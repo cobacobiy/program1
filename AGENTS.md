@@ -11,11 +11,14 @@ This application provides clean domain-driven business capabilities (`User`, `Pr
 - **Staging Environment (Windows)**:
   - Triggered on Pull Requests via GitHub Actions (`[self-hosted, windows]`).
   - Runs preview builds inside multiplatform Docker containers.
-- **Production Environment (Server 135 Linux)**:
-  - Code merged into `main` deploys automatically to **Production Linux Server 135** (`[self-hosted, 135gemini2]`).
+- **Production Environment (Server 226 Linux)**:
+  - Code merged into `main` deploys automatically to **Production Linux Server 226** (`[self-hosted, 226node2]`).
 
 ## Multiplatform Docker & Credentials Policy
 - **Multiplatform Docker**: All containerized services MUST be deployed via Docker / Docker Compose (`docker-compose.yml`) across Linux and Windows.
+- **Port Allocation**:
+  - **Exposed Host Port**: `6090` (`6090:8080`)
+  - **NPM Reverse Proxy Target**: Nginx Proxy Manager (NPM) on Server 135 routes HTTPS requests to `http://192.168.6.226:6090`.
 - **Credentials & Environment Variables**:
   - NEVER hardcode secrets, passwords, or tokens directly in source code or `docker-compose.yml`.
   - Maintain `.env.example` as the canonical template. Always populate runtime settings from `.env`.
@@ -35,13 +38,13 @@ This application provides clean domain-driven business capabilities (`User`, `Pr
 3. **Single Binary Deployment**:
    - `program1-web` compiles the entire modular monolith into a single self-contained binary.
 
-## Tech Stack & Port Mappings
-- **Language & Runtime**: Rust (edition 2021), Tokio (async engine).
-- **Web Framework**: Axum, Tower-HTTP.
-- **Serialization & Utilities**: Serde, Serde JSON, UUID v4, Chrono, Async-Trait.
-- **Architecture**: Cargo Workspace Modular Monolith (`crates/contracts`, `crates/core`, `crates/modules/*`, `crates/web`).
-- **Default Port**:
-  - **HTTP API & Web Dashboard**: `http://localhost:8080`
+## Cargo Workspace Structure
+- `crates/contracts` — Shared trait interfaces (`UserContract`, `ProductContract`, `OrderContract`), DTOs, and error types.
+- `crates/core` — Shared domain primitives, logging initialization (`tracing`), and application context.
+- `crates/modules/user` — User management domain implementing `UserContract`.
+- `crates/modules/product` — Product catalog & stock inventory implementing `ProductContract`.
+- `crates/modules/order` — Order checkout processing implementing `OrderContract` (depends strictly on `UserContract` & `ProductContract` trait abstractions).
+- `crates/web` — Axum HTTP server orchestrator & static glassmorphic dashboard host (`src/main.rs`).
 
 ## Verification & Testing Workflows
 - **Check First-Run Dependencies**:
