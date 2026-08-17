@@ -37,6 +37,9 @@ This application provides clean domain-driven business capabilities (`User`, `Pr
    - All inter-module communications MUST occur through `#[async_trait]` interface traits defined in `program1-contracts`.
 3. **Single Binary Deployment**:
    - `program1-web` compiles the entire modular monolith into a single self-contained binary.
+4. **Frontend Modularization & File Editing Policy**:
+   - **No Monolithic HTML**: Do NOT bundle HTML, CSS, and JavaScript together inside a single `index.html` file. Always modularize web assets into separate files (`index.html`, `style.css`, and `app.js`).
+   - **No Python One-Liner Overwriting**: NEVER use inline Python script commands in terminal (`python3 -c 'html_content = ...'`) to write or replace HTML/code files. Always edit files directly using proper file writing/editing tools.
 
 ## Cargo Workspace Structure
 - `crates/contracts` — Shared trait interfaces (`UserContract`, `ProductContract`, `OrderContract`), DTOs, and error types.

@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use program1_contracts::{
     AnalyticsContract, CatalogContract, ChannelSyncContract, ChannelType, ContractError,
-    CreateCatalogItemRequest, InventoryContract, OrderContract, StorefrontOrderRequest,
-    UpdateSafetyStockRequest,
+    CreateCatalogItemRequest, CreateUserAccountRequest, InventoryContract, OrderContract,
+    StorefrontOrderRequest, UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserContract,
 };
 use program1_core::init_tracing;
 use program1_module_analytics::AnalyticsModule;
@@ -25,11 +25,13 @@ use program1_module_catalog::CatalogModule;
 use program1_module_channel::ChannelSyncModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
+use program1_module_user::UserModule;
 
 #[derive(Clone)]
 pub struct AppState {
     pub store_name: String,
     pub store_currency: String,
+    pub user_contract: Arc<dyn UserContract>,
     pub catalog_contract: Arc<dyn CatalogContract>,
     pub inventory_contract: Arc<dyn InventoryContract>,
     pub channel_contract: Arc<dyn ChannelSyncContract>,
@@ -45,6 +47,7 @@ async fn main() {
     let store_currency = env::var("STORE_CURRENCY").unwrap_or_else(|_| "IDR".to_string());
 
     // 1. Instantiate domain modules
+    let user_module = Arc::new(UserModule::new());
     let catalog_module = Arc::new(CatalogModule::new());
     let inventory_module = Arc::new(InventoryModule::new(catalog_module.clone()));
     let channel_module = Arc::new(ChannelSyncModule::new());
@@ -60,6 +63,7 @@ async fn main() {
     let state = AppState {
         store_name,
         store_currency,
+        user_contract: user_module,
         catalog_contract: catalog_module,
         inventory_contract: inventory_module,
         channel_contract: channel_module,
@@ -76,6 +80,9 @@ async fn main() {
         // Health & Store Info
         .route("/health", get(health_check))
         .route("/api/v1/store/info", get(get_store_info))
+        // User Accounts & RBAC
+        .route("/api/v1/users/accounts", get(list_user_accounts).post(create_user_account))
+        .route("/api/v1/users/accounts/:id/permissions", post(update_user_permissions))
         // Catalog
         .route("/api/v1/catalog", get(list_catalog).post(create_catalog_item))
         .route("/api/v1/catalog/:id", get(get_catalog_item))
@@ -162,6 +169,35 @@ fn map_contract_error(err: ContractError) -> (StatusCode, Json<serde_json::Value
         ),
         ContractError::ChannelSyncError(msg) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": msg }))),
         ContractError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": msg }))),
+    }
+}
+
+// User Accounts & RBAC Handlers
+async fn list_user_accounts(State(state): State<AppState>) -> impl IntoResponse {
+    match state.user_contract.list_accounts().await {
+        Ok(accounts) => (StatusCode::OK, Json(json!(accounts))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
+async fn create_user_account(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateUserAccountRequest>,
+) -> impl IntoResponse {
+    match state.user_contract.create_account(payload).await {
+        Ok(acc) => (StatusCode::CREATED, Json(json!(acc))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
+async fn update_user_permissions(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateUserPermissionsRequest>,
+) -> impl IntoResponse {
+    match state.user_contract.update_permissions(id, payload.accessible_menus).await {
+        Ok(acc) => (StatusCode::OK, Json(json!(acc))),
+        Err(e) => map_contract_error(e),
     }
 }
 

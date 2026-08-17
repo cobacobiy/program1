@@ -41,6 +41,40 @@ impl std::fmt::Display for ChannelType {
     }
 }
 
+// --- USER & RBAC PERMISSION CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserAccountDto {
+    pub id: Uuid,
+    pub username: String,
+    pub full_name: String,
+    pub role: String,
+    pub accessible_menus: Vec<String>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUserAccountRequest {
+    pub username: String,
+    pub full_name: String,
+    pub role: String,
+    pub accessible_menus: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateUserPermissionsRequest {
+    pub accessible_menus: Vec<String>,
+}
+
+#[async_trait]
+pub trait UserContract: Send + Sync {
+    async fn list_accounts(&self) -> Result<Vec<UserAccountDto>, ContractError>;
+    async fn get_account(&self, id: Uuid) -> Result<UserAccountDto, ContractError>;
+    async fn create_account(&self, req: CreateUserAccountRequest) -> Result<UserAccountDto, ContractError>;
+    async fn update_permissions(&self, id: Uuid, accessible_menus: Vec<String>) -> Result<UserAccountDto, ContractError>;
+}
+
 // --- CATALOG CONTRACT ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

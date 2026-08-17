@@ -603,6 +603,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "program1-module-user"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "program1-web"
 version = "0.1.0"
 dependencies = [
@@ -615,6 +628,7 @@ dependencies = [
  "program1-module-channel",
  "program1-module-inventory",
  "program1-module-order",
+ "program1-module-user",
  "serde",
  "serde_json",
  "tokio",

@@ -5,39 +5,97 @@ use chrono::Utc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use program1_contracts::{ContractError, CreateUserRequest, UserContract, UserDto};
+use program1_contracts::{
+    ContractError, CreateUserAccountRequest, UserAccountDto, UserContract,
+};
 
 #[derive(Clone)]
 pub struct UserModule {
-    store: Arc<RwLock<HashMap<Uuid, UserDto>>>,
+    accounts: Arc<RwLock<HashMap<Uuid, UserAccountDto>>>,
 }
 
 impl UserModule {
     pub fn new() -> Self {
-        let initial_users = vec![
-            UserDto {
+        let all_menus = vec![
+            "dashboard".to_string(),
+            "orders".to_string(),
+            "master_products".to_string(),
+            "channel_products".to_string(),
+            "purchases".to_string(),
+            "stocks".to_string(),
+            "warehouses".to_string(),
+            "promotions".to_string(),
+            "customers".to_string(),
+            "chat".to_string(),
+            "reports".to_string(),
+            "logistics".to_string(),
+            "finances".to_string(),
+            "integrations".to_string(),
+            "settings".to_string(),
+        ];
+
+        let seed_accounts = vec![
+            UserAccountDto {
                 id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                name: "Admin System".to_string(),
-                email: "admin@program1.dev".to_string(),
-                role: "Administrator".to_string(),
+                username: "admin".to_string(),
+                full_name: "Admin Super (Owner)".to_string(),
+                role: "Super Admin".to_string(),
+                accessible_menus: all_menus.clone(),
+                is_active: true,
                 created_at: Utc::now(),
             },
-            UserDto {
+            UserAccountDto {
                 id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
-                name: "Customer One".to_string(),
-                email: "customer1@example.com".to_string(),
-                role: "Customer".to_string(),
+                username: "staff_cs".to_string(),
+                full_name: "Siti Rahma (Staff CS)".to_string(),
+                role: "Customer Support".to_string(),
+                accessible_menus: vec![
+                    "dashboard".to_string(),
+                    "orders".to_string(),
+                    "customers".to_string(),
+                    "chat".to_string(),
+                ],
+                is_active: true,
+                created_at: Utc::now(),
+            },
+            UserAccountDto {
+                id: Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap(),
+                username: "staff_gudang".to_string(),
+                full_name: "Bambang W (Staff Gudang)".to_string(),
+                role: "Warehouse Manager".to_string(),
+                accessible_menus: vec![
+                    "dashboard".to_string(),
+                    "master_products".to_string(),
+                    "stocks".to_string(),
+                    "warehouses".to_string(),
+                    "logistics".to_string(),
+                ],
+                is_active: true,
+                created_at: Utc::now(),
+            },
+            UserAccountDto {
+                id: Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap(),
+                username: "staff_finance".to_string(),
+                full_name: "Dewi Lestari (Staff Keuangan)".to_string(),
+                role: "Finance Officer".to_string(),
+                accessible_menus: vec![
+                    "dashboard".to_string(),
+                    "orders".to_string(),
+                    "reports".to_string(),
+                    "finances".to_string(),
+                ],
+                is_active: true,
                 created_at: Utc::now(),
             },
         ];
 
         let mut map = HashMap::new();
-        for u in initial_users {
-            map.insert(u.id, u);
+        for acc in seed_accounts {
+            map.insert(acc.id, acc);
         }
 
         Self {
-            store: Arc::new(RwLock::new(map)),
+            accounts: Arc::new(RwLock::new(map)),
         }
     }
 }
@@ -50,40 +108,50 @@ impl Default for UserModule {
 
 #[async_trait]
 impl UserContract for UserModule {
-    async fn get_user(&self, id: Uuid) -> Result<UserDto, ContractError> {
-        let lock = self.store.read().await;
-        lock.get(&id)
-            .cloned()
-            .ok_or_else(|| ContractError::NotFound(format!("User {}", id)))
+    async fn list_accounts(&self) -> Result<Vec<UserAccountDto>, ContractError> {
+        let lock = self.accounts.read().await;
+        let mut list: Vec<UserAccountDto> = lock.values().cloned().collect();
+        list.sort_by(|a, b| a.full_name.cmp(&b.full_name));
+        Ok(list)
     }
 
-    async fn create_user(&self, req: CreateUserRequest) -> Result<UserDto, ContractError> {
-        if req.name.trim().is_empty() {
-            return Err(ContractError::ValidationError("User name cannot be empty".to_string()));
-        }
-        if !req.email.contains('@') {
-            return Err(ContractError::ValidationError("Invalid email format".to_string()));
+    async fn get_account(&self, id: Uuid) -> Result<UserAccountDto, ContractError> {
+        let lock = self.accounts.read().await;
+        lock.get(&id)
+            .cloned()
+            .ok_or_else(|| ContractError::NotFound(format!("User Account {}", id)))
+    }
+
+    async fn create_account(&self, req: CreateUserAccountRequest) -> Result<UserAccountDto, ContractError> {
+        if req.username.trim().is_empty() {
+            return Err(ContractError::ValidationError("Username cannot be empty".to_string()));
         }
 
-        let user = UserDto {
+        let acc = UserAccountDto {
             id: Uuid::new_v4(),
-            name: req.name.trim().to_string(),
-            email: req.email.trim().to_string(),
-            role: req.role.unwrap_or_else(|| "Customer".to_string()),
+            username: req.username.trim().to_lowercase(),
+            full_name: req.full_name.trim().to_string(),
+            role: req.role.trim().to_string(),
+            accessible_menus: req.accessible_menus,
+            is_active: true,
             created_at: Utc::now(),
         };
 
-        let mut lock = self.store.write().await;
-        lock.insert(user.id, user.clone());
-        tracing::info!(user_id = %user.id, name = %user.name, "User created successfully");
-        Ok(user)
+        let mut lock = self.accounts.write().await;
+        lock.insert(acc.id, acc.clone());
+        tracing::info!(id = %acc.id, username = %acc.username, "User Account Created");
+        Ok(acc)
     }
 
-    async fn list_users(&self) -> Result<Vec<UserDto>, ContractError> {
-        let lock = self.store.read().await;
-        let mut list: Vec<UserDto> = lock.values().cloned().collect();
-        list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        Ok(list)
+    async fn update_permissions(&self, id: Uuid, accessible_menus: Vec<String>) -> Result<UserAccountDto, ContractError> {
+        let mut lock = self.accounts.write().await;
+        let acc = lock
+            .get_mut(&id)
+            .ok_or_else(|| ContractError::NotFound(format!("User Account {}", id)))?;
+
+        acc.accessible_menus = accessible_menus;
+        tracing::info!(id = %id, permissions_count = acc.accessible_menus.len(), "Permissions updated");
+        Ok(acc.clone())
     }
 }
 
@@ -92,24 +160,54 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_user_module_crud() {
+    async fn test_user_accounts_and_rbac() {
         let module = UserModule::new();
-        let users = module.list_users().await.unwrap();
-        assert!(users.len() >= 2);
+        let accounts = module.list_accounts().await.unwrap();
+        assert_eq!(accounts.len(), 4);
 
+        // Verify admin seed has all 15 menus
+        let admin = accounts.iter().find(|a| a.username == "admin").unwrap();
+        assert_eq!(admin.accessible_menus.len(), 15);
+
+        // Update permissions for CS staff
+        let cs_staff = accounts.iter().find(|a| a.username == "staff_cs").unwrap();
+        let updated = module
+            .update_permissions(cs_staff.id, vec!["dashboard".to_string(), "chat".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(updated.accessible_menus, vec!["dashboard", "chat"]);
+
+        // Create new user account
         let new_user = module
-            .create_user(CreateUserRequest {
-                name: "Bob Dev".to_string(),
-                email: "bob@rust.dev".to_string(),
-                role: Some("Engineer".to_string()),
+            .create_account(CreateUserAccountRequest {
+                username: "staff_promotions".to_string(),
+                full_name: "Rian Marketing".to_string(),
+                role: "Marketing Manager".to_string(),
+                accessible_menus: vec!["dashboard".to_string(), "promotions".to_string()],
             })
             .await
             .unwrap();
 
-        assert_eq!(new_user.name, "Bob Dev");
-        assert_eq!(new_user.email, "bob@rust.dev");
+        assert_eq!(new_user.username, "staff_promotions");
+        assert_eq!(new_user.accessible_menus, vec!["dashboard", "promotions"]);
 
-        let fetched = module.get_user(new_user.id).await.unwrap();
-        assert_eq!(fetched.id, new_user.id);
+        let all_after_create = module.list_accounts().await.unwrap();
+        assert_eq!(all_after_create.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_create_account_empty_username_validation() {
+        let module = UserModule::new();
+        let res = module
+            .create_account(CreateUserAccountRequest {
+                username: "   ".to_string(),
+                full_name: "Test Invalid".to_string(),
+                role: "Tester".to_string(),
+                accessible_menus: vec![],
+            })
+            .await;
+
+        assert!(res.is_err());
     }
 }
