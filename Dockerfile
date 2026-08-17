@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Program1 Rust Modular Monolith
 
 # --- Stage 1: Build binary ---
-FROM rust:1.80-slim-bookworm AS builder
+FROM rust:1.85-slim-bookworm AS builder
 
 WORKDIR /usr/src/program1
 

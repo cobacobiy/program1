@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="page-title">AURA Storefront — Premium Gear</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(18, 26, 43, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --cyan: #06b6d4;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+      --emerald: #10b981;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, var(--bg) 75%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 1.2rem 2.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      text-decoration: none;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.4rem;
+      color: #fff;
+      box-shadow: 0 0 25px rgba(6, 182, 212, 0.4);
+    }
+
+    .brand-text h1 { font-size: 1.35rem; font-weight: 700; background: linear-gradient(90deg, #fff, var(--text-muted)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .brand-text p { font-size: 0.75rem; color: var(--cyan); letter-spacing: 0.05em; }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-admin {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .btn-admin:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+
+    .cart-trigger {
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      border: none;
+      color: #fff;
+      padding: 0.6rem 1.4rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+      transition: transform 0.2s;
+    }
+    .cart-trigger:hover { transform: translateY(-2px); }
+    .cart-badge { background: #fff; color: var(--bg); padding: 0.1rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 700; }
+
+    main {
+      flex: 1;
+      max-width: 1250px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+    }
+
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(139, 92, 246, 0.15));
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 3rem;
+      margin-bottom: 2.5rem;
+      backdrop-filter: blur(10px);
+    }
+    .hero-banner h2 { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .hero-banner p { color: var(--text-muted); font-size: 1.1rem; max-width: 600px; }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .section-title { font-size: 1.5rem; font-weight: 600; }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 2rem;
+    }
+
+    .product-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(12px);
+      transition: transform 0.3s, border-color 0.3s;
+    }
+    .product-card:hover { transform: translateY(-5px); border-color: rgba(6, 182, 212, 0.4); }
+
+    .product-img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      background: #111827;
+    }
+
+    .product-info {
+      padding: 1.25rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .product-category { font-size: 0.75rem; color: var(--cyan); font-weight: 600; text-transform: uppercase; margin-bottom: 0.3rem; }
+    .product-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .product-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; flex: 1; line-height: 1.4; }
+
+    .product-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+    }
+
+    .product-price { font-size: 1.25rem; font-weight: 700; color: #fff; }
+    .btn-add-cart {
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--cyan);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-add-cart:hover { background: var(--cyan); color: #fff; }
+
+    /* Modal Cart */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .modal-content {
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 550px;
+      padding: 2rem;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.8rem 0;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .form-group { margin-top: 1rem; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+    .form-control {
+      width: 100%;
+      background: rgba(18, 26, 43, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      color: #fff;
+      font-size: 0.9rem;
+    }
+
+    .btn-checkout {
+      width: 100%;
+      margin-top: 1.5rem;
+      background: linear-gradient(135deg, var(--emerald), var(--cyan));
+      border: none;
+      color: #fff;
+      padding: 0.85rem;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="#" class="brand">
+      <div class="brand-logo">A</div>
+      <div class="brand-text">
+        <h1 id="header-store-name">AURA Storefront</h1>
+        <p>PREMIUM GEAR & ELECTRONICS</p>
+      </div>
+    </a>
+    <div class="nav-actions">
+      <a href="/admin" class="btn-admin">⚙️ Admin Operations</a>
+      <button class="cart-trigger" onclick="openCart()">
+        🛒 Cart <span class="cart-badge" id="cart-count">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero-banner">
+      <h2 id="hero-title">Elevate Your Tech Setup</h2>
+      <p>Discover high-performance gear engineered for precision, speed, and aesthetics.</p>
+    </div>
+
+    <div class="section-header">
+      <h3 class="section-title">Explore Catalog</h3>
+    </div>
+
+    <div class="product-grid" id="product-grid">
+      <p>Loading products...</p>
+    </div>
+  </main>
+
+  <!-- Cart Modal -->
+  <div class="modal-overlay" id="cart-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Your Shopping Cart</h2>
+        <button class="modal-close" onclick="closeCart()">&times;</button>
+      </div>
+      <div id="cart-items-container">
+        <p style="color:var(--text-muted)">Your cart is empty.</p>
+      </div>
+
+      <form id="checkout-form" style="display: none; margin-top: 1.5rem;">
+        <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--cyan)">Customer Details</h3>
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="cust-name" class="form-control" placeholder="Jane Doe" required>
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="cust-email" class="form-control" placeholder="jane@example.com" required>
+        </div>
+        <div class="form-group">
+          <label>Shipping Address</label>
+          <input type="text" id="cust-address" class="form-control" placeholder="Jakarta, Indonesia" required>
+        </div>
+        <button type="submit" class="btn-checkout">Complete Checkout</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let cart = [];
+    let catalog = [];
+
+    async function initStore() {
+      // Load store info
+      const infoRes = await fetch('/api/v1/store/info');
+      const info = await infoRes.json();
+      document.getElementById('header-store-name').innerText = info.store_name;
+      document.getElementById('page-title').innerText = `${info.store_name} — Premium Gear`;
+
+      // Load products
+      const res = await fetch('/api/v1/catalog');
+      catalog = await res.json();
+      renderCatalog();
+    }
+
+    function renderCatalog() {
+      const grid = document.getElementById('product-grid');
+      grid.innerHTML = catalog.map(p => `
+        <div class="product-card">
+          <img src="${p.image_url}" alt="${p.name}" class="product-img">
+          <div class="product-info">
+            <span class="product-category">${p.category}</span>
+            <h4 class="product-name">${p.name}</h4>
+            <p class="product-desc">${p.description}</p>
+            <div class="product-footer">
+              <span class="product-price">Rp ${p.price.toLocaleString('id-ID')}</span>
+              <button class="btn-add-cart" onclick="addToCart('${p.id}')">+ Add</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function addToCart(productId) {
+      const item = catalog.find(p => p.id === productId);
+      if (!item) return;
+
+      const existing = cart.find(c => c.product_id === productId);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cart.push({ product_id: productId, name: item.name, price: item.price, quantity: 1 });
+      }
+
+      updateCartUI();
+    }
+
+    function updateCartUI() {
+      const totalCount = cart.reduce((acc, i) => acc + i.quantity, 0);
+      document.getElementById('cart-count').innerText = totalCount;
+
+      const container = document.getElementById('cart-items-container');
+      const form = document.getElementById('checkout-form');
+
+      if (cart.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted)">Your cart is empty.</p>';
+        form.style.display = 'none';
+        return;
+      }
+
+      let total = 0;
+      container.innerHTML = cart.map(i => {
+        const itemTotal = i.price * i.quantity;
+        total += itemTotal;
+        return `
+          <div class="cart-item">
+            <div>
+              <strong>${i.name}</strong>
+              <div style="font-size:0.8rem; color:var(--text-muted)">${i.quantity} x Rp ${i.price.toLocaleString('id-ID')}</div>
+            </div>
+            <span style="font-weight:700; color:var(--emerald)">Rp ${itemTotal.toLocaleString('id-ID')}</span>
+          </div>
+        `;
+      }).join('') + `
+        <div style="display:flex; justify-content:space-between; margin-top:1rem; font-size:1.1rem; font-weight:700">
+          <span>Total:</span>
+          <span style="color:var(--cyan)">Rp ${total.toLocaleString('id-ID')}</span>
+        </div>
+      `;
+
+      form.style.display = 'block';
+    }
+
+    function openCart() { document.getElementById('cart-modal').style.display = 'flex'; }
+    function closeCart() { document.getElementById('cart-modal').style.display = 'none'; }
+
+    document.getElementById('checkout-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const customer_name = document.getElementById('cust-name').value;
+      const customer_email = document.getElementById('cust-email').value;
+      const shipping_address = document.getElementById('cust-address').value;
+
+      const items = cart.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+
+      const res = await fetch('/api/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_name, customer_email, shipping_address, items })
+      });
+
+      if (res.ok) {
+        alert('🎉 Order Placed Successfully! Your order will be processed across our central inventory.');
+        cart = [];
+        updateCartUI();
+        closeCart();
+      } else {
+        const err = await res.json();
+        alert(`Checkout Failed: ${err.error || JSON.stringify(err)}`);
+      }
+    };
+
+    initStore();
+  </script>
+</body>
+</html>

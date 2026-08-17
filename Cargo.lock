@@ -532,40 +532,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "program1-module-analytics"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "program1-module-catalog",
+ "program1-module-inventory",
+ "program1-module-order",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "program1-module-catalog"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "program1-module-channel"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "program1-module-inventory"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "program1-module-catalog",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "program1-module-order"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
  "program1-contracts",
- "program1-module-product",
- "program1-module-user",
- "serde",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "program1-module-product"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "program1-contracts",
- "serde",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "program1-module-user"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "program1-contracts",
+ "program1-module-catalog",
+ "program1-module-inventory",
  "serde",
  "tokio",
  "tracing",
@@ -580,9 +610,11 @@ dependencies = [
  "chrono",
  "program1-contracts",
  "program1-core",
+ "program1-module-analytics",
+ "program1-module-catalog",
+ "program1-module-channel",
+ "program1-module-inventory",
  "program1-module-order",
- "program1-module-product",
- "program1-module-user",
  "serde",
  "serde_json",
  "tokio",

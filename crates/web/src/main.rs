@@ -1,11 +1,12 @@
+use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
-    routing::get,
+    response::{Html, IntoResponse},
+    routing::{get, post},
     Json, Router,
 };
 use serde_json::json;
@@ -14,37 +15,55 @@ use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 use program1_contracts::{
-    ContractError, CreateOrderRequest, CreateProductRequest, CreateUserRequest,
-    OrderContract, ProductContract, UserContract,
+    AnalyticsContract, CatalogContract, ChannelSyncContract, ChannelType, ContractError,
+    CreateCatalogItemRequest, InventoryContract, OrderContract, StorefrontOrderRequest,
 };
 use program1_core::init_tracing;
+use program1_module_analytics::AnalyticsModule;
+use program1_module_catalog::CatalogModule;
+use program1_module_channel::ChannelSyncModule;
+use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
-use program1_module_product::ProductModule;
-use program1_module_user::UserModule;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub user_contract: Arc<dyn UserContract>,
-    pub product_contract: Arc<dyn ProductContract>,
+    pub store_name: String,
+    pub store_currency: String,
+    pub catalog_contract: Arc<dyn CatalogContract>,
+    pub inventory_contract: Arc<dyn InventoryContract>,
+    pub channel_contract: Arc<dyn ChannelSyncContract>,
     pub order_contract: Arc<dyn OrderContract>,
+    pub analytics_contract: Arc<dyn AnalyticsContract>,
 }
 
 #[tokio::main]
 async fn main() {
     init_tracing();
 
-    // Instantiate domain modules and wire trait contracts
-    let user_module = Arc::new(UserModule::new());
-    let product_module = Arc::new(ProductModule::new());
+    let store_name = env::var("STORE_NAME").unwrap_or_else(|_| "AURA Storefront".to_string());
+    let store_currency = env::var("STORE_CURRENCY").unwrap_or_else(|_| "IDR".to_string());
+
+    // 1. Instantiate domain modules
+    let catalog_module = Arc::new(CatalogModule::new());
+    let inventory_module = Arc::new(InventoryModule::new(catalog_module.clone()));
+    let channel_module = Arc::new(ChannelSyncModule::new());
     let order_module = Arc::new(OrderModule::new(
-        user_module.clone(),
-        product_module.clone(),
+        catalog_module.clone(),
+        inventory_module.clone(),
+    ));
+    let analytics_module = Arc::new(AnalyticsModule::new(
+        catalog_module.clone(),
+        order_module.clone(),
     ));
 
     let state = AppState {
-        user_contract: user_module,
-        product_contract: product_module,
+        store_name,
+        store_currency,
+        catalog_contract: catalog_module,
+        inventory_contract: inventory_module,
+        channel_contract: channel_module,
         order_contract: order_module,
+        analytics_contract: analytics_module,
     };
 
     let cors = CorsLayer::new()
@@ -53,27 +72,48 @@ async fn main() {
         .allow_headers(Any);
 
     let api_routes = Router::new()
-        // Health
+        // Health & Store Info
         .route("/health", get(health_check))
-        // Users
-        .route("/api/v1/users", get(list_users).post(create_user))
-        .route("/api/v1/users/:id", get(get_user))
-        // Products
-        .route("/api/v1/products", get(list_products).post(create_product))
-        .route("/api/v1/products/:id", get(get_product))
+        .route("/api/v1/store/info", get(get_store_info))
+        // Catalog
+        .route("/api/v1/catalog", get(list_catalog).post(create_catalog_item))
+        .route("/api/v1/catalog/:id", get(get_catalog_item))
+        // Inventory
+        .route("/api/v1/inventory/:id", get(get_inventory_stock))
+        // Channels
+        .route("/api/v1/channels", get(list_channels))
+        .route("/api/v1/channels/sync/:channel", post(sync_channel))
         // Orders
-        .route("/api/v1/orders", get(list_orders).post(create_order))
+        .route("/api/v1/orders", get(list_orders).post(create_storefront_order))
         .route("/api/v1/orders/:id", get(get_order))
+        .route("/api/v1/orders/marketplace", post(create_marketplace_order))
+        // Analytics
+        .route("/api/v1/analytics", get(get_analytics))
         .with_state(state);
 
-    // Static UI server with fallback to API routes
+    // Static pages
+    let admin_page = std::fs::read_to_string("crates/web/static/index.html")
+        .unwrap_or_else(|_| "<h1>Admin Hub</h1>".to_string());
+    let store_page = std::fs::read_to_string("crates/web/static/store.html")
+        .unwrap_or_else(|_| "<h1>Storefront</h1>".to_string());
+
+    let store_page_alt = store_page.clone();
+
     let app = Router::new()
+        .route("/admin", get(move || async move { Html(admin_page) }))
+        .route("/store", get(move || async move { Html(store_page_alt) }))
+        .route("/", get(move || async move { Html(store_page) }))
         .merge(api_routes)
-        .nest_service("/", ServeDir::new("crates/web/static"))
+        .nest_service("/assets", ServeDir::new("crates/web/static"))
         .layer(cors);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    tracing::info!("Starting Program1 Rust Modular Monolith on http://{}", addr);
+    let port: u16 = env::var("APP_PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse()
+        .unwrap_or(8080);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    tracing::info!("Starting Program1 Omnichannel Engine on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -93,6 +133,16 @@ async fn health_check() -> impl IntoResponse {
     )
 }
 
+async fn get_store_info(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "store_name": state.store_name,
+            "currency": state.store_currency,
+        })),
+    )
+}
+
 fn map_contract_error(err: ContractError) -> (StatusCode, Json<serde_json::Value>) {
     match err {
         ContractError::NotFound(msg) => (StatusCode::NOT_FOUND, Json(json!({ "error": msg }))),
@@ -106,56 +156,62 @@ fn map_contract_error(err: ContractError) -> (StatusCode, Json<serde_json::Value
                 "available": available
             })),
         ),
+        ContractError::ChannelSyncError(msg) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": msg }))),
         ContractError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": msg }))),
     }
 }
 
-// User Handlers
-async fn list_users(State(state): State<AppState>) -> impl IntoResponse {
-    match state.user_contract.list_users().await {
-        Ok(users) => (StatusCode::OK, Json(json!(users))),
+// Catalog Handlers
+async fn list_catalog(State(state): State<AppState>) -> impl IntoResponse {
+    match state.catalog_contract.list_items().await {
+        Ok(items) => (StatusCode::OK, Json(json!(items))),
         Err(e) => map_contract_error(e),
     }
 }
 
-async fn get_user(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
-    match state.user_contract.get_user(id).await {
-        Ok(user) => (StatusCode::OK, Json(json!(user))),
+async fn get_catalog_item(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
+    match state.catalog_contract.get_item(id).await {
+        Ok(item) => (StatusCode::OK, Json(json!(item))),
         Err(e) => map_contract_error(e),
     }
 }
 
-async fn create_user(
+async fn create_catalog_item(
     State(state): State<AppState>,
-    Json(payload): Json<CreateUserRequest>,
+    Json(payload): Json<CreateCatalogItemRequest>,
 ) -> impl IntoResponse {
-    match state.user_contract.create_user(payload).await {
-        Ok(user) => (StatusCode::CREATED, Json(json!(user))),
+    match state.catalog_contract.create_item(payload).await {
+        Ok(item) => (StatusCode::CREATED, Json(json!(item))),
         Err(e) => map_contract_error(e),
     }
 }
 
-// Product Handlers
-async fn list_products(State(state): State<AppState>) -> impl IntoResponse {
-    match state.product_contract.list_products().await {
-        Ok(products) => (StatusCode::OK, Json(json!(products))),
+// Inventory Handlers
+async fn get_inventory_stock(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
+    match state.inventory_contract.get_stock(id).await {
+        Ok(stock) => (StatusCode::OK, Json(json!(stock))),
         Err(e) => map_contract_error(e),
     }
 }
 
-async fn get_product(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
-    match state.product_contract.get_product(id).await {
-        Ok(product) => (StatusCode::OK, Json(json!(product))),
+// Channel Sync Handlers
+async fn list_channels(State(state): State<AppState>) -> impl IntoResponse {
+    match state.channel_contract.get_channel_statuses().await {
+        Ok(channels) => (StatusCode::OK, Json(json!(channels))),
         Err(e) => map_contract_error(e),
     }
 }
 
-async fn create_product(
-    State(state): State<AppState>,
-    Json(payload): Json<CreateProductRequest>,
-) -> impl IntoResponse {
-    match state.product_contract.create_product(payload).await {
-        Ok(product) => (StatusCode::CREATED, Json(json!(product))),
+async fn sync_channel(Path(channel_name): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
+    let channel = match channel_name.to_lowercase().as_str() {
+        "tiktok" | "tiktokshop" => ChannelType::TikTokShop,
+        "shopee" => ChannelType::Shopee,
+        "tokopedia" => ChannelType::Tokopedia,
+        _ => ChannelType::NativeWeb,
+    };
+
+    match state.channel_contract.sync_channel_stock(channel).await {
+        Ok(count) => (StatusCode::OK, Json(json!({ "synced_products": count }))),
         Err(e) => map_contract_error(e),
     }
 }
@@ -175,12 +231,44 @@ async fn get_order(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl 
     }
 }
 
-async fn create_order(
+async fn create_storefront_order(
     State(state): State<AppState>,
-    Json(payload): Json<CreateOrderRequest>,
+    Json(payload): Json<StorefrontOrderRequest>,
 ) -> impl IntoResponse {
-    match state.order_contract.create_order(payload).await {
+    match state.order_contract.create_storefront_order(payload).await {
         Ok(order) => (StatusCode::CREATED, Json(json!(order))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct MarketplaceOrderReq {
+    channel: String,
+    customer_name: String,
+    items: Vec<program1_contracts::StorefrontOrderItemRequest>,
+}
+
+async fn create_marketplace_order(
+    State(state): State<AppState>,
+    Json(payload): Json<MarketplaceOrderReq>,
+) -> impl IntoResponse {
+    let channel = match payload.channel.to_lowercase().as_str() {
+        "tiktok" | "tiktokshop" => ChannelType::TikTokShop,
+        "shopee" => ChannelType::Shopee,
+        "tokopedia" => ChannelType::Tokopedia,
+        _ => ChannelType::NativeWeb,
+    };
+
+    match state.order_contract.create_marketplace_order(channel, payload.customer_name, payload.items).await {
+        Ok(order) => (StatusCode::CREATED, Json(json!(order))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
+// Analytics Handlers
+async fn get_analytics(State(state): State<AppState>) -> impl IntoResponse {
+    match state.analytics_contract.get_sales_analytics().await {
+        Ok(analytics) => (StatusCode::OK, Json(json!(analytics))),
         Err(e) => map_contract_error(e),
     }
 }

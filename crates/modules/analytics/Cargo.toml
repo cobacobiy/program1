@@ -1,5 +1,5 @@
 [package]
-name = "program1-module-order"
+name = "program1-module-analytics"
 version.workspace = true
 edition.workspace = true
 
@@ -15,3 +15,4 @@ tracing.workspace = true
 [dev-dependencies]
 program1-module-catalog = { path = "../catalog" }
 program1-module-inventory = { path = "../inventory" }
+program1-module-order = { path = "../order" }

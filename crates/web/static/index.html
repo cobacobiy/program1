@@ -3,496 +3,307 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Program1 — Rust Modular Monolith Engine</title>
+  <title>Program1 — Admin Omnichannel Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #090d16;
-      --card-bg: rgba(18, 26, 43, 0.7);
+      --bg: #0b0f19;
+      --card-bg: rgba(17, 24, 39, 0.75);
       --card-border: rgba(255, 255, 255, 0.08);
-      --accent-cyan: #06b6d4;
-      --accent-blue: #3b82f6;
-      --accent-purple: #8b5cf6;
-      --accent-pink: #ec4899;
-      --accent-emerald: #10b981;
-      --text-main: #f3f4f6;
+      --cyan: #06b6d4;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+      --emerald: #10b981;
+      --rose: #f43f5e;
+      --amber: #f59e0b;
+      --text: #f3f4f6;
       --text-muted: #9ca3af;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
 
     body {
-      background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, var(--bg-dark) 80%);
-      color: var(--text-main);
+      background: radial-gradient(circle at 0% 0%, #1e1b4b 0%, var(--bg) 70%);
+      color: var(--text);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
 
     header {
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--card-border);
-      backdrop-filter: blur(12px);
-      background: rgba(9, 13, 22, 0.8);
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      padding: 1.25rem 2rem;
+      padding: 1.2rem 2.5rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
 
-    .brand {
+    .logo {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 1rem;
     }
-
-    .brand-logo {
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+    .logo-box {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 700;
-      font-size: 1.25rem;
-      box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+      font-weight: 800;
+      font-size: 1.2rem;
     }
 
-    .brand-title h1 { font-size: 1.25rem; font-weight: 700; background: linear-gradient(90deg, #fff, var(--text-muted)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .brand-title p { font-size: 0.75rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      padding: 0.35rem 0.85rem;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      color: var(--accent-emerald);
-      font-weight: 500;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--accent-emerald);
-      border-radius: 50%;
-      box-shadow: 0 0 10px var(--accent-emerald);
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.3); opacity: 0.6; }
-    }
-
-    main {
-      flex: 1;
-      max-width: 1300px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 2rem;
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
-
-    .architecture-banner {
-      background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(139, 92, 246, 0.1));
+    .nav-link {
+      background: rgba(255,255,255,0.05);
       border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.5rem 2rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      backdrop-filter: blur(10px);
-    }
-
-    .arch-text h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.3rem; }
-    .arch-text p { color: var(--text-muted); font-size: 0.9rem; }
-
-    .nav-tabs {
-      display: flex;
-      gap: 0.75rem;
-      border-bottom: 1px solid var(--card-border);
-      padding-bottom: 0.5rem;
-    }
-
-    .tab-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      padding: 0.6rem 1.2rem;
+      color: var(--cyan);
+      padding: 0.5rem 1rem;
       border-radius: 8px;
-      cursor: pointer;
-      font-weight: 500;
-      transition: all 0.2s ease;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
     }
 
-    .tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
-    .tab-btn.active { color: #fff; background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple)); box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); }
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+    }
 
-    .grid-container {
+    .grid-metrics {
       display: grid;
-      grid-template-columns: 350px 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 1.5rem;
+      margin-bottom: 2.5rem;
     }
 
-    .glass-card {
+    .metric-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 16px;
       padding: 1.5rem;
-      backdrop-filter: blur(16px);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(12px);
+    }
+    .metric-title { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.4rem; font-family: 'JetBrains Mono', monospace; }
+
+    .section-title { font-size: 1.3rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+    .channels-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
     }
 
-    .glass-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: var(--accent-cyan); }
-
-    .form-group { margin-bottom: 1rem; }
-    .form-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; font-weight: 500; }
-    .form-control {
-      width: 100%;
-      background: rgba(9, 13, 22, 0.6);
+    .channel-card {
+      background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 0.6rem 0.8rem;
-      color: #fff;
-      font-size: 0.9rem;
-      outline: none;
-      transition: border 0.2s;
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
     }
-    .form-control:focus { border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(6, 182, 212, 0.2); }
-
-    .btn-submit {
-      width: 100%;
-      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
-      border: none;
-      color: #fff;
-      padding: 0.75rem;
-      border-radius: 8px;
+    .channel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .channel-badge { background: rgba(16, 185, 129, 0.15); color: var(--emerald); padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+    .btn-sync {
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--cyan);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.1s, box-shadow 0.2s;
     }
-    .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(6, 182, 212, 0.4); }
 
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-    }
-    .data-table th, .data-table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--card-border); font-size: 0.85rem; }
-    .data-table th { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
-    .data-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
-
-    .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent-cyan); }
-    .tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-    .tag-role { background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); border: 1px solid rgba(139, 92, 246, 0.3); }
-    .tag-stock { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
-
-    footer {
-      border-top: 1px solid var(--card-border);
+    .table-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
       padding: 1.5rem;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.8rem;
+      margin-bottom: 2.5rem;
+      backdrop-filter: blur(12px);
     }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.8rem 1rem; border-bottom: 1px solid var(--card-border); font-size: 0.9rem; }
+    th { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; }
+
+    .source-badge {
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-web { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
+    .badge-tiktok { background: rgba(244, 63, 94, 0.2); color: var(--rose); }
+    .badge-shopee { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+    .badge-tokopedia { background: rgba(16, 185, 129, 0.2); color: var(--emerald); }
   </style>
 </head>
 <body>
   <header>
-    <div class="brand">
-      <div class="brand-logo">P1</div>
-      <div class="brand-title">
-        <h1>Program1 Monolith</h1>
-        <p>RUST AXUM • MODULAR TRAIT CONTRACTS</p>
+    <div class="logo">
+      <div class="logo-box">P1</div>
+      <div>
+        <h2 style="font-size:1.1rem; font-weight:700">Program1 Admin Hub</h2>
+        <p style="font-size:0.75rem; color:var(--text-muted)">OMNICHANNEL RUST ENGINE</p>
       </div>
     </div>
-    <div class="status-badge" id="health-badge">
-      <span class="status-dot"></span>
-      <span id="health-text">Connecting...</span>
-    </div>
+    <a href="/store" class="nav-link" target="_blank">🛒 View Storefront &rarr;</a>
   </header>
 
-  <main>
-    <div class="architecture-banner">
-      <div class="arch-text">
-        <h2>Modular Monolith Architecture</h2>
-        <p>Modules communicate strictly through <code>#[async_trait]</code> Rust Contract interfaces in a single high-performance binary.</p>
+  <div class="container">
+    <div class="grid-metrics">
+      <div class="metric-card">
+        <div class="metric-title">Gross Revenue</div>
+        <div class="metric-value" style="color:var(--emerald)" id="metric-revenue">Rp 0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Total Orders</div>
+        <div class="metric-value" style="color:var(--cyan)" id="metric-orders">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Active Synced Catalog</div>
+        <div class="metric-value" style="color:var(--purple)" id="metric-products">0</div>
       </div>
     </div>
 
-    <div class="nav-tabs">
-      <button class="tab-btn active" onclick="showTab('users')">👤 Users Module</button>
-      <button class="tab-btn" onclick="showTab('products')">📦 Products Module</button>
-      <button class="tab-btn" onclick="showTab('orders')">🛒 Orders Module</button>
+    <h3 class="section-title">🌐 Connected Sales Channels</h3>
+    <div class="channels-grid" id="channels-grid">
+      <p>Loading channels...</p>
     </div>
 
-    <!-- USERS TAB -->
-    <div id="tab-users" class="grid-container">
-      <div class="glass-card">
-        <h3>Create User</h3>
-        <form id="form-create-user">
-          <div class="form-group">
-            <label>Name</label>
-            <input type="text" id="user-name" class="form-control" placeholder="e.g. Alice Rustacean" required>
-          </div>
-          <div class="form-group">
-            <label>Email</label>
-            <input type="email" id="user-email" class="form-control" placeholder="alice@rust.dev" required>
-          </div>
-          <div class="form-group">
-            <label>Role</label>
-            <input type="text" id="user-role" class="form-control" value="Developer">
-          </div>
-          <button type="submit" class="btn-submit">Add User</button>
-        </form>
-      </div>
-      <div class="glass-card">
-        <h3>User Directory (Contracts Data)</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-            </tr>
-          </thead>
-          <tbody id="table-users">
-            <tr><td colspan="4">Loading users...</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="table-card">
+      <h3 class="section-title">📦 Omnichannel Order Ledger</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Channel</th>
+            <th>Customer</th>
+            <th>Total Amount</th>
+            <th>Status</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="orders-tbody">
+          <tr><td colspan="6">Loading order ledger...</td></tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- PRODUCTS TAB -->
-    <div id="tab-products" class="grid-container" style="display: none;">
-      <div class="glass-card">
-        <h3>Add Product</h3>
-        <form id="form-create-product">
-          <div class="form-group">
-            <label>Product Name</label>
-            <input type="text" id="prod-name" class="form-control" placeholder="e.g. Tokio Async Book" required>
-          </div>
-          <div class="form-group">
-            <label>SKU</label>
-            <input type="text" id="prod-sku" class="form-control" placeholder="SKU-BOOK-01" required>
-          </div>
-          <div class="form-group">
-            <label>Price ($)</label>
-            <input type="number" step="0.01" id="prod-price" class="form-control" value="29.99" required>
-          </div>
-          <div class="form-group">
-            <label>Initial Stock</label>
-            <input type="number" id="prod-stock" class="form-control" value="50" required>
-          </div>
-          <button type="submit" class="btn-submit">Add Product</button>
-        </form>
-      </div>
-      <div class="glass-card">
-        <h3>Product Catalog</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>ID / SKU</th>
-              <th>Name</th>
-              <th>Price</th>
-              <th>Stock</th>
-            </tr>
-          </thead>
-          <tbody id="table-products">
-            <tr><td colspan="4">Loading catalog...</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="table-card">
+      <h3 class="section-title">📊 Central Inventory & Stock Allocation</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Product Name</th>
+            <th>SKU</th>
+            <th>Price</th>
+            <th>Available Stock</th>
+            <th>Reserved</th>
+          </tr>
+        </thead>
+        <tbody id="catalog-tbody">
+          <tr><td colspan="5">Loading central inventory...</td></tr>
+        </tbody>
+      </table>
     </div>
-
-    <!-- ORDERS TAB -->
-    <div id="tab-orders" class="grid-container" style="display: none;">
-      <div class="glass-card">
-        <h3>Checkout Order</h3>
-        <form id="form-create-order">
-          <div class="form-group">
-            <label>Select User</label>
-            <select id="order-user-select" class="form-control" required></select>
-          </div>
-          <div class="form-group">
-            <label>Select Product</label>
-            <select id="order-prod-select" class="form-control" required></select>
-          </div>
-          <div class="form-group">
-            <label>Quantity</label>
-            <input type="number" id="order-qty" class="form-control" value="1" min="1" required>
-          </div>
-          <button type="submit" class="btn-submit">Process Order Contract</button>
-        </form>
-      </div>
-      <div class="glass-card">
-        <h3>Order Ledger</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Order ID</th>
-              <th>Customer</th>
-              <th>Items</th>
-              <th>Total Amount</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="table-orders">
-            <tr><td colspan="5">Loading orders...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </main>
-
-  <footer>
-    Program1 — Modular Monolith Architecture Engine written in Rust (Axum, Tokio & Trait Contracts)
-  </footer>
+  </div>
 
   <script>
-    const API_BASE = '';
+    async function loadAdminData() {
+      // Analytics
+      const analyticsRes = await fetch('/api/v1/analytics');
+      const stats = await analyticsRes.json();
+      document.getElementById('metric-revenue').innerText = `Rp ${stats.gross_revenue.toLocaleString('id-ID')}`;
+      document.getElementById('metric-orders').innerText = stats.total_orders;
+      document.getElementById('metric-products').innerText = stats.active_products;
 
-    async function checkHealth() {
-      try {
-        const res = await fetch(`${API_BASE}/health`);
-        const data = await res.json();
-        document.getElementById('health-text').innerText = `${data.app} • ${data.status.toUpperCase()}`;
-      } catch (err) {
-        document.getElementById('health-text').innerText = 'Offline';
-        document.getElementById('health-badge').style.borderColor = 'rgba(239, 68, 68, 0.4)';
-      }
+      // Channels
+      const chanRes = await fetch('/api/v1/channels');
+      const channels = await chanRes.json();
+      renderChannels(channels);
+
+      // Orders
+      const ordRes = await fetch('/api/v1/orders');
+      const orders = await ordRes.json();
+      renderOrders(orders);
+
+      // Catalog
+      const catRes = await fetch('/api/v1/catalog');
+      const catalog = await catRes.json();
+      renderCatalog(catalog);
     }
 
-    function showTab(tabName) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.grid-container').forEach(c => c.style.display = 'none');
-      event.target.classList.add('active');
-      document.getElementById(`tab-${tabName}`).style.display = 'grid';
-    }
-
-    async function loadUsers() {
-      const res = await fetch(`${API_BASE}/api/v1/users`);
-      const users = await res.json();
-      const tbody = document.getElementById('table-users');
-      tbody.innerHTML = users.map(u => `
-        <tr>
-          <td class="mono">${u.id.substring(0, 8)}...</td>
-          <td><strong>${u.name}</strong></td>
-          <td>${u.email}</td>
-          <td><span class="tag tag-role">${u.role}</span></td>
-        </tr>
+    function renderChannels(channels) {
+      document.getElementById('channels-grid').innerHTML = channels.map(c => `
+        <div class="channel-card">
+          <div class="channel-header">
+            <strong>${c.name}</strong>
+            <span class="channel-badge">CONNECTED</span>
+          </div>
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem">
+            Synced Products: <strong>${c.active_products_synced}</strong>
+          </p>
+          <button class="btn-sync" onclick="triggerSync('${c.channel}')">⚡ Sync Stock Now</button>
+        </div>
       `).join('');
-
-      // Populate Order User select
-      const select = document.getElementById('order-user-select');
-      select.innerHTML = users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
     }
 
-    async function loadProducts() {
-      const res = await fetch(`${API_BASE}/api/v1/products`);
-      const products = await res.json();
-      const tbody = document.getElementById('table-products');
-      tbody.innerHTML = products.map(p => `
+    function renderOrders(orders) {
+      const tbody = document.getElementById('orders-tbody');
+      if (orders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted)">No orders recorded yet. Place an order on the storefront to test!</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = orders.map(o => {
+        let badgeClass = 'badge-web';
+        if (o.channel === 'TikTokShop') badgeClass = 'badge-tiktok';
+        if (o.channel === 'Shopee') badgeClass = 'badge-shopee';
+        if (o.channel === 'Tokopedia') badgeClass = 'badge-tokopedia';
+
+        return `
+          <tr>
+            <td style="font-family:'JetBrains Mono'">${o.id.substring(0,8)}...</td>
+            <td><span class="source-badge ${badgeClass}">${o.channel}</span></td>
+            <td>${o.customer_name}</td>
+            <td style="font-weight:700; color:var(--emerald)">Rp ${o.total_amount.toLocaleString('id-ID')}</td>
+            <td><strong>${o.status}</strong></td>
+            <td style="color:var(--text-muted)">${new Date(o.created_at).toLocaleTimeString()}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderCatalog(catalog) {
+      document.getElementById('catalog-tbody').innerHTML = catalog.map(p => `
         <tr>
-          <td><div class="mono">${p.sku}</div><small style="color:var(--text-muted); font-size:0.7rem">${p.id.substring(0, 8)}</small></td>
           <td><strong>${p.name}</strong></td>
-          <td style="color: var(--accent-cyan)">$${p.price.toFixed(2)}</td>
-          <td><span class="tag tag-stock">${p.stock} units</span></td>
-        </tr>
-      `).join('');
-
-      // Populate Order Product select
-      const select = document.getElementById('order-prod-select');
-      select.innerHTML = products.map(p => `<option value="${p.id}">${p.name} - $${p.price} (Stock: ${p.stock})</option>`).join('');
-    }
-
-    async function loadOrders() {
-      const res = await fetch(`${API_BASE}/api/v1/orders`);
-      const orders = await res.json();
-      const tbody = document.getElementById('table-orders');
-      tbody.innerHTML = orders.map(o => `
-        <tr>
-          <td class="mono">${o.id.substring(0, 8)}...</td>
-          <td><strong>${o.user_name}</strong></td>
-          <td>${o.items.length} item(s)</td>
-          <td style="color: var(--accent-emerald); font-weight:700">$${o.total_amount.toFixed(2)}</td>
-          <td><span class="tag tag-stock">${o.status}</span></td>
+          <td style="font-family:'JetBrains Mono'; color:var(--cyan)">${p.sku}</td>
+          <td>Rp ${p.price.toLocaleString('id-ID')}</td>
+          <td><strong style="color:var(--emerald)">${p.stock} units</strong></td>
+          <td style="color:var(--text-muted)">0 units</td>
         </tr>
       `).join('');
     }
 
-    // Forms
-    document.getElementById('form-create-user').onsubmit = async (e) => {
-      e.preventDefault();
-      const name = document.getElementById('user-name').value;
-      const email = document.getElementById('user-email').value;
-      const role = document.getElementById('user-role').value;
-      await fetch(`${API_BASE}/api/v1/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, role })
-      });
-      document.getElementById('user-name').value = '';
-      document.getElementById('user-email').value = '';
-      loadUsers();
-    };
+    async function triggerSync(channel) {
+      await fetch(`/api/v1/channels/sync/${channel}`, { method: 'POST' });
+      alert(`⚡ Stock & Catalog Synced for ${channel}`);
+      loadAdminData();
+    }
 
-    document.getElementById('form-create-product').onsubmit = async (e) => {
-      e.preventDefault();
-      const name = document.getElementById('prod-name').value;
-      const sku = document.getElementById('prod-sku').value;
-      const price = parseFloat(document.getElementById('prod-price').value);
-      const stock = parseInt(document.getElementById('prod-stock').value);
-      await fetch(`${API_BASE}/api/v1/products`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, sku, price, stock })
-      });
-      document.getElementById('prod-name').value = '';
-      document.getElementById('prod-sku').value = '';
-      loadProducts();
-    };
-
-    document.getElementById('form-create-order').onsubmit = async (e) => {
-      e.preventDefault();
-      const user_id = document.getElementById('order-user-select').value;
-      const product_id = document.getElementById('order-prod-select').value;
-      const quantity = parseInt(document.getElementById('order-qty').value);
-
-      const res = await fetch(`${API_BASE}/api/v1/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id,
-          items: [{ product_id, quantity }]
-        })
-      });
-
-      if (res.ok) {
-        loadOrders();
-        loadProducts();
-      } else {
-        const err = await res.json();
-        alert(`Order Failed: ${err.error || JSON.stringify(err)}`);
-      }
-    };
-
-    // Init
-    checkHealth();
-    loadUsers();
-    loadProducts();
-    loadOrders();
+    loadAdminData();
   </script>
 </body>
 </html>
