@@ -1,0 +1,16 @@
+services:
+  program1-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: program1-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

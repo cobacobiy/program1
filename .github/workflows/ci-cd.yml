@@ -1,0 +1,126 @@
+name: CI/CD Pipeline — Program1 (Rust Modular Monolith)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  # ============================================
+  # Job 1: Validate (Check & Test Workspace)
+  # ============================================
+  validate:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Cargo Check
+        run: cargo check --workspace
+
+      - name: Run Workspace Unit Tests
+        run: cargo test --workspace
+
+  # ============================================
+  # Job 2: Package & Upload Artifacts
+  # ============================================
+  package:
+    if: github.event.action != 'closed'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: program1-build
+          path: |
+            crates/
+            Cargo.toml
+            Cargo.lock
+            Dockerfile
+            docker-compose.yml
+            docker-compose.standalone.yml
+            scripts/
+            .env.example
+          include-hidden-files: true
+          retention-days: 7
+
+  # ============================================
+  # Job 3: Deploy Preview / Staging (Windows Runner)
+  # ============================================
+  deploy-preview:
+    needs: package
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: [self-hosted, windows]
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: program1-build
+          path: ./
+
+      - name: Deploy Preview Container (Windows)
+        shell: powershell
+        run: |
+          Write-Output "Deploying PR Preview to Windows Staging..."
+          if (-not (Test-Path ".env")) {
+              Copy-Item ".env.example" -Destination ".env"
+          }
+          docker compose up -d --build --remove-orphans
+          Write-Output "Preview container successfully deployed to Windows Staging!"
+
+  # ============================================
+  # Job 4: Cleanup Preview (Windows Staging)
+  # ============================================
+  cleanup-preview:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: [self-hosted, windows]
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: program1-build
+          path: ./
+
+      - name: Stop Preview Container
+        continue-on-error: true
+        shell: powershell
+        run: |
+          Write-Output "PR closed. Stopping Windows preview container..."
+          docker compose down 2>&1 | Out-Null
+
+  # ============================================
+  # Job 5: Deploy Production (Server 135 Linux Runner)
+  # ============================================
+  deploy-production:
+    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, 135gemini2]
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: program1-build
+          path: ./
+
+      - name: Deploy Production Container (Linux Server 135)
+        shell: bash
+        run: |
+          echo "Deploying Production to Linux Server 135..."
+          if [ ! -f ".env" ]; then
+              cp .env.example .env
+          fi
+          docker compose up -d --build --remove-orphans
+          echo "Production deployment complete on Linux Server 135!"
