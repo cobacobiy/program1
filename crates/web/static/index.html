@@ -13,7 +13,7 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <!-- SIDEBAR LEFT GINEE STYLE (14 CATEGORIES + SETTINGS) -->
+  <!-- SIDEBAR LEFT GINEE OMS OFFICIAL STRUCTURE -->
   <aside>
     <div class="sidebar-header">
       <div class="ginee-logo">G</div>
@@ -25,11 +25,23 @@
     <div class="sidebar-menu">
       <div class="menu-category">UTAMA & OPERASIONAL</div>
       <div class="nav-item active" data-menu-id="dashboard" onclick="switchView('dashboard', this)">
-        <span class="nav-icon">📊</span> Ringkasan
+        <span class="nav-icon">📊</span> Dashboard
       </div>
-      <div class="nav-item" data-menu-id="orders" onclick="switchView('orders', this)">
-        <span class="nav-icon">📦</span> Pesanan
+
+      <!-- ORDERS WITH SUBMENUS -->
+      <div class="nav-item" data-menu-id="orders" onclick="switchView('orders', this); toggleSubmenu('orders-submenu')">
+        <span class="nav-icon">📦</span> Orders (Pesanan)
+        <span style="margin-left:auto; font-size:0.65rem; color:var(--text-muted)">▼</span>
       </div>
+      <div id="orders-submenu" style="display:none; padding-left:1.5rem; flex-direction:column; gap:0.2rem; margin-bottom:0.4rem">
+        <div style="font-size:0.75rem; color:var(--text-muted); padding:0.3rem 0.6rem; cursor:pointer" onclick="switchView('orders'); filterOrderTab('all')">▸ Past 90 Days Orders</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); padding:0.3rem 0.6rem; cursor:pointer" onclick="switchView('orders'); filterOrderTab('PAID')">▸ Pending & Diproses</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); padding:0.3rem 0.6rem; cursor:pointer" onclick="switchView('orders')">▸ Pending Print Orders</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); padding:0.3rem 0.6rem; cursor:pointer" onclick="switchView('orders')">▸ Waiting for Pickup / Shipped</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); padding:0.3rem 0.6rem; cursor:pointer" onclick="switchView('orders')">▸ Historical Orders & Records</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); padding:0.3rem 0.6rem; cursor:pointer" onclick="switchView('orders')">▸ Return Management</div>
+      </div>
+
       <div class="nav-item" data-menu-id="master_products" onclick="switchView('master_products', this)">
         <span class="nav-icon">🗃️</span> Master Products
       </div>
@@ -37,43 +49,46 @@
         <span class="nav-icon">🛍️</span> Channel Products
       </div>
       <div class="nav-item" data-menu-id="purchases" onclick="switchView('purchases', this)">
-        <span class="nav-icon">🛒</span> Pembelian
+        <span class="nav-icon">🛒</span> Purchases (Pembelian)
       </div>
       <div class="nav-item" data-menu-id="stocks" onclick="switchView('stocks', this)">
-        <span class="nav-icon">🏷️</span> Stock List & Safety
+        <span class="nav-icon">🏷️</span> Stocks (Inventaris)
       </div>
       <div class="nav-item" data-menu-id="warehouses" onclick="switchView('warehouses', this)">
-        <span class="nav-icon">🏬</span> Gudang
+        <span class="nav-icon">🏬</span> Warehouses (Gudang)
       </div>
       <div class="nav-item" data-menu-id="promotions" onclick="switchView('promotions', this)">
-        <span class="nav-icon">🎟️</span> Promosi
+        <span class="nav-icon">🎟️</span> Promotions (Promosi)
       </div>
 
       <div class="menu-category">KOMUNIKASI & PELANGGAN</div>
       <div class="nav-item" data-menu-id="customers" onclick="switchView('customers', this)">
-        <span class="nav-icon">👥</span> Pelanggan
+        <span class="nav-icon">👥</span> Customers & CRM
       </div>
       <div class="nav-item" data-menu-id="chat" onclick="switchView('chat', this)">
         <span class="nav-icon">💬</span> Ginee Chat
       </div>
+      <div class="nav-item" data-menu-id="service" onclick="switchView('service', this)">
+        <span class="nav-icon">🎧</span> Service & Support
+      </div>
 
       <div class="menu-category">ANALITIK & PENGIRIMAN</div>
       <div class="nav-item" data-menu-id="reports" onclick="switchView('reports', this)">
-        <span class="nav-icon">📈</span> Laporan Keuangan
+        <span class="nav-icon">📈</span> Reports & Analitik
       </div>
       <div class="nav-item" data-menu-id="logistics" onclick="switchView('logistics', this)">
-        <span class="nav-icon">🚚</span> Pengiriman
+        <span class="nav-icon">🚚</span> Logistics (Pengiriman)
       </div>
       <div class="nav-item" data-menu-id="finances" onclick="switchView('finances', this)">
-        <span class="nav-icon">💰</span> Keuangan
+        <span class="nav-icon">💰</span> Finances & Payout
       </div>
       <div class="nav-item" data-menu-id="integrations" onclick="switchView('integrations', this)">
-        <span class="nav-icon">🌐</span> Integrasi Toko
+        <span class="nav-icon">🌐</span> Integrations (Toko)
       </div>
 
       <div class="menu-category">SISTEM & HAK AKSES</div>
       <div class="nav-item" data-menu-id="settings" onclick="switchView('settings', this)">
-        <span class="nav-icon">⚙️</span> Pengaturan & Hak Akses
+        <span class="nav-icon">⚙️</span> Settings & Hak Akses
       </div>
     </div>
     <div class="sidebar-footer">
@@ -89,8 +104,8 @@
   <div class="wrapper">
     <header>
       <div class="breadcrumb">
-        <h2 id="view-title">Ringkasan Bisnis</h2>
-        <p id="view-subtitle">Omnichannel Sales & Stock Allocation Overview</p>
+        <h2 id="view-title">Dashboard</h2>
+        <p id="view-subtitle">Omnichannel Business Overview & Real-Time Analytics</p>
       </div>
       <div class="header-actions">
         <a href="/store" class="btn-action" target="_blank">🛒 Storefront &rarr;</a>
@@ -166,12 +181,12 @@
       <div id="view-orders" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">📦 Manajemen Pesanan Omnichannel</h3>
+            <h3 class="panel-title">📦 Manajemen Pesanan Omnichannel (Orders Ledger)</h3>
           </div>
           <div class="tabs-bar">
-            <button class="tab-btn active" onclick="filterOrderTab('all', this)">Semua Pesanan</button>
-            <button class="tab-btn" onclick="filterOrderTab('PAID', this)">Lunas (PAID)</button>
-            <button class="tab-btn" onclick="filterOrderTab('PROCESSING', this)">Dipproses</button>
+            <button class="tab-btn active" onclick="filterOrderTab('all', this)">Semua Pesanan (Past 90 Days)</button>
+            <button class="tab-btn" onclick="filterOrderTab('PAID', this)">Lunas (PAID / Pending Print)</button>
+            <button class="tab-btn" onclick="filterOrderTab('PROCESSING', this)">Diproses (Waiting Pickup / Shipped)</button>
           </div>
           <table>
             <thead>
@@ -244,7 +259,7 @@
       <div id="view-purchases" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">🛒 Manajemen Pembelian & Procurement</h3>
+            <h3 class="panel-title">🛒 Purchases & Procurement Management</h3>
           </div>
           <p style="color:var(--text-muted)">Fitur Pembelian & Supplier PO siap digunakan untuk restocking otomatis.</p>
         </div>
@@ -309,7 +324,7 @@
       <div id="view-promotions" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">🎟️ Promosi & Campaign Monitor</h3>
+            <h3 class="panel-title">🎟️ Promotions & Campaign Monitor</h3>
           </div>
           <p style="color:var(--text-muted)">Pengaturan Flash Sale & Diskon Multi-Channel.</p>
         </div>
@@ -319,7 +334,7 @@
       <div id="view-customers" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">👥 Pelanggan & CRM Directory</h3>
+            <h3 class="panel-title">👥 Customers & CRM Directory</h3>
           </div>
           <p style="color:var(--text-muted)">Database Pembeli Omnichannel & Loyalty Program.</p>
         </div>
@@ -340,11 +355,26 @@
         </div>
       </div>
 
-      <!-- VIEW 11: REPORTS -->
+      <!-- VIEW 11: SERVICE & SUPPORT -->
+      <div id="view-service" class="spa-view">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">🎧 Service & Customer Support Helpdesk</h3>
+            <span class="channel-badge badge-native">Ginee Helpdesk Active</span>
+          </div>
+          <p style="color:var(--text-muted); margin-bottom:1rem">Layanan bantuan pelanggan dan penanganan tiket komplain pembeli.</p>
+          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:1.2rem; border-radius:12px">
+            <div style="color:var(--cyan); font-weight:600">✔ Support Desk Integrated</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem">Multi-channel customer service tickets, returns, and dispute records.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 12: REPORTS -->
       <div id="view-reports" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">📈 Laporan Penjualan & Performa Channel</h3>
+            <h3 class="panel-title">📈 Reports & Laporan Keuangan</h3>
           </div>
           <div id="analytics-breakdown-container">
             <p>Loading analytics report...</p>
@@ -352,31 +382,31 @@
         </div>
       </div>
 
-      <!-- VIEW 12: LOGISTICS -->
+      <!-- VIEW 13: LOGISTICS -->
       <div id="view-logistics" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">🚚 Pengiriman & Logistik Expedition</h3>
+            <h3 class="panel-title">🚚 Logistics & Pengiriman Expedition</h3>
           </div>
           <p style="color:var(--text-muted)">Status resi & ekspedisi J&T, SiCepat, GoSend, Shopee Xpress.</p>
         </div>
       </div>
 
-      <!-- VIEW 13: FINANCES -->
+      <!-- VIEW 14: FINANCES -->
       <div id="view-finances" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">💰 Keuangan & Payout Settlement</h3>
+            <h3 class="panel-title">💰 Finances & Payout Settlement</h3>
           </div>
           <p style="color:var(--text-muted)">Rekapitulasi pencairan dana dari marketplace.</p>
         </div>
       </div>
 
-      <!-- VIEW 14: INTEGRATIONS -->
+      <!-- VIEW 15: INTEGRATIONS -->
       <div id="view-integrations" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">🌐 Status Integrasi Channel Toko</h3>
+            <h3 class="panel-title">🌐 Integrasi Toko & Multi-Channel Sync</h3>
           </div>
           <div class="channels-grid" id="channels-page-grid">
             <p>Loading channel integrations...</p>
@@ -384,7 +414,7 @@
         </div>
       </div>
 
-      <!-- VIEW 15: SETTINGS & RBAC MANAGEMENT -->
+      <!-- VIEW 16: SETTINGS & RBAC MANAGEMENT -->
       <div id="view-settings" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
@@ -414,7 +444,7 @@
     </main>
   </div>
 
-  <!-- MODAL 1: EDIT SAFETY STOCK -->
+  <!-- MODALS -->
   <div class="modal-overlay" id="edit-safety-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -447,7 +477,6 @@
     </div>
   </div>
 
-  <!-- MODAL 2: AUDIT LOG HISTORY -->
   <div class="modal-overlay" id="history-safety-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -462,7 +491,6 @@
     </div>
   </div>
 
-  <!-- MODAL 3: EDIT PERMISSIONS (RBAC) -->
   <div class="modal-overlay" id="edit-permissions-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -490,7 +518,6 @@
     </div>
   </div>
 
-  <!-- MODAL 4: CREATE USER ACCOUNT -->
   <div class="modal-overlay" id="create-user-modal">
     <div class="modal-card">
       <div class="modal-header">

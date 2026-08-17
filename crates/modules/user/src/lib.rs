@@ -32,6 +32,7 @@ impl UserModule {
             "finances".to_string(),
             "integrations".to_string(),
             "settings".to_string(),
+            "service".to_string(),
         ];
 
         let seed_accounts = vec![
@@ -54,6 +55,7 @@ impl UserModule {
                     "orders".to_string(),
                     "customers".to_string(),
                     "chat".to_string(),
+                    "service".to_string(),
                 ],
                 is_active: true,
                 created_at: Utc::now(),
@@ -165,18 +167,18 @@ mod tests {
         let accounts = module.list_accounts().await.unwrap();
         assert_eq!(accounts.len(), 4);
 
-        // Verify admin seed has all 15 menus
+        // Verify admin seed has all 16 menus
         let admin = accounts.iter().find(|a| a.username == "admin").unwrap();
-        assert_eq!(admin.accessible_menus.len(), 15);
+        assert_eq!(admin.accessible_menus.len(), 16);
 
         // Update permissions for CS staff
         let cs_staff = accounts.iter().find(|a| a.username == "staff_cs").unwrap();
         let updated = module
-            .update_permissions(cs_staff.id, vec!["dashboard".to_string(), "chat".to_string()])
+            .update_permissions(cs_staff.id, vec!["dashboard".to_string(), "chat".to_string(), "service".to_string()])
             .await
             .unwrap();
 
-        assert_eq!(updated.accessible_menus, vec!["dashboard", "chat"]);
+        assert_eq!(updated.accessible_menus, vec!["dashboard", "chat", "service"]);
 
         // Create new user account
         let new_user = module

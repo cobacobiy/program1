@@ -3,21 +3,22 @@ let userAccounts = [];
 let activeAccount = null;
 
 const ALL_MENU_ITEMS = [
-  { id: "dashboard", label: "📊 Ringkasan" },
-  { id: "orders", label: "📦 Pesanan" },
+  { id: "dashboard", label: "📊 Dashboard" },
+  { id: "orders", label: "📦 Orders (Pesanan)" },
   { id: "master_products", label: "🗃️ Master Products" },
   { id: "channel_products", label: "🛍️ Channel Products" },
-  { id: "purchases", label: "🛒 Pembelian" },
-  { id: "stocks", label: "🏷️ Stock List & Safety" },
-  { id: "warehouses", label: "🏬 Gudang" },
-  { id: "promotions", label: "🎟️ Promosi" },
-  { id: "customers", label: "👥 Pelanggan" },
+  { id: "purchases", label: "🛒 Purchases (Pembelian)" },
+  { id: "stocks", label: "🏷️ Stocks (Inventaris)" },
+  { id: "warehouses", label: "🏬 Warehouses (Gudang)" },
+  { id: "promotions", label: "🎟️ Promotions" },
+  { id: "customers", label: "👥 Customers & CRM" },
   { id: "chat", label: "💬 Ginee Chat" },
-  { id: "reports", label: "📈 Laporan Keuangan" },
-  { id: "logistics", label: "🚚 Pengiriman" },
-  { id: "finances", label: "💰 Keuangan" },
-  { id: "integrations", label: "🌐 Integrasi Toko" },
-  { id: "settings", label: "⚙️ Pengaturan & Hak Akses" }
+  { id: "reports", label: "📈 Reports & Analitik" },
+  { id: "logistics", label: "🚚 Logistics (Pengiriman)" },
+  { id: "finances", label: "💰 Finances & Settlement" },
+  { id: "integrations", label: "🌐 Integrations (Channel)" },
+  { id: "settings", label: "⚙️ Settings & Hak Akses" },
+  { id: "service", label: "🎧 Service & Support" }
 ];
 
 async function loadData() {
@@ -92,7 +93,6 @@ function toggleUserDropdown() {
   document.getElementById("user-dropdown-menu").classList.toggle("show");
 }
 
-// Close dropdown on outside click
 window.onclick = function(e) {
   if (!e.target.closest(".user-switcher-container")) {
     const dropdown = document.getElementById("user-dropdown-menu");
@@ -127,7 +127,6 @@ function applyRBACPermissions(account) {
     }
   });
 
-  // If currently active tab is hidden, switch view to first accessible view
   if (!activeTabVisible && account.accessible_menus.length > 0) {
     const firstMenu = account.accessible_menus[0];
     const firstNavItem = document.querySelector(`.nav-item[data-menu-id="${firstMenu}"]`);
@@ -208,6 +207,14 @@ function closeCreateUserModal() {
   document.getElementById("create-user-modal").style.display = "none";
 }
 
+// SUBMENU TOGGLER
+function toggleSubmenu(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.style.display = el.style.display === "block" ? "none" : "block";
+  }
+}
+
 // --- NAVIGATION & RENDERING ---
 function switchView(viewName, navEl) {
   document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
@@ -219,22 +226,23 @@ function switchView(viewName, navEl) {
   if (targetView) targetView.classList.add("active");
 
   const titleMap = {
-    dashboard: { title: "Ringkasan Bisnis", sub: "Omnichannel Sales & Stock Allocation Overview" },
-    orders: { title: "Manajemen Pesanan", sub: "Omnichannel Order Processing & Ledger" },
+    dashboard: { title: "Dashboard", sub: "Omnichannel Business Overview & Real-Time Analytics" },
+    orders: { title: "Orders Management", sub: "Ginee OMS Centralized Order Ledger & Submenu Workflows" },
     master_products: { title: "Master Products Catalog", sub: "Global MSKU Product Information System" },
     channel_products: { title: "Channel Products Listing", sub: "Marketplace Listing & Stock Synchronization" },
-    purchases: { title: "Pembelian & Restock", sub: "Supplier Procurement & Purchase Orders" },
-    stocks: { title: "Stock List & Safety Stock", sub: "Ginee OMS Multi-Warehouse & Safety Stock Buffer" },
-    inventory: { title: "Stock List & Safety Stock", sub: "Ginee OMS Multi-Warehouse & Safety Stock Buffer" },
-    warehouses: { title: "Multi-Gudang Hub", sub: "Warehouse Allocation & Transit Logistics" },
-    promotions: { title: "Promosi & Flash Sale", sub: "Cross-Channel Promotion Campaign Monitor" },
-    customers: { title: "Pelanggan & CRM", sub: "Customer Directory & Purchase History" },
+    purchases: { title: "Purchases & Procurement", sub: "Supplier Purchase Orders & Automated Restock" },
+    stocks: { title: "Stocks & Safety Stock", sub: "Ginee OMS Multi-Warehouse Stock & Buffer Control" },
+    inventory: { title: "Stocks & Safety Stock", sub: "Ginee OMS Multi-Warehouse Stock & Buffer Control" },
+    warehouses: { title: "Warehouses Hub", sub: "Multi-Warehouse Allocation & Transit Logistics" },
+    promotions: { title: "Promotions & Campaign", sub: "Cross-Channel Promotion Campaign Monitor" },
+    customers: { title: "Customers & CRM Directory", sub: "Buyer Profile & Loyalty Program" },
     chat: { title: "Ginee Chat Hub", sub: "Automated Multi-Channel Messaging Center" },
-    reports: { title: "Laporan Keuangan", sub: "Financial Revenue & Ledger Reports" },
-    logistics: { title: "Pengiriman & Ekspedition", sub: "Order Courier Logistics Tracking" },
-    finances: { title: "Keuangan & Settlement", sub: "Marketplace Disbursement & Revenue Reconciliation" },
-    integrations: { title: "Integrasi Toko", sub: "TikTok, Shopee, Tokopedia Channel Connections" },
-    settings: { title: "Pengaturan & Hak Akses", sub: "User Account Role-Based Access Control (RBAC)" }
+    reports: { title: "Reports & Financials", sub: "Financial Revenue, Sales & Performance Reports" },
+    logistics: { title: "Logistics & Expedition", sub: "Order Courier Logistics Tracking" },
+    finances: { title: "Finances & Settlement", sub: "Marketplace Disbursement & Revenue Reconciliation" },
+    integrations: { title: "Integrations & Toko", sub: "TikTok, Shopee, Tokopedia Channel Connections" },
+    settings: { title: "Settings & Hak Akses", sub: "User Account Role-Based Access Control (RBAC)" },
+    service: { title: "Service & Customer Support", sub: "Ginee Customer Service Helpdesk & Ticket Logs" }
   };
 
   if (titleMap[viewName]) {
@@ -307,7 +315,7 @@ function renderFullOrdersTable(orders) {
 
 function filterOrderTab(status, btn) {
   document.querySelectorAll("#view-orders .tab-btn").forEach(el => el.classList.remove("active"));
-  btn.classList.add("active");
+  if (btn) btn.classList.add("active");
   if (status === "all") {
     renderFullOrdersTable(currentOrders);
   } else {
@@ -434,7 +442,6 @@ async function syncAllChannels() {
   loadData();
 }
 
-// Attach Form Event Listeners
 document.addEventListener("DOMContentLoaded", () => {
   const editPermForm = document.getElementById("edit-permissions-form");
   if (editPermForm) {
