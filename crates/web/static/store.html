@@ -31,7 +31,15 @@
       </div>
 
       <div class="header-actions">
-        <a href="/admin" class="btn-admin">⚙️ OMS Admin</a>
+        <!-- BUYER LOGIN BADGE / BUTTON -->
+        <button class="btn-login-store" onclick="openBuyerLoginModal()" id="btn-buyer-login">🔑 Masuk Pembeli</button>
+        <div id="buyer-profile-badge" style="display:none" class="buyer-profile" onclick="openBuyerLoginModal()">
+          <div class="buyer-avatar" id="buyer-avatar">P</div>
+          <span id="buyer-name-label" style="font-size:0.8rem; font-weight:600; color:#fff">Pembeli</span>
+        </div>
+
+        <a href="/admin" class="btn-admin">⚙️ Admin Penjual</a>
+
         <button class="cart-trigger" onclick="openCart()">
           🛒 <span class="cart-label">Keranjang</span> <span class="cart-badge" id="cart-count">0</span>
         </button>
@@ -72,6 +80,39 @@
     </div>
   </main>
 
+  <!-- BUYER LOGIN / REGISTER MODAL -->
+  <div class="modal-overlay" id="buyer-login-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🔑 Login Pembeli Shopee Store</h2>
+        <button class="modal-close" onclick="closeBuyerLoginModal()">&times;</button>
+      </div>
+      
+      <div id="buyer-logged-in-view" style="display:none; text-align:center; padding:1rem 0">
+        <div class="buyer-avatar-lg" id="modal-buyer-avatar">P</div>
+        <h3 id="modal-buyer-name" style="font-size:1.2rem; margin-top:0.6rem; color:#fff">Status Akun Pembeli</h3>
+        <p id="modal-buyer-email" style="font-size:0.85rem; color:var(--cyan); margin-bottom:1.5rem">buyer@shopee.co.id</p>
+        <button type="button" class="btn-checkout" style="background:var(--shopee-red)" onclick="logoutBuyer()">Keluar / Logout Pembeli</button>
+      </div>
+
+      <form id="buyer-login-form">
+        <div class="form-group">
+          <label>Email / Nomor HP WhatsApp Pembeli</label>
+          <input type="text" id="buyer-input-login" class="form-control" placeholder="contoh: 08123456789 atau budi@shopee.co.id" required>
+        </div>
+        <div class="form-group">
+          <label>Kata Sandi / PIN</label>
+          <input type="password" id="buyer-input-pass" class="form-control" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn-checkout">Masuk Akun Pembeli</button>
+        <div style="display:flex; justify-content:space-between; margin-top:1rem; font-size:0.8rem">
+          <a href="#" style="color:var(--text-muted); text-decoration:none" onclick="quickGuestLoginBuyer()">🚀 Coba Akun Demo Pembeli</a>
+          <a href="#" style="color:var(--shopee-orange); font-weight:600; text-decoration:none" onclick="quickGuestLoginBuyer()">Daftar Akun Baru &rarr;</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- SHOPPING CART MODAL DRAWER -->
   <div class="modal-overlay" id="cart-modal">
     <div class="modal-content">
@@ -91,7 +132,7 @@
           <input type="text" id="cust-name" class="form-control" placeholder="Jane Doe" required>
         </div>
         <div class="form-group">
-          <label>Alamat Email</label>
+          <label>Alamat Email Pembeli</label>
           <input type="email" id="cust-email" class="form-control" placeholder="jane@example.com" required>
         </div>
         <div class="form-group">
@@ -117,10 +158,10 @@
       <span class="mobile-nav-icon">🛒</span>
       <span>Keranjang</span>
     </div>
-    <a href="/admin" class="mobile-nav-item">
+    <div class="mobile-nav-item" onclick="openBuyerLoginModal()">
       <span class="mobile-nav-icon">👤</span>
-      <span>Akun OMS</span>
-    </a>
+      <span>Akun Saya</span>
+    </div>
   </nav>
 </body>
 </html>

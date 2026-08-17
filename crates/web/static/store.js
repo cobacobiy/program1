@@ -1,5 +1,5 @@
 /* ==========================================================================
-   STOREFRONT LOGIC ENGINE (SHOPEE-STYLE RESPONSIVE)
+   STOREFRONT LOGIC ENGINE (SHOPEE-STYLE RESPONSIVE WITH BUYER LOGIN)
    Target File: /home/cacyos/Downloads/github/program1/crates/web/static/store.js
    ========================================================================== */
 
@@ -7,11 +7,15 @@ let cart = [];
 let catalog = [];
 let activeCategory = "ALL";
 let searchQuery = "";
+let activeBuyer = null;
 
 // Initialize Storefront
 async function initStore() {
   try {
-    // 1. Fetch Store Information
+    // 1. Check Storefront Buyer Session
+    checkBuyerSession();
+
+    // 2. Fetch Store Information
     const infoRes = await fetch('/api/v1/store/info');
     if (infoRes.ok) {
       const info = await infoRes.json();
@@ -22,7 +26,7 @@ async function initStore() {
       if (titleEl) titleEl.innerText = `${info.store_name || "AURA Storefront"} — Shopee Official Store`;
     }
 
-    // 2. Fetch Catalog Products
+    // 3. Fetch Catalog Products
     const res = await fetch('/api/v1/catalog');
     if (res.ok) {
       catalog = await res.json();
@@ -30,13 +34,124 @@ async function initStore() {
       renderCatalog();
     }
 
-    // 3. Start Flash Sale Countdown Timer
+    // 4. Start Flash Sale Countdown Timer
     startFlashSaleTimer();
 
-    // 4. Setup Event Listeners
+    // 5. Setup Event Listeners
     setupSearchListener();
+    setupBuyerLoginForm();
   } catch (e) {
     console.error("Failed to initialize storefront data:", e);
+  }
+}
+
+// --- BUYER LOGIN & SESSION MANAGEMENT ---
+function checkBuyerSession() {
+  const saved = localStorage.getItem("shopee_buyer_session");
+  if (saved) {
+    try {
+      activeBuyer = JSON.parse(saved);
+      renderBuyerHeaderState();
+    } catch (e) {
+      localStorage.removeItem("shopee_buyer_session");
+    }
+  } else {
+    renderBuyerHeaderState();
+  }
+}
+
+function renderBuyerHeaderState() {
+  const btnLogin = document.getElementById("btn-buyer-login");
+  const badgeProfile = document.getElementById("buyer-profile-badge");
+  const avatarEl = document.getElementById("buyer-avatar");
+  const nameLabelEl = document.getElementById("buyer-name-label");
+
+  if (activeBuyer) {
+    if (btnLogin) btnLogin.style.display = "none";
+    if (badgeProfile) badgeProfile.style.display = "flex";
+    if (avatarEl) avatarEl.innerText = activeBuyer.name.charAt(0).toUpperCase();
+    if (nameLabelEl) nameLabelEl.innerText = activeBuyer.name;
+
+    // Auto-fill Checkout Form
+    const custNameInput = document.getElementById("cust-name");
+    const custEmailInput = document.getElementById("cust-email");
+    if (custNameInput && !custNameInput.value) custNameInput.value = activeBuyer.name;
+    if (custEmailInput && !custEmailInput.value) custEmailInput.value = activeBuyer.email;
+  } else {
+    if (btnLogin) btnLogin.style.display = "block";
+    if (badgeProfile) badgeProfile.style.display = "none";
+  }
+}
+
+function openBuyerLoginModal() {
+  const modal = document.getElementById("buyer-login-modal");
+  const loggedView = document.getElementById("buyer-logged-in-view");
+  const loginForm = document.getElementById("buyer-login-form");
+
+  if (activeBuyer) {
+    if (loggedView) loggedView.style.display = "block";
+    if (loginForm) loginForm.style.display = "none";
+    document.getElementById("modal-buyer-avatar").innerText = activeBuyer.name.charAt(0).toUpperCase();
+    document.getElementById("modal-buyer-name").innerText = activeBuyer.name;
+    document.getElementById("modal-buyer-email").innerText = activeBuyer.email;
+  } else {
+    if (loggedView) loggedView.style.display = "none";
+    if (loginForm) loginForm.style.display = "block";
+  }
+
+  if (modal) modal.style.display = "flex";
+}
+
+function closeBuyerLoginModal() {
+  const modal = document.getElementById("buyer-login-modal");
+  if (modal) modal.style.display = "none";
+}
+
+function quickGuestLoginBuyer() {
+  const sampleBuyer = {
+    id: "buyer-" + Date.now(),
+    name: "Budi Santoso (Pembeli)",
+    email: "budi.santoso@shopee.co.id",
+    phone: "081234567890"
+  };
+  loginBuyerSuccess(sampleBuyer);
+}
+
+function loginBuyerSuccess(buyerObj) {
+  activeBuyer = buyerObj;
+  localStorage.setItem("shopee_buyer_session", JSON.stringify(buyerObj));
+  renderBuyerHeaderState();
+  closeBuyerLoginModal();
+  alert(`🎉 Selamat datang kembali, ${buyerObj.name}! Akun pembeli berhasil masuk.`);
+}
+
+function logoutBuyer() {
+  activeBuyer = null;
+  localStorage.removeItem("shopee_buyer_session");
+  renderBuyerHeaderState();
+  closeBuyerLoginModal();
+  alert("👋 Akun pembeli berhasil keluar (logged out).");
+}
+
+function setupBuyerLoginForm() {
+  const form = document.getElementById("buyer-login-form");
+  if (form) {
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const loginInput = document.getElementById("buyer-input-login").value;
+      const passInput = document.getElementById("buyer-input-pass").value;
+
+      let buyerName = loginInput.split("@")[0];
+      buyerName = buyerName.charAt(0).toUpperCase() + buyerName.slice(1);
+
+      const buyerObj = {
+        id: "buyer-" + Date.now(),
+        name: buyerName.includes("08") ? "Pembeli WA (" + loginInput + ")" : buyerName,
+        email: loginInput.includes("@") ? loginInput : loginInput + "@buyer.shopee.co.id",
+        phone: loginInput
+      };
+      loginBuyerSuccess(buyerObj);
+    };
   }
 }
 
