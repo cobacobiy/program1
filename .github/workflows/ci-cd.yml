@@ -31,58 +31,20 @@ jobs:
         run: cargo test --workspace
 
   # ============================================
-  # Job 2: Deploy Preview / Staging (Windows Runner)
-  # ============================================
-  deploy-preview:
-    needs: validate
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
-    runs-on: [self-hosted, windows]
-    steps:
-      - name: Checkout Code Directly
-        uses: actions/checkout@v4
-
-      - name: Deploy Preview Container (Windows)
-        shell: powershell
-        run: |
-          Write-Output "Deploying PR Preview to Windows Staging..."
-          if (-not (Test-Path ".env")) {
-              Copy-Item ".env.example" -Destination ".env"
-          }
-          docker compose up -d --build --remove-orphans
-          Write-Output "Preview container successfully deployed to Windows Staging!"
-
-  # ============================================
-  # Job 3: Cleanup Preview (Windows Staging)
-  # ============================================
-  cleanup-preview:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: [self-hosted, windows]
-    steps:
-      - name: Checkout Code Directly
-        uses: actions/checkout@v4
-
-      - name: Stop Preview Container
-        continue-on-error: true
-        shell: powershell
-        run: |
-          Write-Output "PR closed. Stopping Windows preview container..."
-          docker compose down 2>&1 | Out-Null
-
-  # ============================================
-  # Job 4: Deploy Production (Server 226 Linux Runner)
+  # Job 2: Deploy Production (Server 226 Linux Runner - Actionless Zero-Fetch)
   # ============================================
   deploy-production:
     needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, 226node2]
     steps:
-      - name: Checkout Code Directly
-        uses: actions/checkout@v4
-
       - name: Deploy Production Container (Linux Server 226)
         shell: bash
         run: |
           echo "Deploying Production to Linux Server 226..."
+          cd /home/gpu/actions-runner-program1/_work/program1/program1 || cd ./
+          git fetch origin main || true
+          git reset --hard origin/main || true
           if [ ! -f ".env" ]; then
               cp .env.example .env
           fi
