@@ -31,45 +31,15 @@ jobs:
         run: cargo test --workspace
 
   # ============================================
-  # Job 2: Package & Upload Artifacts
-  # ============================================
-  package:
-    if: github.event.action != 'closed'
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: program1-build
-          path: |
-            crates/
-            Cargo.toml
-            Cargo.lock
-            Dockerfile
-            docker-compose.yml
-            docker-compose.standalone.yml
-            scripts/
-            .env.example
-          include-hidden-files: true
-          retention-days: 7
-
-  # ============================================
-  # Job 3: Deploy Preview / Staging (Windows Runner)
+  # Job 2: Deploy Preview / Staging (Windows Runner)
   # ============================================
   deploy-preview:
-    needs: package
+    needs: validate
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
     runs-on: [self-hosted, windows]
     steps:
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: program1-build
-          path: ./
+      - name: Checkout Code Directly
+        uses: actions/checkout@v4
 
       - name: Deploy Preview Container (Windows)
         shell: powershell
@@ -82,17 +52,14 @@ jobs:
           Write-Output "Preview container successfully deployed to Windows Staging!"
 
   # ============================================
-  # Job 4: Cleanup Preview (Windows Staging)
+  # Job 3: Cleanup Preview (Windows Staging)
   # ============================================
   cleanup-preview:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: [self-hosted, windows]
     steps:
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: program1-build
-          path: ./
+      - name: Checkout Code Directly
+        uses: actions/checkout@v4
 
       - name: Stop Preview Container
         continue-on-error: true
@@ -102,18 +69,15 @@ jobs:
           docker compose down 2>&1 | Out-Null
 
   # ============================================
-  # Job 5: Deploy Production (Server 226 Linux Runner)
+  # Job 4: Deploy Production (Server 226 Linux Runner)
   # ============================================
   deploy-production:
-    needs: package
+    needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, 226node2]
     steps:
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: program1-build
-          path: ./
+      - name: Checkout Code Directly
+        uses: actions/checkout@v4
 
       - name: Deploy Production Container (Linux Server 226)
         shell: bash
