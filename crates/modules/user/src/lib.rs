@@ -14,9 +14,6 @@ pub struct UserModule {
 
 impl UserModule {
     pub fn new() -> Self {
-        let store = Arc::new(RwLock::new(HashMap::new()));
-        
-        // Seed initial data
         let initial_users = vec![
             UserDto {
                 id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
@@ -34,13 +31,14 @@ impl UserModule {
             },
         ];
 
-        let mut lock = store.blocking_write();
+        let mut map = HashMap::new();
         for u in initial_users {
-            lock.insert(u.id, u);
+            map.insert(u.id, u);
         }
-        drop(lock);
 
-        Self { store }
+        Self {
+            store: Arc::new(RwLock::new(map)),
+        }
     }
 }
 

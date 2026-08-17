@@ -16,8 +16,6 @@ pub struct ProductModule {
 
 impl ProductModule {
     pub fn new() -> Self {
-        let store = Arc::new(RwLock::new(HashMap::new()));
-
         let initial_products = vec![
             ProductDto {
                 id: Uuid::parse_str("10000000-0000-0000-0000-000000000001").unwrap(),
@@ -45,13 +43,14 @@ impl ProductModule {
             },
         ];
 
-        let mut lock = store.blocking_write();
+        let mut map = HashMap::new();
         for p in initial_products {
-            lock.insert(p.id, p);
+            map.insert(p.id, p);
         }
-        drop(lock);
 
-        Self { store }
+        Self {
+            store: Arc::new(RwLock::new(map)),
+        }
     }
 }
 

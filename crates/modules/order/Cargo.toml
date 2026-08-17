@@ -11,3 +11,7 @@ serde.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+program1-module-user = { path = "../user" }
+program1-module-product = { path = "../product" }

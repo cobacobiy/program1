@@ -538,6 +538,8 @@ dependencies = [
  "async-trait",
  "chrono",
  "program1-contracts",
+ "program1-module-product",
+ "program1-module-user",
  "serde",
  "tokio",
  "tracing",
