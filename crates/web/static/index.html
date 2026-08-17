@@ -1,16 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Program1 — Admin Omnichannel Hub</title>
+  <title>Ginee Hub — Program1 Omnichannel ERP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0b0f19;
-      --card-bg: rgba(17, 24, 39, 0.75);
+      --bg: #090d16;
+      --sidebar-bg: #0d1322;
+      --card-bg: rgba(18, 26, 43, 0.8);
       --card-border: rgba(255, 255, 255, 0.08);
       --cyan: #06b6d4;
       --blue: #3b82f6;
@@ -20,213 +21,487 @@
       --amber: #f59e0b;
       --text: #f3f4f6;
       --text-muted: #9ca3af;
+      --sidebar-width: 260px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
 
     body {
-      background: radial-gradient(circle at 0% 0%, #1e1b4b 0%, var(--bg) 70%);
+      background: radial-gradient(circle at 10% 0%, #1e1b4b 0%, var(--bg) 70%);
       color: var(--text);
       min-height: 100vh;
+      display: flex;
     }
 
-    header {
-      background: rgba(11, 15, 25, 0.85);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--card-border);
-      padding: 1.2rem 2.5rem;
+    /* --- SIDEBAR NAV --- */
+    aside {
+      width: var(--sidebar-width);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
+      flex-direction: column;
+      position: fixed;
       top: 0;
-      z-index: 50;
+      bottom: 0;
+      left: 0;
+      z-index: 100;
     }
 
-    .logo {
+    .sidebar-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--card-border);
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: 0.8rem;
     }
-    .logo-box {
-      width: 42px;
-      height: 42px;
-      background: linear-gradient(135deg, var(--blue), var(--cyan));
+    .ginee-logo {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #06b6d4, #3b82f6);
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
       font-size: 1.2rem;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+    .ginee-title h1 { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .ginee-title p { font-size: 0.7rem; color: var(--cyan); letter-spacing: 0.05em; font-weight: 600; }
+
+    .sidebar-menu {
+      padding: 1.2rem 0.8rem;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
     }
 
-    .nav-link {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--card-border);
-      color: var(--cyan);
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      text-decoration: none;
+    .menu-category {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.8rem 0.8rem 0.4rem;
       font-weight: 600;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+    .nav-item.active {
+      background: linear-gradient(90deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.1));
+      border-left: 3px solid var(--cyan);
+      color: #fff;
+      font-weight: 600;
+    }
+    .nav-icon { font-size: 1.1rem; width: 22px; text-align: center; }
+
+    .sidebar-footer {
+      padding: 1.2rem;
+      border-top: 1px solid var(--card-border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .status-dot { width: 8px; height: 8px; background: var(--emerald); border-radius: 99px; box-shadow: 0 0 8px var(--emerald); }
+
+    /* --- MAIN CONTENT AREA --- */
+    .wrapper {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    header {
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 90;
+    }
+
+    .breadcrumb h2 { font-size: 1.25rem; font-weight: 700; }
+    .breadcrumb p { font-size: 0.8rem; color: var(--text-muted); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-action {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.55rem 1.1rem;
+      border-radius: 8px;
       font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+    .btn-action:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
+      border: none;
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); }
+
+    main {
+      padding: 2rem;
+      flex: 1;
     }
 
-    .container {
-      max-width: 1300px;
-      margin: 0 auto;
-      padding: 2.5rem 2rem;
-    }
+    .spa-view { display: none; }
+    .spa-view.active { display: block; }
 
-    .grid-metrics {
+    /* --- CARDS & METRICS --- */
+    .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 1.5rem;
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }
 
     .metric-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 16px;
-      padding: 1.5rem;
+      padding: 1.4rem;
       backdrop-filter: blur(12px);
     }
-    .metric-title { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .metric-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.4rem; font-family: 'JetBrains Mono', monospace; }
+    .metric-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+    .metric-value { font-size: 1.75rem; font-weight: 700; margin-top: 0.3rem; font-family: 'JetBrains Mono', monospace; }
 
-    .section-title { font-size: 1.3rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    /* --- TABLES & PANELS --- */
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      backdrop-filter: blur(12px);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.2rem;
+    }
+    .panel-title { font-size: 1.15rem; font-weight: 600; }
+
+    .tabs-bar {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 1.2rem;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .tab-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.85rem 1rem; border-bottom: 1px solid var(--card-border); font-size: 0.88rem; }
+    th { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .channel-badge {
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-native { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
+    .badge-tiktok { background: rgba(244, 63, 94, 0.2); color: var(--rose); }
+    .badge-shopee { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+    .badge-tokopedia { background: rgba(16, 185, 129, 0.2); color: var(--emerald); }
 
     .channels-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 1.5rem;
-      margin-bottom: 3rem;
     }
-
-    .channel-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.5rem;
-      backdrop-filter: blur(12px);
-    }
-    .channel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    .channel-badge { background: rgba(16, 185, 129, 0.15); color: var(--emerald); padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
-    .btn-sync {
-      background: rgba(6, 182, 212, 0.15);
-      border: 1px solid rgba(6, 182, 212, 0.3);
-      color: var(--cyan);
-      padding: 0.4rem 0.8rem;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .table-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin-bottom: 2.5rem;
-      backdrop-filter: blur(12px);
-    }
-
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { text-align: left; padding: 0.8rem 1rem; border-bottom: 1px solid var(--card-border); font-size: 0.9rem; }
-    th { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; }
-
-    .source-badge {
-      padding: 0.2rem 0.5rem;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    .badge-web { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
-    .badge-tiktok { background: rgba(244, 63, 94, 0.2); color: var(--rose); }
-    .badge-shopee { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
-    .badge-tokopedia { background: rgba(16, 185, 129, 0.2); color: var(--emerald); }
   </style>
 </head>
 <body>
-  <header>
-    <div class="logo">
-      <div class="logo-box">P1</div>
+
+  <!-- SIDEBAR LEFT -->
+  <aside>
+    <div class="sidebar-header">
+      <div class="ginee-logo">G</div>
+      <div class="ginee-title">
+        <h1>Ginee Hub ERP</h1>
+        <p>PROGRAM1 MONOLITH</p>
+      </div>
+    </div>
+
+    <div class="sidebar-menu">
+      <div class="menu-category">UTAMA</div>
+      <div class="nav-item active" onclick="switchView('dashboard', this)">
+        <span class="nav-icon">📊</span> Ringkasan
+      </div>
+
+      <div class="menu-category">OPERASIONAL ERPS</div>
+      <div class="nav-item" onclick="switchView('orders', this)">
+        <span class="nav-icon">📦</span> Pesanan
+      </div>
+      <div class="nav-item" onclick="switchView('inventory', this)">
+        <span class="nav-icon">🏷️</span> Produk & Stok
+      </div>
+      <div class="nav-item" onclick="switchView('chat', this)">
+        <span class="nav-icon">💬</span> Ginee Chat
+      </div>
+
+      <div class="menu-category">INTEGRASI & LAPORAN</div>
+      <div class="nav-item" onclick="switchView('channels', this)">
+        <span class="nav-icon">🌐</span> Integrasi Toko
+      </div>
+      <div class="nav-item" onclick="switchView('analytics', this)">
+        <span class="nav-icon">📈</span> Laporan Keuangan
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-dot"></div>
       <div>
-        <h2 style="font-size:1.1rem; font-weight:700">Program1 Admin Hub</h2>
-        <p style="font-size:0.75rem; color:var(--text-muted)">OMNICHANNEL RUST ENGINE</p>
+        <div style="font-weight:600; color:#fff">Server 226 Active</div>
+        <div style="font-size:0.7rem">v0.1.0 Rust Axum Engine</div>
       </div>
     </div>
-    <a href="/store" class="nav-link" target="_blank">🛒 View Storefront &rarr;</a>
-  </header>
+  </aside>
 
-  <div class="container">
-    <div class="grid-metrics">
-      <div class="metric-card">
-        <div class="metric-title">Gross Revenue</div>
-        <div class="metric-value" style="color:var(--emerald)" id="metric-revenue">Rp 0</div>
+  <!-- MAIN CONTAINER -->
+  <div class="wrapper">
+    <header>
+      <div class="breadcrumb">
+        <h2 id="view-title">Ringkasan Bisnis</h2>
+        <p id="view-subtitle">Omnichannel Sales & Stock Allocation Overview</p>
       </div>
-      <div class="metric-card">
-        <div class="metric-title">Total Orders</div>
-        <div class="metric-value" style="color:var(--cyan)" id="metric-orders">0</div>
+
+      <div class="header-actions">
+        <a href="/store" class="btn-action" target="_blank">🛒 Buka Storefront &rarr;</a>
+        <button class="btn-action btn-primary" onclick="syncAllChannels()">⚡ Sync Semua Channel</button>
       </div>
-      <div class="metric-card">
-        <div class="metric-title">Active Synced Catalog</div>
-        <div class="metric-value" style="color:var(--purple)" id="metric-products">0</div>
+    </header>
+
+    <main>
+      <!-- VIEW 1: DASHBOARD RINGKASAN -->
+      <div id="view-dashboard" class="spa-view active">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Gross Revenue</div>
+            <div class="metric-value" style="color:var(--emerald)" id="dash-revenue">Rp 0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Total Pesanan</div>
+            <div class="metric-value" style="color:var(--cyan)" id="dash-orders">0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Produk Ter-sync</div>
+            <div class="metric-value" style="color:var(--purple)" id="dash-products">0</div>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">🌐 Status Integrasi Channel Toko</h3>
+          </div>
+          <div class="channels-grid" id="dash-channels-grid">
+            <p>Loading channels...</p>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">📦 Pesanan Terbaru Multi-Channel</h3>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Channel</th>
+                <th>Pembeli</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="dash-orders-tbody">
+              <tr><td colspan="5">Loading recent orders...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
 
-    <h3 class="section-title">🌐 Connected Sales Channels</h3>
-    <div class="channels-grid" id="channels-grid">
-      <p>Loading channels...</p>
-    </div>
+      <!-- VIEW 2: PESANAN / ORDERS -->
+      <div id="view-orders" class="spa-view">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">📦 Manajemen Pesanan Omnichannel</h3>
+          </div>
 
-    <div class="table-card">
-      <h3 class="section-title">📦 Omnichannel Order Ledger</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Order ID</th>
-            <th>Channel</th>
-            <th>Customer</th>
-            <th>Total Amount</th>
-            <th>Status</th>
-            <th>Timestamp</th>
-          </tr>
-        </thead>
-        <tbody id="orders-tbody">
-          <tr><td colspan="6">Loading order ledger...</td></tr>
-        </tbody>
-      </table>
-    </div>
+          <div class="tabs-bar">
+            <button class="tab-btn active" onclick="filterOrderTab('all', this)">Semua Pesanan</button>
+            <button class="tab-btn" onclick="filterOrderTab('PAID', this)">Lunas (PAID)</button>
+            <button class="tab-btn" onclick="filterOrderTab('PROCESSING', this)">Diproses</button>
+          </div>
 
-    <div class="table-card">
-      <h3 class="section-title">📊 Central Inventory & Stock Allocation</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Product Name</th>
-            <th>SKU</th>
-            <th>Price</th>
-            <th>Available Stock</th>
-            <th>Reserved</th>
-          </tr>
-        </thead>
-        <tbody id="catalog-tbody">
-          <tr><td colspan="5">Loading central inventory...</td></tr>
-        </tbody>
-      </table>
-    </div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID Pesanan</th>
+                <th>Channel Toko</th>
+                <th>Nama Pembeli</th>
+                <th>Email / Alamat</th>
+                <th>Total Nilai</th>
+                <th>Status</th>
+                <th>Waktu</th>
+              </tr>
+            </thead>
+            <tbody id="orders-full-tbody">
+              <tr><td colspan="7">Loading full order ledger...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VIEW 3: PRODUK & STOK / INVENTORY -->
+      <div id="view-inventory" class="spa-view">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">🏷️ Katalog Produk Master & Alokasi Stok</h3>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Nama Produk Master</th>
+                <th>SKU Code</th>
+                <th>Kategori</th>
+                <th>Harga Toko</th>
+                <th>Stok Tersedia</th>
+                <th>Stok Terpesan</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-full-tbody">
+              <tr><td colspan="6">Loading master inventory...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VIEW 4: GINEE CHAT / PESAN -->
+      <div id="view-chat" class="spa-view">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">💬 Antrean Ginee Chat Multi-Channel</h3>
+          </div>
+          <div class="tabs-bar">
+            <button class="tab-btn active">Semua Pesan (Standby Active)</button>
+            <button class="tab-btn">Belum Dibalas (0)</button>
+          </div>
+          <p style="color:var(--text-muted); padding:1rem 0">
+            🤖 Standby bot auto-reply Ginee Chat aktif di background. Siap merespon pembeli TikTok Shop, Shopee, & Tokopedia.
+          </p>
+        </div>
+      </div>
+
+      <!-- VIEW 5: INTEGRASI TOKO -->
+      <div id="view-channels" class="spa-view">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">🌐 Kelola Integrasi Marketplace</h3>
+          </div>
+          <div class="channels-grid" id="full-channels-grid">
+            <p>Loading channel integrations...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 6: LAPORAN ANALYTICS -->
+      <div id="view-analytics" class="spa-view">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3 class="panel-title">📈 Laporan Pendapatan Per Channel</h3>
+          </div>
+          <div id="analytics-breakdown-container">
+            <p>Loading analytics breakdown...</p>
+          </div>
+        </div>
+      </div>
+    </main>
   </div>
 
   <script>
-    async function loadAdminData() {
-      // Analytics
+    let currentOrders = [];
+
+    function switchView(viewName, element) {
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.spa-view').forEach(el => el.classList.remove('active'));
+
+      element.classList.add('active');
+      document.getElementById(`view-${viewName}`).classList.add('active');
+
+      const titles = {
+        'dashboard': ['Ringkasan Bisnis', 'Omnichannel Sales & Stock Allocation Overview'],
+        'orders': ['Manajemen Pesanan', 'Omnichannel Order Ledger & Status Filter'],
+        'inventory': ['Produk & Stok Master', 'Central Inventory Engine & SKU Mapping'],
+        'chat': ['Ginee Chat Multi-Channel', 'Customer Support Auto-Reply Standby'],
+        'channels': ['Integrasi Toko', 'Marketplace Channel Connections & Stock Sync'],
+        'analytics': ['Laporan Keuangan', 'Channel Revenue & Profit Analytics']
+      };
+
+      document.getElementById('view-title').innerText = titles[viewName][0];
+      document.getElementById('view-subtitle').innerText = titles[viewName][1];
+    }
+
+    async function loadData() {
+      // Analytics & Metrics
       const analyticsRes = await fetch('/api/v1/analytics');
       const stats = await analyticsRes.json();
-      document.getElementById('metric-revenue').innerText = `Rp ${stats.gross_revenue.toLocaleString('id-ID')}`;
-      document.getElementById('metric-orders').innerText = stats.total_orders;
-      document.getElementById('metric-products').innerText = stats.active_products;
+      document.getElementById('dash-revenue').innerText = `Rp ${stats.gross_revenue.toLocaleString('id-ID')}`;
+      document.getElementById('dash-orders').innerText = stats.total_orders;
+      document.getElementById('dash-products').innerText = stats.active_products;
 
       // Channels
       const chanRes = await fetch('/api/v1/channels');
@@ -235,75 +510,130 @@
 
       // Orders
       const ordRes = await fetch('/api/v1/orders');
-      const orders = await ordRes.json();
-      renderOrders(orders);
+      currentOrders = await ordRes.json();
+      renderOrders(currentOrders);
 
-      // Catalog
+      // Inventory
       const catRes = await fetch('/api/v1/catalog');
       const catalog = await catRes.json();
-      renderCatalog(catalog);
+      renderInventory(catalog);
+
+      // Analytics breakdown
+      renderAnalyticsBreakdown(stats.channel_breakdown);
     }
 
     function renderChannels(channels) {
-      document.getElementById('channels-grid').innerHTML = channels.map(c => `
-        <div class="channel-card">
-          <div class="channel-header">
+      const html = channels.map(c => `
+        <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; padding:1.2rem">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem">
             <strong>${c.name}</strong>
-            <span class="channel-badge">CONNECTED</span>
+            <span style="background:rgba(16,185,129,0.15); color:var(--emerald); padding:0.2rem 0.5rem; border-radius:99px; font-size:0.7rem; font-weight:700">CONNECTED</span>
           </div>
-          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem">
-            Synced Products: <strong>${c.active_products_synced}</strong>
-          </p>
-          <button class="btn-sync" onclick="triggerSync('${c.channel}')">⚡ Sync Stock Now</button>
+          <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.8rem">Produk Synced: <strong>${c.active_products_synced}</strong></p>
+          <button style="background:rgba(6,182,212,0.15); border:1px solid rgba(6,182,212,0.3); color:var(--cyan); padding:0.4rem 0.8rem; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer" onclick="syncChannel('${c.channel}')">⚡ Sync Stok</button>
         </div>
       `).join('');
+
+      document.getElementById('dash-channels-grid').innerHTML = html;
+      document.getElementById('full-channels-grid').innerHTML = html;
+    }
+
+    function getBadgeClass(ch) {
+      if (ch === 'TikTokShop') return 'badge-tiktok';
+      if (ch === 'Shopee') return 'badge-shopee';
+      if (ch === 'Tokopedia') return 'badge-tokopedia';
+      return 'badge-native';
     }
 
     function renderOrders(orders) {
-      const tbody = document.getElementById('orders-tbody');
-      if (orders.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted)">No orders recorded yet. Place an order on the storefront to test!</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = orders.map(o => {
-        let badgeClass = 'badge-web';
-        if (o.channel === 'TikTokShop') badgeClass = 'badge-tiktok';
-        if (o.channel === 'Shopee') badgeClass = 'badge-shopee';
-        if (o.channel === 'Tokopedia') badgeClass = 'badge-tokopedia';
-
-        return `
+      // Recent top 5
+      const recent = orders.slice(0, 5);
+      document.getElementById('dash-orders-tbody').innerHTML = recent.length === 0 ? 
+        '<tr><td colspan="5" style="color:var(--text-muted)">Belum ada pesanan recorded. Place order on storefront to test!</td></tr>' :
+        recent.map(o => `
           <tr>
             <td style="font-family:'JetBrains Mono'">${o.id.substring(0,8)}...</td>
-            <td><span class="source-badge ${badgeClass}">${o.channel}</span></td>
+            <td><span class="channel-badge ${getBadgeClass(o.channel)}">${o.channel}</span></td>
             <td>${o.customer_name}</td>
+            <td style="font-weight:700; color:var(--emerald)">Rp ${o.total_amount.toLocaleString('id-ID')}</td>
+            <td><strong>${o.status}</strong></td>
+          </tr>
+        `).join('');
+
+      renderFullOrdersTable(orders);
+    }
+
+    function renderFullOrdersTable(orders) {
+      const tbody = document.getElementById('orders-full-tbody');
+      tbody.innerHTML = orders.length === 0 ?
+        '<tr><td colspan="7" style="color:var(--text-muted)">Belum ada pesanan.</td></tr>' :
+        orders.map(o => `
+          <tr>
+            <td style="font-family:'JetBrains Mono'">${o.id.substring(0,8)}...</td>
+            <td><span class="channel-badge ${getBadgeClass(o.channel)}">${o.channel}</span></td>
+            <td>${o.customer_name}</td>
+            <td>${o.customer_email}</td>
             <td style="font-weight:700; color:var(--emerald)">Rp ${o.total_amount.toLocaleString('id-ID')}</td>
             <td><strong>${o.status}</strong></td>
             <td style="color:var(--text-muted)">${new Date(o.created_at).toLocaleTimeString()}</td>
           </tr>
-        `;
-      }).join('');
+        `).join('');
     }
 
-    function renderCatalog(catalog) {
-      document.getElementById('catalog-tbody').innerHTML = catalog.map(p => `
+    function filterOrderTab(status, btn) {
+      document.querySelectorAll('#view-orders .tab-btn').forEach(el => el.classList.remove('active'));
+      btn.classList.add('active');
+
+      if (status === 'all') {
+        renderFullOrdersTable(currentOrders);
+      } else {
+        const filtered = currentOrders.filter(o => o.status === status);
+        renderFullOrdersTable(filtered);
+      }
+    }
+
+    function renderInventory(catalog) {
+      document.getElementById('inventory-full-tbody').innerHTML = catalog.map(p => `
         <tr>
           <td><strong>${p.name}</strong></td>
           <td style="font-family:'JetBrains Mono'; color:var(--cyan)">${p.sku}</td>
+          <td>${p.category}</td>
           <td>Rp ${p.price.toLocaleString('id-ID')}</td>
-          <td><strong style="color:var(--emerald)">${p.stock} units</strong></td>
-          <td style="color:var(--text-muted)">0 units</td>
+          <td><strong style="color:var(--emerald)">${p.stock} unit</strong></td>
+          <td style="color:var(--text-muted)">0 unit</td>
         </tr>
       `).join('');
     }
 
-    async function triggerSync(channel) {
-      await fetch(`/api/v1/channels/sync/${channel}`, { method: 'POST' });
-      alert(`⚡ Stock & Catalog Synced for ${channel}`);
-      loadAdminData();
+    function renderAnalyticsBreakdown(breakdown) {
+      document.getElementById('analytics-breakdown-container').innerHTML = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1.2rem">
+          ${breakdown.map(b => `
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:1.2rem; border-radius:12px">
+              <span class="channel-badge ${getBadgeClass(b.channel)}">${b.channel_name}</span>
+              <div style="font-size:1.4rem; font-weight:700; margin-top:0.6rem; color:var(--emerald)">Rp ${b.total_revenue.toLocaleString('id-ID')}</div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem">Total Orders: <strong>${b.total_orders}</strong></div>
+            </div>
+          `).join('')}
+        </div>
+      `;
     }
 
-    loadAdminData();
+    async function syncChannel(channel) {
+      await fetch(`/api/v1/channels/sync/${channel}`, { method: 'POST' });
+      alert(`⚡ Stock & Catalog Synced for ${channel}`);
+      loadData();
+    }
+
+    async function syncAllChannels() {
+      await fetch('/api/v1/channels/sync/tiktok', { method: 'POST' });
+      await fetch('/api/v1/channels/sync/shopee', { method: 'POST' });
+      await fetch('/api/v1/channels/sync/tokopedia', { method: 'POST' });
+      alert('⚡ Semua Channel (TikTok, Shopee, Tokopedia, Native Web) Berhasil Di-sync!');
+      loadData();
+    }
+
+    loadData();
   </script>
 </body>
 </html>
