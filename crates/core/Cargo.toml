@@ -1,0 +1,11 @@
+[package]
+name = "program1-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+program1-contracts = { path = "../contracts" }
+tokio.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

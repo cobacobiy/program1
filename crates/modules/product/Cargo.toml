@@ -1,0 +1,13 @@
+[package]
+name = "program1-module-product"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+program1-contracts = { path = "../../contracts" }
+async-trait.workspace = true
+tokio.workspace = true
+serde.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true

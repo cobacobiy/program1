@@ -1,0 +1,24 @@
+[package]
+name = "program1-web"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "program1"
+path = "src/main.rs"
+
+[dependencies]
+program1-contracts = { path = "../contracts" }
+program1-core = { path = "../core" }
+program1-module-user = { path = "../modules/user" }
+program1-module-product = { path = "../modules/product" }
+program1-module-order = { path = "../modules/order" }
+
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
