@@ -31,22 +31,54 @@ jobs:
         run: cargo test --workspace
 
   # ============================================
-  # Job 2: Deploy Production (Server 226 Linux Runner - Actionless Zero-Fetch)
+  # Job 2: Build & Push Image to GHCR (ghcr.io)
+  # ============================================
+  build-ghcr:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR (GitHub Container Registry)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/cobacobiy/program1:latest
+            ghcr.io/cobacobiy/program1:${{ github.sha }}
+
+  # ============================================
+  # Job 3: Deploy Production (Server 226 Linux Runner)
   # ============================================
   deploy-production:
-    needs: validate
+    needs: build-ghcr
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, 226node2]
     steps:
-      - name: Deploy Production Container (Linux Server 226)
+      - name: Deploy Container from GHCR (Linux Server 226)
         shell: bash
         run: |
-          echo "Deploying Production to Linux Server 226..."
+          echo "Deploying Production Container from GHCR to Linux Server 226..."
           cd /home/gpu/actions-runner-program1/_work/program1/program1 || cd ./
           git fetch origin main || true
           git reset --hard origin/main || true
           if [ ! -f ".env" ]; then
               cp .env.example .env
           fi
-          docker compose up -d --build --remove-orphans
-          echo "Production deployment complete on Linux Server 226!"
+          docker pull ghcr.io/cobacobiy/program1:latest || true
+          docker compose up -d --remove-orphans
+          echo "Production GHCR deployment complete on Linux Server 226!"
