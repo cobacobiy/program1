@@ -17,6 +17,7 @@ use uuid::Uuid;
 use program1_contracts::{
     AnalyticsContract, CatalogContract, ChannelSyncContract, ChannelType, ContractError,
     CreateCatalogItemRequest, InventoryContract, OrderContract, StorefrontOrderRequest,
+    UpdateSafetyStockRequest,
 };
 use program1_core::init_tracing;
 use program1_module_analytics::AnalyticsModule;
@@ -78,8 +79,11 @@ async fn main() {
         // Catalog
         .route("/api/v1/catalog", get(list_catalog).post(create_catalog_item))
         .route("/api/v1/catalog/:id", get(get_catalog_item))
-        // Inventory
+        // Inventory Ginee OMS
+        .route("/api/v1/inventory", get(list_all_inventory))
         .route("/api/v1/inventory/:id", get(get_inventory_stock))
+        .route("/api/v1/inventory/:id/safety-stock", post(update_safety_stock))
+        .route("/api/v1/inventory/:id/safety-stock-logs", get(get_safety_stock_logs))
         // Channels
         .route("/api/v1/channels", get(list_channels))
         .route("/api/v1/channels/sync/:channel", post(sync_channel))
@@ -186,10 +190,40 @@ async fn create_catalog_item(
     }
 }
 
-// Inventory Handlers
+// Inventory Ginee OMS Handlers
+async fn list_all_inventory(State(state): State<AppState>) -> impl IntoResponse {
+    match state.inventory_contract.get_all_stocks().await {
+        Ok(stocks) => (StatusCode::OK, Json(json!(stocks))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
 async fn get_inventory_stock(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
     match state.inventory_contract.get_stock(id).await {
         Ok(stock) => (StatusCode::OK, Json(json!(stock))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
+async fn update_safety_stock(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateSafetyStockRequest>,
+) -> impl IntoResponse {
+    let operator = payload.updated_by.unwrap_or_else(|| "Admin Ginee".to_string());
+    match state
+        .inventory_contract
+        .update_safety_stock(id, payload.new_safety_stock, payload.admin_note, operator)
+        .await
+    {
+        Ok(updated) => (StatusCode::OK, Json(json!(updated))),
+        Err(e) => map_contract_error(e),
+    }
+}
+
+async fn get_safety_stock_logs(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
+    match state.inventory_contract.get_safety_stock_logs(id).await {
+        Ok(logs) => (StatusCode::OK, Json(json!(logs))),
         Err(e) => map_contract_error(e),
     }
 }

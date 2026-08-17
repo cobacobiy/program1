@@ -74,23 +74,55 @@ pub trait CatalogContract: Send + Sync {
     async fn create_item(&self, req: CreateCatalogItemRequest) -> Result<CatalogItemDto, ContractError>;
 }
 
-// --- INVENTORY CONTRACT ---
+// --- INVENTORY CONTRACT (Ginee OMS Multi-Stock) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InventoryStockDto {
     pub product_id: Uuid,
     pub sku: String,
+    pub product_name: String,
+    pub image_url: String,
+    pub average_purchase_price: f64,
+    pub warehouse_stock: u32,
+    pub spare_stock: u32,
+    pub locked_stock: u32,
+    pub promotion_stock: u32,
+    pub safety_stock: u32,
     pub available_stock: u32,
-    pub reserved_stock: u32,
-    pub total_stock: u32,
     pub last_updated: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SafetyStockLogDto {
+    pub id: Uuid,
+    pub product_id: Uuid,
+    pub old_safety_stock: u32,
+    pub new_safety_stock: u32,
+    pub admin_note: String,
+    pub updated_by: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSafetyStockRequest {
+    pub new_safety_stock: u32,
+    pub admin_note: String,
+    pub updated_by: Option<String>,
 }
 
 #[async_trait]
 pub trait InventoryContract: Send + Sync {
+    async fn get_all_stocks(&self) -> Result<Vec<InventoryStockDto>, ContractError>;
     async fn get_stock(&self, product_id: Uuid) -> Result<InventoryStockDto, ContractError>;
     async fn reserve_stock(&self, product_id: Uuid, quantity: u32) -> Result<(), ContractError>;
-    async fn update_stock(&self, product_id: Uuid, new_total_stock: u32) -> Result<InventoryStockDto, ContractError>;
+    async fn update_safety_stock(
+        &self,
+        product_id: Uuid,
+        new_safety_stock: u32,
+        admin_note: String,
+        updated_by: String,
+    ) -> Result<InventoryStockDto, ContractError>;
+    async fn get_safety_stock_logs(&self, product_id: Uuid) -> Result<Vec<SafetyStockLogDto>, ContractError>;
 }
 
 // --- CHANNEL SYNC CONTRACT ---
