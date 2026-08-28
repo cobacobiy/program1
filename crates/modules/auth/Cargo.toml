@@ -1,0 +1,12 @@
+[package]
+name = "program1-module-auth"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+program1-contracts = { path = "../../contracts" }
+async-trait.workspace = true
+jsonwebtoken = { workspace = true }
+serde.workspace = true
+chrono.workspace = true
+uuid.workspace = true

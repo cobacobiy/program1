@@ -1,6 +1,7 @@
 let currentOrders = [];
 let userAccounts = [];
 let activeAccount = null;
+let authToken = localStorage.getItem("program1_jwt_token") || null;
 
 const ALL_MENU_ITEMS = [
   { id: "dashboard", label: "📊 Dashboard" },
@@ -21,33 +22,82 @@ const ALL_MENU_ITEMS = [
   { id: "service", label: "🎧 Service & Support" }
 ];
 
+async function getAuthToken(username = "admin", password = "admin123") {
+  try {
+    const res = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      authToken = data.access_token;
+      localStorage.setItem("program1_jwt_token", authToken);
+      return authToken;
+    }
+  } catch (err) {
+    console.error("Login authentication failed:", err);
+  }
+  return null;
+}
+
+async function authFetch(url, options = {}) {
+  if (!authToken) {
+    await getAuthToken();
+  }
+  options.headers = options.headers || {};
+  if (authToken) {
+    options.headers["Authorization"] = `Bearer ${authToken}`;
+  }
+  let res = await fetch(url, options);
+  if (res.status === 401) {
+    await getAuthToken(activeAccount ? activeAccount.username : "admin", "admin123");
+    if (authToken) {
+      options.headers["Authorization"] = `Bearer ${authToken}`;
+      res = await fetch(url, options);
+    }
+  }
+  return res;
+}
+
 async function loadData() {
   try {
     await fetchUserAccounts();
     const [analyticsRes, channelsRes, ordersRes, stocksRes, catalogRes] = await Promise.all([
-      fetch("/api/v1/analytics"),
-      fetch("/api/v1/channels"),
-      fetch("/api/v1/orders"),
-      fetch("/api/v1/inventory"),
-      fetch("/api/v1/catalog")
+      authFetch("/api/v1/analytics"),
+      authFetch("/api/v1/channels"),
+      authFetch("/api/v1/orders"),
+      authFetch("/api/v1/inventory"),
+      authFetch("/api/v1/catalog")
     ]);
 
-    const analytics = await analyticsRes.json();
-    const channels = await channelsRes.json();
-    currentOrders = await ordersRes.json();
-    const stocks = await stocksRes.json();
-    const catalog = await catalogRes.json();
+    if (analyticsRes.ok) {
+      const analytics = await analyticsRes.json();
+      document.getElementById("dash-revenue").innerText = `Rp ${analytics.gross_revenue.toLocaleString("id-ID")}`;
+      document.getElementById("dash-orders").innerText = analytics.total_orders;
+      document.getElementById("dash-products").innerText = analytics.active_products;
+      renderAnalyticsBreakdown(analytics.channel_breakdown);
+    }
 
-    // Update Dashboard Cards
-    document.getElementById("dash-revenue").innerText = `Rp ${analytics.gross_revenue.toLocaleString("id-ID")}`;
-    document.getElementById("dash-orders").innerText = analytics.total_orders;
-    document.getElementById("dash-products").innerText = analytics.active_products;
+    if (channelsRes.ok) {
+      const channels = await channelsRes.json();
+      renderChannelsGrid(channels);
+    }
 
-    renderChannelsGrid(channels);
-    renderOrders(currentOrders);
-    renderGineeStockList(stocks);
-    renderMasterProducts(catalog);
-    renderAnalyticsBreakdown(analytics.channel_breakdown);
+    if (ordersRes.ok) {
+      currentOrders = await ordersRes.json();
+      renderOrders(currentOrders);
+    }
+
+    if (stocksRes.ok) {
+      const stocks = await stocksRes.json();
+      renderGineeStockList(stocks);
+    }
+
+    if (catalogRes.ok) {
+      const catalog = await catalogRes.json();
+      renderMasterProducts(catalog);
+    }
   } catch (e) {
     console.error("Error loading OMS dashboard data:", e);
   }
@@ -56,16 +106,18 @@ async function loadData() {
 // --- USER ACCOUNTS & RBAC PERMISSION ENGINE ---
 async function fetchUserAccounts() {
   try {
-    const res = await fetch("/api/v1/users/accounts");
-    userAccounts = await res.json();
-    if (!activeAccount && userAccounts.length > 0) {
-      activeAccount = userAccounts.find(a => a.username === "admin") || userAccounts[0];
-    } else if (activeAccount) {
-      activeAccount = userAccounts.find(a => a.id === activeAccount.id) || userAccounts[0];
+    const res = await authFetch("/api/v1/users/accounts");
+    if (res.ok) {
+      userAccounts = await res.json();
+      if (!activeAccount && userAccounts.length > 0) {
+        activeAccount = userAccounts.find(a => a.username === "admin") || userAccounts[0];
+      } else if (activeAccount) {
+        activeAccount = userAccounts.find(a => a.id === activeAccount.id) || userAccounts[0];
+      }
+      renderUserAccountSwitcher();
+      renderUserAccountsTable();
+      applyRBACPermissions(activeAccount);
     }
-    renderUserAccountSwitcher();
-    renderUserAccountsTable();
-    applyRBACPermissions(activeAccount);
   } catch (e) {
     console.error("Error fetching user accounts:", e);
   }
@@ -100,13 +152,15 @@ window.onclick = function(e) {
   }
 };
 
-function switchActiveAccount(userId) {
+async function switchActiveAccount(userId) {
   const acc = userAccounts.find(a => a.id === userId);
   if (acc) {
     activeAccount = acc;
+    await getAuthToken(acc.username, "admin123");
     renderUserAccountSwitcher();
     applyRBACPermissions(activeAccount);
     document.getElementById("user-dropdown-menu").classList.remove("show");
+    loadData();
   }
 }
 
@@ -403,7 +457,7 @@ function closeEditSafetyModal() {
 async function openHistoryModal(productId, productName) {
   document.getElementById("history-product-title").innerText = productName;
   document.getElementById("history-safety-modal").style.display = "flex";
-  const res = await fetch(`/api/v1/inventory/${productId}/safety-stock-logs`);
+  const res = await authFetch(`/api/v1/inventory/${productId}/safety-stock-logs`);
   const logs = await res.json();
   const container = document.getElementById("history-logs-container");
   if (logs.length === 0) {
@@ -429,15 +483,15 @@ function closeHistoryModal() {
 }
 
 async function syncChannel(channel) {
-  await fetch(`/api/v1/channels/sync/${channel}`, { method: "POST" });
+  await authFetch(`/api/v1/channels/sync/${channel}`, { method: "POST" });
   alert(`⚡ Stock & Catalog Synced for ${channel}`);
   loadData();
 }
 
 async function syncAllChannels() {
-  await fetch("/api/v1/channels/sync/tiktok", { method: "POST" });
-  await fetch("/api/v1/channels/sync/shopee", { method: "POST" });
-  await fetch("/api/v1/channels/sync/tokopedia", { method: "POST" });
+  await authFetch("/api/v1/channels/sync/tiktok", { method: "POST" });
+  await authFetch("/api/v1/channels/sync/shopee", { method: "POST" });
+  await authFetch("/api/v1/channels/sync/tokopedia", { method: "POST" });
   alert("⚡ Semua Channel (TikTok, Shopee, Tokopedia, Native Web) Berhasil Di-sync!");
   loadData();
 }
@@ -449,7 +503,7 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       const userId = document.getElementById("edit-perm-user-id").value;
       const checked = Array.from(document.querySelectorAll('#perm-checkboxes-grid input[name="perm_menu"]:checked')).map(cb => cb.value);
-      const res = await fetch(`/api/v1/users/accounts/${userId}/permissions`, {
+      const res = await authFetch(`/api/v1/users/accounts/${userId}/permissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessible_menus: checked })
@@ -474,7 +528,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const role = document.getElementById("create-role").value;
       const accessible_menus = Array.from(document.querySelectorAll('#create-perm-checkboxes-grid input[name="create_perm_menu"]:checked')).map(cb => cb.value);
 
-      const res = await fetch("/api/v1/users/accounts", {
+      const res = await authFetch("/api/v1/users/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, full_name, role, accessible_menus })
@@ -500,7 +554,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const admin_note = document.getElementById("edit-admin-note").value;
       const updated_by = document.getElementById("edit-operator").value;
 
-      const res = await fetch(`/api/v1/inventory/${productId}/safety-stock`, {
+      const res = await authFetch(`/api/v1/inventory/${productId}/safety-stock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_safety_stock, admin_note, updated_by })
