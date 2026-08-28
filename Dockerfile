@@ -5,6 +5,14 @@ FROM rust:slim-bookworm AS builder
 
 WORKDIR /usr/src/program1
 
+# Install build dependencies including curl, pkg-config, OpenSSL, and ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy Cargo manifests, migrations, and crate sources
 COPY Cargo.toml Cargo.lock ./
 COPY migrations ./migrations
