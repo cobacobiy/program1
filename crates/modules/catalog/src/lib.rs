@@ -14,12 +14,7 @@ pub struct CatalogModule {
 
 impl CatalogModule {
     pub fn new(pool: DbPool) -> Self {
-        let module = Self { pool };
-        let module_clone = module.clone();
-        tokio::spawn(async move {
-            let _ = module_clone.seed_default_catalog().await;
-        });
-        module
+        Self { pool }
     }
 
     pub async fn seed_default_catalog(&self) -> Result<(), ContractError> {
@@ -66,8 +61,9 @@ impl CatalogModule {
             ),
         ];
 
+        let now = Utc::now().to_rfc3339();
         for (id, name, sku, category, price, stock, img, desc) in initial_items {
-            let _ = sqlx::query(
+            sqlx::query(
                 "INSERT OR IGNORE INTO catalog_items (id, name, sku, category, price, stock, image_url, description, created_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             )
@@ -79,13 +75,15 @@ impl CatalogModule {
             .bind(stock)
             .bind(img)
             .bind(desc)
-            .bind(Utc::now().to_rfc3339())
+            .bind(&now)
             .execute(&self.pool)
-            .await;
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
         }
 
         Ok(())
     }
+
 
     fn row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<CatalogItemDto, ContractError> {
         let id_str: String = row.get("id");

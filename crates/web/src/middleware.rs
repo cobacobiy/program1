@@ -1,12 +1,16 @@
+use std::env;
+use std::time::Duration;
+
 use axum::{
     extract::{FromRequestParts, Request, State},
-    http::{header, request::Parts, StatusCode},
+    http::{header, request::Parts, HeaderName, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::Response,
     Json,
 };
 use program1_contracts::JwtClaims;
 use serde_json::json;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::AppState;
 
@@ -182,4 +186,70 @@ pub async fn require_admin(
             }
         }
     }
+}
+
+/// Middleware to attach hardened security headers
+pub async fn security_headers(req: Request, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+
+    // Prevent clickjacking
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+
+    // Prevent MIME type sniffing
+    headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+
+    // XSS protection (legacy browsers)
+    headers.insert(HeaderName::from_static("x-xss-protection"), HeaderValue::from_static("1; mode=block"));
+
+    // Referrer policy
+    headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("strict-origin-when-cross-origin"));
+
+    // Content Security Policy
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'"
+        ),
+    );
+
+    // Strict Transport Security (HSTS for production / HTTPS)
+    if env::var("APP_ENV").unwrap_or_default().to_lowercase() == "production" {
+        headers.insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+    }
+
+    response
+}
+
+/// Build hardened CORS configuration layer
+pub fn build_cors_layer() -> CorsLayer {
+    let default_origins = "http://localhost:8080,http://localhost:6090,http://localhost:3000,http://127.0.0.1:8080,http://127.0.0.1:6090,http://127.0.0.1:3000".to_string();
+    let allowed_origins_str = env::var("ALLOWED_ORIGINS").unwrap_or(default_origins);
+
+    let origins: Vec<HeaderValue> = allowed_origins_str
+        .split(',')
+        .filter_map(|o| HeaderValue::from_str(o.trim()).ok())
+        .collect();
+
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            HeaderName::from_static("x-requested-with"),
+        ])
+        .allow_credentials(true)
+        .max_age(Duration::from_secs(3600))
 }

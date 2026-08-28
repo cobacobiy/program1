@@ -11,8 +11,8 @@ use axum::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
+
 use uuid::Uuid;
 use validator::Validate;
 
@@ -79,10 +79,7 @@ where
 }
 
 pub fn create_app(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = middleware::build_cors_layer();
 
     // 1. Public routes (no authentication required)
     let public_routes = Router::new()
@@ -133,10 +130,12 @@ pub fn create_app(state: AppState) -> Router {
         .merge(protected_routes)
         .merge(admin_routes)
         .merge(static_routes)
+        .layer(axum::middleware::from_fn(middleware::security_headers))
         .layer(DefaultBodyLimit::max(1024 * 1024)) // 1MB max body limit
         .layer(cors)
         .with_state(state)
 }
+
 
 // --- HANDLERS ---
 
