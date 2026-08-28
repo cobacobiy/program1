@@ -16,10 +16,11 @@ services:
     ports:
       - "6090:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/store/info"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
+
     networks:
       - default
 

@@ -1,9 +1,9 @@
 use std::env;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::{
     extract::{FromRequestParts, Request, State},
-    http::{header, request::Parts, HeaderName, HeaderValue, Method, StatusCode},
+    http::{header, request::Parts, HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::Response,
     Json,
@@ -11,8 +11,101 @@ use axum::{
 use program1_contracts::JwtClaims;
 use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use uuid::Uuid;
 
 use crate::AppState;
+
+/// Request ID extension container for request tracing
+#[derive(Debug, Clone)]
+pub struct RequestId(pub String);
+
+/// Middleware to extract or generate unique X-Request-ID and log request metrics
+pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
+    let start_time = Instant::now();
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+
+    let request_id = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    req.extensions_mut().insert(RequestId(request_id.clone()));
+
+    let mut response = next.run(req).await;
+    let latency = start_time.elapsed();
+    let status = response.status();
+
+    if let Ok(header_val) = HeaderValue::from_str(&request_id) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("x-request-id"), header_val);
+    }
+
+    tracing::info!(
+        request_id = %request_id,
+        method = %method,
+        path = %path,
+        status = %status.as_u16(),
+        latency_ms = %latency.as_millis(),
+        "HTTP Request completed"
+    );
+
+    response
+}
+
+/// Helper to parse Bearer token and validate JWT claims (DRY)
+pub fn extract_and_validate_token(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<JwtClaims, (StatusCode, Json<serde_json::Value>)> {
+    let auth_header = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|val| val.to_str().ok());
+
+    let token = match auth_header {
+        Some(header_val) if header_val.starts_with("Bearer ") => {
+            &header_val["Bearer ".len()..]
+        }
+        _ => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "authentication_required",
+                    "message": "Missing or invalid Authorization header"
+                })),
+            ));
+        }
+    };
+
+    match state.auth_contract.validate_token(token) {
+        Ok(claims) => Ok(claims),
+        Err(e) => {
+            let err_msg = e.to_string();
+            if err_msg.to_lowercase().contains("expired") {
+                Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "error": "token_expired",
+                        "message": "Your session has expired. Please login again"
+                    })),
+                ))
+            } else {
+                Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "error": "authentication_required",
+                        "message": "Invalid token"
+                    })),
+                ))
+            }
+        }
+    }
+}
 
 /// Extractor for authenticated user claims
 #[derive(Debug, Clone)]
@@ -23,168 +116,41 @@ impl FromRequestParts<AppState> for AuthUser {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let auth_header = parts
-            .headers
-            .get(header::AUTHORIZATION)
-            .and_then(|val| val.to_str().ok());
-
-        let token = match auth_header {
-            Some(header_val) if header_val.starts_with("Bearer ") => {
-                &header_val["Bearer ".len()..]
-            }
-            _ => {
-                return Err((
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({
-                        "error": "authentication_required",
-                        "message": "Missing or invalid Authorization header"
-                    })),
-                ));
-            }
-        };
-
-        match state.auth_contract.validate_token(token) {
-            Ok(claims) => Ok(AuthUser(claims)),
-            Err(e) => {
-                let err_msg = e.to_string();
-                if err_msg.to_lowercase().contains("expired") {
-                    Err((
-                        StatusCode::UNAUTHORIZED,
-                        Json(json!({
-                            "error": "token_expired",
-                            "message": "Your session has expired. Please login again"
-                        })),
-                    ))
-                } else {
-                    Err((
-                        StatusCode::UNAUTHORIZED,
-                        Json(json!({
-                            "error": "authentication_required",
-                            "message": "Missing or invalid Authorization header"
-                        })),
-                    ))
-                }
-            }
-        }
+        let claims = extract_and_validate_token(&parts.headers, state)?;
+        Ok(AuthUser(claims))
     }
 }
 
-/// Middleware to require valid JWT authentication
+/// Middleware to enforce authentication on protected endpoints
 pub async fn require_auth(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
-    let auth_header = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|val| val.to_str().ok());
-
-    let token = match auth_header {
-        Some(header_val) if header_val.starts_with("Bearer ") => {
-            &header_val["Bearer ".len()..]
-        }
-        _ => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "authentication_required",
-                    "message": "Missing or invalid Authorization header"
-                })),
-            ));
-        }
-    };
-
-    match state.auth_contract.validate_token(token) {
-        Ok(claims) => {
-            req.extensions_mut().insert(claims);
-            Ok(next.run(req).await)
-        }
-        Err(e) => {
-            let err_msg = e.to_string();
-            if err_msg.to_lowercase().contains("expired") {
-                Err((
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({
-                        "error": "token_expired",
-                        "message": "Your session has expired. Please login again"
-                    })),
-                ))
-            } else {
-                Err((
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({
-                        "error": "authentication_required",
-                        "message": "Missing or invalid Authorization header"
-                    })),
-                ))
-            }
-        }
-    }
+    let claims = extract_and_validate_token(req.headers(), &state)?;
+    req.extensions_mut().insert(claims);
+    Ok(next.run(req).await)
 }
 
-/// Middleware to require admin access (Super Admin or Admin)
+/// Middleware to enforce Admin-only RBAC access
 pub async fn require_admin(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
-    let auth_header = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|val| val.to_str().ok());
-
-    let token = match auth_header {
-        Some(header_val) if header_val.starts_with("Bearer ") => {
-            &header_val["Bearer ".len()..]
-        }
-        _ => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "error": "authentication_required",
-                    "message": "Missing or invalid Authorization header"
-                })),
-            ));
-        }
-    };
-
-    match state.auth_contract.validate_token(token) {
-        Ok(claims) => {
-            let role = claims.role.to_lowercase();
-            if role.contains("admin") {
-                req.extensions_mut().insert(claims);
-                Ok(next.run(req).await)
-            } else {
-                Err((
-                    StatusCode::FORBIDDEN,
-                    Json(json!({
-                        "error": "insufficient_permissions",
-                        "message": "Your role does not have access to this resource"
-                    })),
-                ))
-            }
-        }
-        Err(e) => {
-            let err_msg = e.to_string();
-            if err_msg.to_lowercase().contains("expired") {
-                Err((
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({
-                        "error": "token_expired",
-                        "message": "Your session has expired. Please login again"
-                    })),
-                ))
-            } else {
-                Err((
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({
-                        "error": "authentication_required",
-                        "message": "Missing or invalid Authorization header"
-                    })),
-                ))
-            }
-        }
+    let claims = extract_and_validate_token(req.headers(), &state)?;
+    let role = claims.role.to_lowercase();
+    if role.contains("admin") {
+        req.extensions_mut().insert(claims);
+        Ok(next.run(req).await)
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": "Your role does not have access to this resource"
+            })),
+        ))
     }
 }
 
@@ -211,11 +177,11 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
         HeaderValue::from_static("1.0.0"),
     );
 
-    // Content Security Policy
+    // Hardened Content Security Policy (unsafe-eval removed)
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'"
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'"
         ),
     );
 
@@ -229,7 +195,6 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
 
     response
 }
-
 
 /// Build hardened CORS configuration layer
 pub fn build_cors_layer() -> CorsLayer {
@@ -248,7 +213,6 @@ pub fn build_cors_layer() -> CorsLayer {
             Method::POST,
             Method::PUT,
             Method::PATCH,
-            Method::DELETE,
             Method::OPTIONS,
         ])
         .allow_headers([
@@ -256,6 +220,7 @@ pub fn build_cors_layer() -> CorsLayer {
             header::AUTHORIZATION,
             header::ACCEPT,
             HeaderName::from_static("x-requested-with"),
+            HeaderName::from_static("x-request-id"),
         ])
         .allow_credentials(true)
         .max_age(Duration::from_secs(3600))

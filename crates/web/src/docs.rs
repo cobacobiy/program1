@@ -36,7 +36,9 @@ impl Modify for SecurityAddon {
 #[openapi(
     paths(
         handlers::health_check,
+        handlers::readiness_check,
         handlers::get_store_info,
+
         handlers::login_handler,
         handlers::register_handler,
         handlers::list_user_accounts,

@@ -64,6 +64,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Arc<AuditModule>) {
         analytics_contract: analytics_module,
         audit_contract: audit_module.clone(),
         rate_limiter,
+        started_at: std::time::Instant::now(),
     };
 
     (create_app(state), admin_token, staff_token, audit_module)

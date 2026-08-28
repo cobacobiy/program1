@@ -68,8 +68,13 @@ pub async fn get_catalog_item(
 )]
 pub async fn create_catalog_item(
     State(state): State<AppState>,
-    ValidatedJson(payload): ValidatedJson<CreateCatalogItemRequest>,
+    ValidatedJson(mut payload): ValidatedJson<CreateCatalogItemRequest>,
 ) -> Result<(StatusCode, Json<CatalogItemDto>), ApiError> {
+    payload.name = program1_core::sanitize::sanitize_text(&payload.name, 200);
+    if let Some(desc) = payload.description {
+        payload.description = Some(program1_core::sanitize::sanitize_text(&desc, 2000));
+    }
+
     let sku = payload.sku.clone();
     let item = state.catalog_contract.create_item(payload).await?;
 

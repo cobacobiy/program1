@@ -6,7 +6,6 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
     Router,
-
 };
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::services::ServeDir;
@@ -61,6 +60,7 @@ pub fn create_app(state: AppState) -> Router {
     // 1. Public routes (no authentication required)
     let public_routes = Router::new()
         .route("/health", get(health_check))
+        .route("/health/ready", get(readiness_check))
         .route("/api/v1/store/info", get(get_store_info))
         .route("/api/v1/auth/login", post(login_handler).route_layer(login_limit_layer))
         .route("/api/v1/catalog", get(list_catalog))
@@ -107,14 +107,14 @@ pub fn create_app(state: AppState) -> Router {
     // Swagger UI & OpenAPI Specification routes
     let doc_routes = SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi());
 
-
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
         .merge(admin_routes)
         .merge(static_routes)
         .merge(doc_routes)
-        .layer(CatchPanicLayer::custom(|_| {
+        .layer(CatchPanicLayer::custom(|panic_info| {
+            tracing::error!("Handler panicked! Error: {:?}", panic_info);
             let err = ApiError::new(
                 ErrorCode::InternalError,
                 "An unexpected internal error occurred",
@@ -123,6 +123,7 @@ pub fn create_app(state: AppState) -> Router {
             err.into_response()
         }))
         .layer(axum::middleware::from_fn(middleware::security_headers))
+        .layer(axum::middleware::from_fn(middleware::request_id_middleware))
         .layer(DefaultBodyLimit::max(1024 * 1024)) // 1MB max body limit
         .layer(cors)
         .with_state(state)

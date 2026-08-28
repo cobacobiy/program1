@@ -15,17 +15,42 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
+        let app_env = env_or("APP_ENV", "development");
+        let is_prod = app_env.eq_ignore_ascii_case("production");
+
+        let jwt_secret = if is_prod {
+            let secret = std::env::var("JWT_SECRET")
+                .expect("CRITICAL: JWT_SECRET environment variable must be set in production!");
+            if secret.len() < 32 {
+                panic!("CRITICAL: JWT_SECRET in production must be at least 32 characters long!");
+            }
+            secret
+        } else {
+            env_or(
+                "JWT_SECRET",
+                "super-secret-program1-jwt-signing-key-32chars-min!",
+            )
+        };
+
+        let admin_default_password = if is_prod {
+            let pass = std::env::var("ADMIN_DEFAULT_PASSWORD")
+                .expect("CRITICAL: ADMIN_DEFAULT_PASSWORD must be set in production!");
+            if pass.len() < 8 {
+                panic!("CRITICAL: ADMIN_DEFAULT_PASSWORD must be at least 8 characters long!");
+            }
+            pass
+        } else {
+            env_or("ADMIN_DEFAULT_PASSWORD", "admin123")
+        };
+
         Self {
-            app_env: env_or("APP_ENV", "development"),
+            app_env,
             app_port: env_or("APP_PORT", "8080").parse().unwrap_or(8080),
             store_name: env_or("STORE_NAME", "AURA Storefront"),
             store_currency: env_or("STORE_CURRENCY", "IDR"),
             database_url: env_or("DATABASE_URL", "sqlite://./data/program1.db?mode=rwc"),
-            admin_default_password: env_or("ADMIN_DEFAULT_PASSWORD", "admin123"),
-            jwt_secret: env_or(
-                "JWT_SECRET",
-                "super-secret-program1-jwt-signing-key-32chars-min!",
-            ),
+            admin_default_password,
+            jwt_secret,
             jwt_expiry_hours: env_or("JWT_EXPIRY_HOURS", "24").parse().unwrap_or(24),
             allowed_origins: env_or("ALLOWED_ORIGINS", "http://localhost:8080,http://localhost:3000")
                 .split(',')

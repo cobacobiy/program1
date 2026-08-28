@@ -75,7 +75,9 @@ async fn main() {
         analytics_contract: analytics_module,
         audit_contract: audit_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
+        started_at: std::time::Instant::now(),
     };
+
 
     let app = create_app(state);
 
