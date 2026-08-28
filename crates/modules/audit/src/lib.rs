@@ -23,7 +23,14 @@ impl AuditModule {
         let timestamp_str: String = row.get("timestamp");
         let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
             .map(|dt| dt.with_timezone(&Utc))
-            .unwrap_or_else(|_| Utc::now());
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    raw_timestamp = %timestamp_str,
+                    error = %e,
+                    "Corrupt timestamp in audit log, fallback to Utc::now()"
+                );
+                Utc::now()
+            });
 
         let actor_id_str: Option<String> = row.get("actor_id");
         let actor_id = actor_id_str.and_then(|s| Uuid::parse_str(&s).ok());

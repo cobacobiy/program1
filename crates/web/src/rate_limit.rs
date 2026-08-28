@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::{
@@ -11,6 +11,7 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
 pub struct RateLimitInfo {
@@ -42,20 +43,19 @@ impl IpRateLimiter {
     }
 
     /// Check and record an incoming request for a given IP and route key
-    pub fn check(
+    pub async fn check(
         &self,
         ip: &str,
         route_key: &str,
         max_requests: usize,
         window: Duration,
     ) -> Result<RateLimitInfo, RateLimitRejection> {
-        let mut map = self.records.lock().unwrap();
+        let mut map = self.records.lock().await;
         let now = Instant::now();
         let cutoff = now.checked_sub(window).unwrap_or(now);
 
         let key = (ip.to_string(), route_key.to_string());
         let timestamps = map.entry(key).or_default();
-
 
         // Retain only timestamps within the sliding window
         timestamps.retain(|&t| t > cutoff);
@@ -86,9 +86,15 @@ impl IpRateLimiter {
         })
     }
 
+    /// Cleanup stale/empty rate limit entries to prevent memory leak
+    pub async fn cleanup_stale_entries(&self) {
+        let mut map = self.records.lock().await;
+        map.retain(|_key, timestamps| !timestamps.is_empty());
+    }
+
     /// Reset limiter state (useful for tests)
-    pub fn clear(&self) {
-        let mut map = self.records.lock().unwrap();
+    pub async fn clear(&self) {
+        let mut map = self.records.lock().await;
         map.clear();
     }
 }
@@ -128,7 +134,7 @@ pub async fn rate_limit_layer(
 ) -> Response<Body> {
     let client_ip = extract_client_ip(&req);
 
-    match limiter.check(&client_ip, route_key, max_requests, window) {
+    match limiter.check(&client_ip, route_key, max_requests, window).await {
         Ok(info) => {
             let mut response = next.run(req).await;
             let headers = response.headers_mut();

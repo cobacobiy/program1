@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Pool, Sqlite};
-use tracing::info;
+use tracing::{info, warn};
 
 pub type DbPool = Pool<Sqlite>;
 
@@ -36,8 +36,11 @@ pub async fn init_database(database_url: &str) -> Result<DbPool, sqlx::Error> {
             .acquire_timeout(Duration::from_secs(5))
             .after_connect(|conn, _meta| {
                 Box::pin(async move {
-                    sqlx::query("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-                        .execute(conn)
+                    sqlx::query("PRAGMA journal_mode=WAL;")
+                        .execute(&mut *conn)
+                        .await?;
+                    sqlx::query("PRAGMA foreign_keys=ON;")
+                        .execute(&mut *conn)
                         .await?;
                     Ok(())
                 })
@@ -53,7 +56,11 @@ pub async fn init_database(database_url: &str) -> Result<DbPool, sqlx::Error> {
         info!("Database migrations executed successfully.");
         Ok(pool)
     } else {
-        // Default to in-memory sqlite if not matching
+        warn!(
+            database_url = %database_url,
+            "Unrecognized DATABASE_URL format. Falling back to in-memory SQLite (data will not persist)."
+        );
+
         let connect_options = SqliteConnectOptions::from_str("sqlite::memory:")?
             .create_if_missing(true);
 

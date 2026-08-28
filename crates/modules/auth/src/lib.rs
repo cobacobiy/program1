@@ -11,6 +11,10 @@ pub struct AuthModule {
 
 impl AuthModule {
     pub fn new(jwt_secret: String, token_expiry_hours: u64) -> Self {
+        assert!(
+            jwt_secret.len() >= 32,
+            "JWT_SECRET must be at least 32 characters for security"
+        );
         Self {
             jwt_secret,
             token_expiry_hours: if token_expiry_hours == 0 { 24 } else { token_expiry_hours },
@@ -33,8 +37,10 @@ impl AuthContract for AuthModule {
             iat: now,
         };
 
+        let header = Header::new(jsonwebtoken::Algorithm::HS256);
+
         encode(
-            &Header::default(),
+            &header,
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
         )

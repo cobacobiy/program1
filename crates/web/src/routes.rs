@@ -113,7 +113,8 @@ pub fn create_app(state: AppState) -> Router {
         .merge(admin_routes)
         .merge(static_routes)
         .merge(doc_routes)
-        .layer(CatchPanicLayer::custom(|_| {
+        .layer(CatchPanicLayer::custom(|panic_info| {
+            tracing::error!("Handler panicked! Error: {:?}", panic_info);
             let err = ApiError::new(
                 ErrorCode::InternalError,
                 "An unexpected internal error occurred",
