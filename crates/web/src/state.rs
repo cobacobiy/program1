@@ -28,7 +28,9 @@ pub struct AppState {
     pub analytics_contract: Arc<dyn AnalyticsContract>,
     pub audit_contract: Arc<dyn AuditContract>,
     pub rate_limiter: Arc<IpRateLimiter>,
+    pub started_at: std::time::Instant,
 }
+
 
 /// Custom Axum extractor that parses JSON and automatically runs validation
 #[derive(Debug, Clone, Copy, Default)]

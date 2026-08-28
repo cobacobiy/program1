@@ -53,7 +53,9 @@ async fn setup_test_app() -> (axum::Router, Arc<IpRateLimiter>) {
         analytics_contract: analytics_module,
         audit_contract: audit_module,
         rate_limiter: rate_limiter.clone(),
+        started_at: std::time::Instant::now(),
     };
+
 
 
     (create_app(state), rate_limiter)

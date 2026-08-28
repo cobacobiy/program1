@@ -60,7 +60,9 @@ async fn setup_test_app() -> (axum::Router, String) {
         analytics_contract: analytics_module,
         audit_contract: audit_module,
         rate_limiter,
+        started_at: std::time::Instant::now(),
     };
+
 
     let router = create_app(state);
     (router, admin_token)

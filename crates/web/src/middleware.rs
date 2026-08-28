@@ -1,5 +1,5 @@
 use std::env;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::{
     extract::{FromRequestParts, Request, State},
@@ -11,8 +11,50 @@ use axum::{
 use program1_contracts::JwtClaims;
 use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use uuid::Uuid;
 
 use crate::AppState;
+
+/// Request ID extension container for request tracing
+#[derive(Debug, Clone)]
+pub struct RequestId(pub String);
+
+/// Middleware to extract or generate unique X-Request-ID and log request metrics
+pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
+    let start_time = Instant::now();
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+
+    let request_id = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    req.extensions_mut().insert(RequestId(request_id.clone()));
+
+    let mut response = next.run(req).await;
+    let latency = start_time.elapsed();
+    let status = response.status();
+
+    if let Ok(header_val) = HeaderValue::from_str(&request_id) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("x-request-id"), header_val);
+    }
+
+    tracing::info!(
+        request_id = %request_id,
+        method = %method,
+        path = %path,
+        status = %status.as_u16(),
+        latency_ms = %latency.as_millis(),
+        "HTTP Request completed"
+    );
+
+    response
+}
 
 /// Extractor for authenticated user claims
 #[derive(Debug, Clone)]
@@ -60,7 +102,7 @@ impl FromRequestParts<AppState> for AuthUser {
                         StatusCode::UNAUTHORIZED,
                         Json(json!({
                             "error": "authentication_required",
-                            "message": "Missing or invalid Authorization header"
+                            "message": "Invalid token"
                         })),
                     ))
                 }
@@ -69,7 +111,7 @@ impl FromRequestParts<AppState> for AuthUser {
     }
 }
 
-/// Middleware to require valid JWT authentication
+/// Middleware to enforce authentication on protected endpoints
 pub async fn require_auth(
     State(state): State<AppState>,
     mut req: Request,
@@ -123,7 +165,7 @@ pub async fn require_auth(
     }
 }
 
-/// Middleware to require admin access (Super Admin or Admin)
+/// Middleware to enforce Admin-only RBAC access
 pub async fn require_admin(
     State(state): State<AppState>,
     mut req: Request,
@@ -230,7 +272,6 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     response
 }
 
-
 /// Build hardened CORS configuration layer
 pub fn build_cors_layer() -> CorsLayer {
     let default_origins = "http://localhost:8080,http://localhost:6090,http://localhost:3000,http://127.0.0.1:8080,http://127.0.0.1:6090,http://127.0.0.1:3000".to_string();
@@ -256,6 +297,7 @@ pub fn build_cors_layer() -> CorsLayer {
             header::AUTHORIZATION,
             header::ACCEPT,
             HeaderName::from_static("x-requested-with"),
+            HeaderName::from_static("x-request-id"),
         ])
         .allow_credentials(true)
         .max_age(Duration::from_secs(3600))

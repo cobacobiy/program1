@@ -56,7 +56,9 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         analytics_contract: analytics_module,
         audit_contract: audit_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
+        started_at: std::time::Instant::now(),
     };
+
 
 
 
