@@ -205,11 +205,17 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     // Referrer policy
     headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("strict-origin-when-cross-origin"));
 
+    // API Version header
+    headers.insert(
+        HeaderName::from_static("x-api-version"),
+        HeaderValue::from_static("1.0.0"),
+    );
+
     // Content Security Policy
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'"
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'"
         ),
     );
 
@@ -223,6 +229,7 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
 
     response
 }
+
 
 /// Build hardened CORS configuration layer
 pub fn build_cors_layer() -> CorsLayer {

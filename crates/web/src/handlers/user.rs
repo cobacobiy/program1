@@ -13,6 +13,20 @@ use program1_contracts::{
     AuditLogEntry, CreateUserAccountRequest, UpdateUserPermissionsRequest, UserAccountDto,
 };
 
+/// List all registered user accounts with RBAC assignments (Admin only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/accounts",
+    responses(
+        (status = 200, description = "List of user accounts", body = Vec<UserAccountDto>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Users"
+)]
 pub async fn list_user_accounts(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<UserAccountDto>>, ApiError> {
@@ -20,6 +34,22 @@ pub async fn list_user_accounts(
     Ok(Json(accounts))
 }
 
+/// Create a new user account with specified RBAC role and menu access (Admin only)
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/accounts",
+    request_body = CreateUserAccountRequest,
+    responses(
+        (status = 201, description = "User account created", body = UserAccountDto),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Users"
+)]
 pub async fn create_user_account(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<CreateUserAccountRequest>,
@@ -41,6 +71,25 @@ pub async fn create_user_account(
     Ok((StatusCode::CREATED, Json(acc)))
 }
 
+/// Update accessible menu permissions for a specific user (Admin only)
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/accounts/{id}/permissions",
+    params(
+        ("id" = Uuid, Path, description = "Target user account ID")
+    ),
+    request_body = UpdateUserPermissionsRequest,
+    responses(
+        (status = 200, description = "User permissions updated", body = UserAccountDto),
+        (status = 404, description = "User not found", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Users"
+)]
 pub async fn update_user_permissions(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,

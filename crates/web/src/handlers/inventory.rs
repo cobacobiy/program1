@@ -12,6 +12,19 @@ use program1_contracts::{
     AuditLogEntry, InventoryStockDto, SafetyStockLogDto, UpdateSafetyStockRequest,
 };
 
+/// List multi-warehouse inventory stocks & safety levels across all products (Protected)
+#[utoipa::path(
+    get,
+    path = "/api/v1/inventory",
+    responses(
+        (status = 200, description = "List of inventory stocks", body = Vec<InventoryStockDto>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Inventory"
+)]
 pub async fn list_all_inventory(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<InventoryStockDto>>, ApiError> {
@@ -19,6 +32,23 @@ pub async fn list_all_inventory(
     Ok(Json(stocks))
 }
 
+/// Retrieve stock breakdown of a specific product (Protected)
+#[utoipa::path(
+    get,
+    path = "/api/v1/inventory/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Product identifier")
+    ),
+    responses(
+        (status = 200, description = "Inventory stock details", body = InventoryStockDto),
+        (status = 404, description = "Product stock not found", body = ApiError),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Inventory"
+)]
 pub async fn get_inventory_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
@@ -27,6 +57,25 @@ pub async fn get_inventory_stock(
     Ok(Json(stock))
 }
 
+/// Update safety stock threshold for a product and record audit note (Protected)
+#[utoipa::path(
+    post,
+    path = "/api/v1/inventory/{id}/safety-stock",
+    params(
+        ("id" = Uuid, Path, description = "Product identifier")
+    ),
+    request_body = UpdateSafetyStockRequest,
+    responses(
+        (status = 200, description = "Safety stock updated successfully", body = InventoryStockDto),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 404, description = "Product stock not found", body = ApiError),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Inventory"
+)]
 pub async fn update_safety_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
@@ -53,6 +102,22 @@ pub async fn update_safety_stock(
     Ok(Json(updated))
 }
 
+/// Retrieve history logs of safety stock adjustments for a product (Protected)
+#[utoipa::path(
+    get,
+    path = "/api/v1/inventory/{id}/safety-stock-logs",
+    params(
+        ("id" = Uuid, Path, description = "Product identifier")
+    ),
+    responses(
+        (status = 200, description = "List of safety stock adjustment logs", body = Vec<SafetyStockLogDto>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Inventory"
+)]
 pub async fn get_safety_stock_logs(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,

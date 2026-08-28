@@ -6,9 +6,11 @@ use axum::{
 use program1_contracts::{ContractError, ErrorCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ApiError {
+
     pub code: ErrorCode,
     pub message: String,
     pub status: u16,

@@ -12,6 +12,19 @@ use program1_contracts::{
     AuditLogEntry, ChannelStatusDto, ChannelType,
 };
 
+/// List all integrated marketplace channels and sync status (Protected)
+#[utoipa::path(
+    get,
+    path = "/api/v1/channels",
+    responses(
+        (status = 200, description = "List of channels", body = Vec<ChannelStatusDto>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Channels"
+)]
 pub async fn list_channels(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ChannelStatusDto>>, ApiError> {
@@ -19,6 +32,23 @@ pub async fn list_channels(
     Ok(Json(channels))
 }
 
+/// Trigger on-demand inventory synchronization with external channel (Protected)
+#[utoipa::path(
+    post,
+    path = "/api/v1/channels/sync/{channel}",
+    params(
+        ("channel" = String, Path, description = "Channel name (e.g. tiktok, shopee, tokopedia)")
+    ),
+    responses(
+        (status = 200, description = "Channel stock synced", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 502, description = "Channel sync failed", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Channels"
+)]
 pub async fn sync_channel(
     Path(channel_name): Path<String>,
     State(state): State<AppState>,

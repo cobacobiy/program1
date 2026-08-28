@@ -35,4 +35,7 @@ uuid.workspace = true
 chrono.workspace = true
 jsonwebtoken.workspace = true
 validator = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
+
 
