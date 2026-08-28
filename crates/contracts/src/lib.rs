@@ -107,6 +107,28 @@ pub trait UserContract: Send + Sync {
     async fn register(&self, req: RegisterUserRequest) -> Result<UserAccountDto, ContractError>;
 }
 
+// --- AUTH & JWT CONTRACT ---
+
+/// JWT Claims structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JwtClaims {
+    pub sub: Uuid,           // user_id
+    pub username: String,
+    pub role: String,
+    pub accessible_menus: Vec<String>,
+    pub exp: i64,            // expiry timestamp
+    pub iat: i64,            // issued at
+}
+
+#[async_trait]
+pub trait AuthContract: Send + Sync {
+    /// Generate JWT token dari UserAccountDto
+    fn generate_token(&self, user: &UserAccountDto) -> Result<String, ContractError>;
+
+    /// Validate & decode JWT token
+    fn validate_token(&self, token: &str) -> Result<JwtClaims, ContractError>;
+}
+
 // --- CATALOG CONTRACT ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

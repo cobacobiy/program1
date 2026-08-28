@@ -3,6 +3,10 @@ name = "program1-web"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+name = "program1_web"
+path = "src/lib.rs"
+
 [[bin]]
 name = "program1"
 path = "src/main.rs"
@@ -15,13 +19,16 @@ program1-module-inventory = { path = "../modules/inventory" }
 program1-module-channel = { path = "../modules/channel" }
 program1-module-order = { path = "../modules/order" }
 program1-module-user = { path = "../modules/user" }
+program1-module-auth = { path = "../modules/auth" }
 program1-module-analytics = { path = "../modules/analytics" }
 
 tokio.workspace = true
 axum.workspace = true
+tower.workspace = true
 tower-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+jsonwebtoken.workspace = true

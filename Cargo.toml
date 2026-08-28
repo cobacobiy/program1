@@ -8,6 +8,7 @@ members = [
     "crates/modules/channel",
     "crates/modules/order",
     "crates/modules/user",
+    "crates/modules/auth",
     "crates/modules/analytics",
     "crates/web",
 ]
@@ -32,3 +33,5 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 argon2 = "0.5"
 rand = "0.8"
+jsonwebtoken = "9.3"
+tower = { version = "0.4", features = ["util"] }
