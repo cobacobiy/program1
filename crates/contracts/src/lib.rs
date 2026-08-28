@@ -1,8 +1,24 @@
+use std::sync::OnceLock;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
+use validator::Validate;
+
+static USERNAME_REGEX: OnceLock<Regex> = OnceLock::new();
+
+pub fn validate_username_regex(username: &str) -> Result<(), validator::ValidationError> {
+    let re = USERNAME_REGEX.get_or_init(|| Regex::new(r"^[a-zA-Z0-9_]+$").unwrap());
+    if re.is_match(username) {
+        Ok(())
+    } else {
+        let mut err = validator::ValidationError::new("username_format");
+        err.message = Some("Username must be alphanumeric or underscore only".into());
+        Err(err)
+    }
+}
 
 #[derive(Error, Debug, Serialize, Deserialize, Clone)]
 pub enum ContractError {
@@ -55,9 +71,11 @@ pub struct UserAccountDto {
 }
 
 /// Request DTO untuk login
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct LoginRequest {
+    #[validate(length(min = 1, max = 50, message = "Username required (1-50 characters)"))]
     pub username: String,
+    #[validate(length(min = 1, max = 100, message = "Password required"))]
     pub password: String,
 }
 
@@ -71,24 +89,37 @@ pub struct AuthTokenResponse {
 }
 
 /// Request DTO untuk register (extend CreateUserAccountRequest)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RegisterUserRequest {
+    #[validate(
+        length(min = 3, max = 50, message = "Username must be 3-50 characters"),
+        custom(function = "validate_username_regex")
+    )]
     pub username: String,
+    #[validate(length(min = 8, max = 100, message = "Password must be at least 8 characters"))]
     pub password: String,
+    #[validate(length(min = 1, max = 200, message = "Full name required (max 200 characters)"))]
     pub full_name: String,
+    #[validate(length(max = 50))]
     pub role: String,
     pub accessible_menus: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateUserAccountRequest {
+    #[validate(
+        length(min = 3, max = 50, message = "Username must be 3-50 characters"),
+        custom(function = "validate_username_regex")
+    )]
     pub username: String,
+    #[validate(length(min = 1, max = 200, message = "Full name required (max 200 characters)"))]
     pub full_name: String,
+    #[validate(length(min = 1, max = 50, message = "Role required (max 50 characters)"))]
     pub role: String,
     pub accessible_menus: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateUserPermissionsRequest {
     pub accessible_menus: Vec<String>,
 }
@@ -144,14 +175,21 @@ pub struct CatalogItemDto {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateCatalogItemRequest {
+    #[validate(length(min = 1, max = 200, message = "Name must be 1-200 characters"))]
     pub name: String,
+    #[validate(length(min = 1, max = 50, message = "SKU must be 1-50 characters"))]
     pub sku: String,
+    #[validate(length(max = 100, message = "Category max 100 characters"))]
     pub category: String,
+    #[validate(range(min = 0.0, max = 999999999.0, message = "Price must be between 0 and 999,999,999"))]
     pub price: f64,
+    #[validate(range(max = 999999, message = "Stock cannot exceed 999,999"))]
     pub stock: u32,
+    #[validate(url(message = "Invalid image URL format"))]
     pub image_url: Option<String>,
+    #[validate(length(max = 2000, message = "Description max 2000 characters"))]
     pub description: Option<String>,
 }
 
@@ -191,10 +229,13 @@ pub struct SafetyStockLogDto {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateSafetyStockRequest {
+    #[validate(range(max = 999999, message = "Safety stock cannot exceed 999,999"))]
     pub new_safety_stock: u32,
+    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
     pub admin_note: String,
+    #[validate(length(max = 100))]
     pub updated_by: Option<String>,
 }
 
@@ -255,17 +296,32 @@ pub struct OmniOrderDto {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct StorefrontOrderItemRequest {
     pub product_id: Uuid,
+    #[validate(range(min = 1, max = 9999, message = "Quantity must be 1-9999"))]
     pub quantity: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct StorefrontOrderRequest {
+    #[validate(length(min = 1, max = 200, message = "Customer name required (max 200 chars)"))]
     pub customer_name: String,
+    #[validate(email(message = "Invalid email format"))]
     pub customer_email: String,
+    #[validate(length(min = 1, max = 500, message = "Shipping address required (max 500 chars)"))]
     pub shipping_address: String,
+    #[validate(length(min = 1, max = 50, message = "Order must have 1-50 items"), nested)]
+    pub items: Vec<StorefrontOrderItemRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct MarketplaceOrderReq {
+    #[validate(length(min = 1, max = 50))]
+    pub channel: String,
+    #[validate(length(min = 1, max = 200))]
+    pub customer_name: String,
+    #[validate(length(min = 1, max = 50), nested)]
     pub items: Vec<StorefrontOrderItemRequest>,
 }
 

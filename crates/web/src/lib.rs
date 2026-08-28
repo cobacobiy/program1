@@ -3,22 +3,24 @@ pub mod middleware;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, FromRequest, Path, Request, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use uuid::Uuid;
+use validator::Validate;
 
 use program1_contracts::{
     AnalyticsContract, AuthContract, AuthTokenResponse, CatalogContract, ChannelSyncContract,
     ChannelType, ContractError, CreateCatalogItemRequest, CreateUserAccountRequest,
-    InventoryContract, LoginRequest, OrderContract, RegisterUserRequest, StorefrontOrderRequest,
-    UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserContract,
+    InventoryContract, LoginRequest, MarketplaceOrderReq, OrderContract, RegisterUserRequest,
+    StorefrontOrderRequest, UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserContract,
 };
 
 #[derive(Clone)]
@@ -32,6 +34,48 @@ pub struct AppState {
     pub channel_contract: Arc<dyn ChannelSyncContract>,
     pub order_contract: Arc<dyn OrderContract>,
     pub analytics_contract: Arc<dyn AnalyticsContract>,
+}
+
+/// Custom Axum extractor that parses JSON and automatically runs validation
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ValidatedJson<T>(pub T);
+
+#[axum::async_trait]
+impl<T> FromRequest<AppState> for ValidatedJson<T>
+where
+    T: DeserializeOwned + Validate,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request(req: Request, state: &AppState) -> Result<Self, Self::Rejection> {
+        let Json(value) = Json::<T>::from_request(req, state)
+            .await
+            .map_err(|e| (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))))?;
+
+        value.validate().map_err(|e| {
+            let mut details = Vec::new();
+            for (field, err_kind) in e.field_errors() {
+                for err in err_kind {
+                    let msg = err
+                        .message
+                        .as_ref()
+                        .map(|m| m.to_string())
+                        .unwrap_or_else(|| format!("Invalid value for {}", field));
+                    details.push(format!("{}: {}", field, msg));
+                }
+            }
+
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({
+                    "error": "validation_failed",
+                    "details": details
+                })),
+            )
+        })?;
+
+        Ok(ValidatedJson(value))
+    }
 }
 
 pub fn create_app(state: AppState) -> Router {
@@ -89,6 +133,7 @@ pub fn create_app(state: AppState) -> Router {
         .merge(protected_routes)
         .merge(admin_routes)
         .merge(static_routes)
+        .layer(DefaultBodyLimit::max(1024 * 1024)) // 1MB max body limit
         .layer(cors)
         .with_state(state)
 }
@@ -138,7 +183,7 @@ pub fn map_contract_error(err: ContractError) -> (StatusCode, Json<serde_json::V
 // Auth Handlers
 pub async fn login_handler(
     State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
+    ValidatedJson(payload): ValidatedJson<LoginRequest>,
 ) -> impl IntoResponse {
     match state.user_contract.authenticate(&payload.username, &payload.password).await {
         Ok(user) => {
@@ -161,7 +206,7 @@ pub async fn login_handler(
 
 pub async fn register_handler(
     State(state): State<AppState>,
-    Json(payload): Json<RegisterUserRequest>,
+    ValidatedJson(payload): ValidatedJson<RegisterUserRequest>,
 ) -> impl IntoResponse {
     match state.user_contract.register(payload).await {
         Ok(user) => (StatusCode::CREATED, Json(json!(user))),
@@ -179,7 +224,7 @@ pub async fn list_user_accounts(State(state): State<AppState>) -> impl IntoRespo
 
 pub async fn create_user_account(
     State(state): State<AppState>,
-    Json(payload): Json<CreateUserAccountRequest>,
+    ValidatedJson(payload): ValidatedJson<CreateUserAccountRequest>,
 ) -> impl IntoResponse {
     match state.user_contract.create_account(payload).await {
         Ok(acc) => (StatusCode::CREATED, Json(json!(acc))),
@@ -215,7 +260,7 @@ pub async fn get_catalog_item(Path(id): Path<Uuid>, State(state): State<AppState
 
 pub async fn create_catalog_item(
     State(state): State<AppState>,
-    Json(payload): Json<CreateCatalogItemRequest>,
+    ValidatedJson(payload): ValidatedJson<CreateCatalogItemRequest>,
 ) -> impl IntoResponse {
     match state.catalog_contract.create_item(payload).await {
         Ok(item) => (StatusCode::CREATED, Json(json!(item))),
@@ -241,7 +286,7 @@ pub async fn get_inventory_stock(Path(id): Path<Uuid>, State(state): State<AppSt
 pub async fn update_safety_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
-    Json(payload): Json<UpdateSafetyStockRequest>,
+    ValidatedJson(payload): ValidatedJson<UpdateSafetyStockRequest>,
 ) -> impl IntoResponse {
     let operator = payload.updated_by.unwrap_or_else(|| "Admin Ginee".to_string());
     match state
@@ -300,7 +345,7 @@ pub async fn get_order(Path(id): Path<Uuid>, State(state): State<AppState>) -> i
 
 pub async fn create_storefront_order(
     State(state): State<AppState>,
-    Json(payload): Json<StorefrontOrderRequest>,
+    ValidatedJson(payload): ValidatedJson<StorefrontOrderRequest>,
 ) -> impl IntoResponse {
     match state.order_contract.create_storefront_order(payload).await {
         Ok(order) => (StatusCode::CREATED, Json(json!(order))),
@@ -308,16 +353,9 @@ pub async fn create_storefront_order(
     }
 }
 
-#[derive(serde::Deserialize)]
-pub struct MarketplaceOrderReq {
-    pub channel: String,
-    pub customer_name: String,
-    pub items: Vec<program1_contracts::StorefrontOrderItemRequest>,
-}
-
 pub async fn create_marketplace_order(
     State(state): State<AppState>,
-    Json(payload): Json<MarketplaceOrderReq>,
+    ValidatedJson(payload): ValidatedJson<MarketplaceOrderReq>,
 ) -> impl IntoResponse {
     let channel = match payload.channel.to_lowercase().as_str() {
         "tiktok" | "tiktokshop" => ChannelType::TikTokShop,

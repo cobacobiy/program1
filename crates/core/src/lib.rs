@@ -1,7 +1,10 @@
 pub mod auth;
 pub mod database;
+pub mod sanitize;
 pub use auth::{hash_password, verify_password};
 pub use database::{init_database, DbPool};
+pub use sanitize::{sanitize_text, strip_html};
+
 
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};

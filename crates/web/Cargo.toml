@@ -32,3 +32,5 @@ tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 jsonwebtoken.workspace = true
+validator = { workspace = true }
+
