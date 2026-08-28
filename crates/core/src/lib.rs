@@ -1,9 +1,12 @@
 pub mod auth;
+pub mod config;
 pub mod database;
 pub mod sanitize;
 pub use auth::{hash_password, verify_password};
+pub use config::AppConfig;
 pub use database::{init_database, DbPool};
 pub use sanitize::{sanitize_text, strip_html};
+
 
 
 
