@@ -13,6 +13,15 @@ use program1_contracts::{
     AuditLogEntry, CatalogItemDto, CreateCatalogItemRequest,
 };
 
+/// List all product catalog items
+#[utoipa::path(
+    get,
+    path = "/api/v1/catalog",
+    responses(
+        (status = 200, description = "List of catalog items", body = Vec<CatalogItemDto>)
+    ),
+    tag = "Catalog"
+)]
 pub async fn list_catalog(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CatalogItemDto>>, ApiError> {
@@ -20,6 +29,19 @@ pub async fn list_catalog(
     Ok(Json(items))
 }
 
+/// Retrieve details of a specific catalog product by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/catalog/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Product identifier")
+    ),
+    responses(
+        (status = 200, description = "Catalog item details", body = CatalogItemDto),
+        (status = 404, description = "Catalog item not found", body = ApiError)
+    ),
+    tag = "Catalog"
+)]
 pub async fn get_catalog_item(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
@@ -28,6 +50,22 @@ pub async fn get_catalog_item(
     Ok(Json(item))
 }
 
+/// Create a new catalog item (Protected)
+#[utoipa::path(
+    post,
+    path = "/api/v1/catalog",
+    request_body = CreateCatalogItemRequest,
+    responses(
+        (status = 201, description = "Catalog item created", body = CatalogItemDto),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 429, description = "Rate limit exceeded")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Catalog"
+)]
 pub async fn create_catalog_item(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<CreateCatalogItemRequest>,

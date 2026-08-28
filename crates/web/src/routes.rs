@@ -6,10 +6,14 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
     Router,
+
 };
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::services::ServeDir;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
+use crate::docs::ApiDoc;
 use crate::error::ApiError;
 use crate::handlers::*;
 use crate::middleware;
@@ -100,11 +104,16 @@ pub fn create_app(state: AppState) -> Router {
         .route("/", get(move || async move { Html(store_page) }))
         .nest_service("/assets", ServeDir::new("crates/web/static"));
 
+    // Swagger UI & OpenAPI Specification routes
+    let doc_routes = SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi());
+
+
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
         .merge(admin_routes)
         .merge(static_routes)
+        .merge(doc_routes)
         .layer(CatchPanicLayer::custom(|_| {
             let err = ApiError::new(
                 ErrorCode::InternalError,

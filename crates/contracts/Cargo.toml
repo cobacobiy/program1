@@ -13,4 +13,6 @@ argon2 = { workspace = true }
 rand = { workspace = true }
 validator = { workspace = true }
 regex = { workspace = true }
+utoipa = { workspace = true }
+
 

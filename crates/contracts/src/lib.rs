@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -20,7 +21,7 @@ pub fn validate_username_regex(username: &str) -> Result<(), validator::Validati
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub enum ErrorCode {
     // 400
     ValidationFailed,
@@ -106,8 +107,7 @@ impl ContractError {
     }
 }
 
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub enum ChannelType {
     NativeWeb,
     TikTokShop,
@@ -128,7 +128,7 @@ impl std::fmt::Display for ChannelType {
 
 // --- USER & RBAC PERMISSION CONTRACT ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserAccountDto {
     pub id: Uuid,
     pub username: String,
@@ -140,7 +140,7 @@ pub struct UserAccountDto {
 }
 
 /// Request DTO untuk login
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct LoginRequest {
     #[validate(length(min = 1, max = 50, message = "Username required (1-50 characters)"))]
     pub username: String,
@@ -149,7 +149,7 @@ pub struct LoginRequest {
 }
 
 /// Response DTO setelah login berhasil
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AuthTokenResponse {
     pub access_token: String,
     pub token_type: String, // "Bearer"
@@ -158,7 +158,7 @@ pub struct AuthTokenResponse {
 }
 
 /// Request DTO untuk register (extend CreateUserAccountRequest)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct RegisterUserRequest {
     #[validate(
         length(min = 3, max = 50, message = "Username must be 3-50 characters"),
@@ -174,7 +174,7 @@ pub struct RegisterUserRequest {
     pub accessible_menus: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct CreateUserAccountRequest {
     #[validate(
         length(min = 3, max = 50, message = "Username must be 3-50 characters"),
@@ -188,7 +188,7 @@ pub struct CreateUserAccountRequest {
     pub accessible_menus: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateUserPermissionsRequest {
     pub accessible_menus: Vec<String>,
 }
@@ -210,7 +210,7 @@ pub trait UserContract: Send + Sync {
 // --- AUTH & JWT CONTRACT ---
 
 /// JWT Claims structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct JwtClaims {
     pub sub: Uuid,           // user_id
     pub username: String,
@@ -231,7 +231,7 @@ pub trait AuthContract: Send + Sync {
 
 // --- CATALOG CONTRACT ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatalogItemDto {
     pub id: Uuid,
     pub name: String,
@@ -244,7 +244,7 @@ pub struct CatalogItemDto {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct CreateCatalogItemRequest {
     #[validate(length(min = 1, max = 200, message = "Name must be 1-200 characters"))]
     pub name: String,
@@ -271,7 +271,7 @@ pub trait CatalogContract: Send + Sync {
 
 // --- INVENTORY CONTRACT (Ginee OMS Multi-Stock) ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InventoryStockDto {
     pub product_id: Uuid,
     pub sku: String,
@@ -287,7 +287,7 @@ pub struct InventoryStockDto {
     pub last_updated: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SafetyStockLogDto {
     pub id: Uuid,
     pub product_id: Uuid,
@@ -298,7 +298,7 @@ pub struct SafetyStockLogDto {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateSafetyStockRequest {
     #[validate(range(max = 999999, message = "Safety stock cannot exceed 999,999"))]
     pub new_safety_stock: u32,
@@ -325,7 +325,7 @@ pub trait InventoryContract: Send + Sync {
 
 // --- CHANNEL SYNC CONTRACT ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ChannelStatusDto {
     pub channel: ChannelType,
     pub name: String,
@@ -343,7 +343,7 @@ pub trait ChannelSyncContract: Send + Sync {
 
 // --- ORDER CONTRACT ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrderItemDto {
     pub product_id: Uuid,
     pub product_name: String,
@@ -352,7 +352,7 @@ pub struct OrderItemDto {
     pub total_price: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OmniOrderDto {
     pub id: Uuid,
     pub channel: ChannelType,
@@ -365,14 +365,14 @@ pub struct OmniOrderDto {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct StorefrontOrderItemRequest {
     pub product_id: Uuid,
     #[validate(range(min = 1, max = 9999, message = "Quantity must be 1-9999"))]
     pub quantity: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct StorefrontOrderRequest {
     #[validate(length(min = 1, max = 200, message = "Customer name required (max 200 chars)"))]
     pub customer_name: String,
@@ -384,7 +384,7 @@ pub struct StorefrontOrderRequest {
     pub items: Vec<StorefrontOrderItemRequest>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct MarketplaceOrderReq {
     #[validate(length(min = 1, max = 50))]
     pub channel: String,
@@ -404,7 +404,7 @@ pub trait OrderContract: Send + Sync {
 
 // --- ANALYTICS CONTRACT ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ChannelRevenueDto {
     pub channel: ChannelType,
     pub channel_name: String,
@@ -412,7 +412,7 @@ pub struct ChannelRevenueDto {
     pub total_revenue: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SalesAnalyticsDto {
     pub gross_revenue: f64,
     pub total_orders: u32,
@@ -427,7 +427,7 @@ pub trait AnalyticsContract: Send + Sync {
 
 // --- AUDIT LOGGING CONTRACT ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AuditLogEntry {
     pub id: Uuid,
     pub timestamp: DateTime<Utc>,
@@ -451,4 +451,3 @@ pub trait AuditContract: Send + Sync {
     ) -> Result<Vec<AuditLogEntry>, ContractError>;
     async fn get_logs_by_actor(&self, actor_id: Uuid) -> Result<Vec<AuditLogEntry>, ContractError>;
 }
-

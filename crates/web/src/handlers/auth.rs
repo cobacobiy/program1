@@ -13,6 +13,18 @@ use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, LoginRequest, RegisterUserRequest, UserAccountDto,
 };
 
+/// Authenticate user credentials and issue JWT bearer token
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = AuthTokenResponse),
+        (status = 400, description = "Bad credentials or validation error", body = ApiError),
+        (status = 429, description = "Rate limit exceeded")
+    ),
+    tag = "Auth"
+)]
 pub async fn login_handler(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<LoginRequest>,
@@ -59,6 +71,22 @@ pub async fn login_handler(
     }
 }
 
+/// Register a new system user account (Admin only)
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    request_body = RegisterUserRequest,
+    responses(
+        (status = 201, description = "User successfully registered", body = UserAccountDto),
+        (status = 400, description = "Username duplicate or validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin role required")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Auth"
+)]
 pub async fn register_handler(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<RegisterUserRequest>,
