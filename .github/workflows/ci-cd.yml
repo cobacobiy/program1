@@ -73,16 +73,16 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, 226node2]
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Deploy Container from GHCR (Linux Server 226)
         shell: bash
         run: |
           echo "Deploying Production Container from GHCR to Linux Server 226..."
-          cd /home/gpu/actions-runner-program1/_work/program1/program1 || cd ./
-          git fetch origin main || true
-          git reset --hard origin/main || true
           if [ ! -f ".env" ]; then
               cp .env.example .env
           fi
           docker pull ghcr.io/cobacobiy/program1:latest || true
-          docker compose up -d --remove-orphans
+          docker compose up -d --force-recreate --remove-orphans
           echo "Production GHCR deployment complete on Linux Server 226!"
