@@ -42,12 +42,18 @@ This application provides clean domain-driven business capabilities (`User`, `Pr
    - **No Python One-Liner Overwriting**: NEVER use inline Python script commands in terminal (`python3 -c 'html_content = ...'`) to write or replace HTML/code files. Always edit files directly using proper file writing/editing tools.
 
 ## Cargo Workspace Structure
-- `crates/contracts` — Shared trait interfaces (`UserContract`, `ProductContract`, `OrderContract`), DTOs, and error types.
-- `crates/core` — Shared domain primitives, logging initialization (`tracing`), and application context.
+- `crates/contracts` — Shared trait interfaces (`UserContract`, `AuthContract`, `CatalogContract`, `InventoryContract`, `ChannelSyncContract`, `OrderContract`, `AnalyticsContract`, `AuditContract`), DTOs, and error types.
+- `crates/core` — Shared domain primitives, database initialization (`sqlx`), password hashing (`Argon2id`), and input sanitization.
 - `crates/modules/user` — User management domain implementing `UserContract`.
-- `crates/modules/product` — Product catalog & stock inventory implementing `ProductContract`.
-- `crates/modules/order` — Order checkout processing implementing `OrderContract` (depends strictly on `UserContract` & `ProductContract` trait abstractions).
-- `crates/web` — Axum HTTP server orchestrator & static glassmorphic dashboard host (`src/main.rs`).
+- `crates/modules/auth` — JWT authentication domain implementing `AuthContract`.
+- `crates/modules/catalog` — Product catalog domain implementing `CatalogContract`.
+- `crates/modules/inventory` — Stock & safety stock tracking implementing `InventoryContract`.
+- `crates/modules/channel` — Marketplace sync domain implementing `ChannelSyncContract`.
+- `crates/modules/order` — Order checkout processing implementing `OrderContract`.
+- `crates/modules/analytics` — Sales analytics domain implementing `AnalyticsContract`.
+- `crates/modules/audit` — Immutable audit logging domain implementing `AuditContract`.
+- `crates/web` — Axum HTTP server orchestrator, routes, handlers & static UI dashboard.
+
 
 ## Verification & Testing Workflows
 - **Check First-Run Dependencies**:
