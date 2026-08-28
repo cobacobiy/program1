@@ -5,16 +5,16 @@ use axum::{
     http::{header, Request, StatusCode},
 };
 use program1_contracts::{AuthContract, UserContract};
-
 use program1_core::init_database;
 use program1_module_analytics::AnalyticsModule;
+use program1_module_audit::AuditModule;
 use program1_module_auth::AuthModule;
 use program1_module_catalog::CatalogModule;
 use program1_module_channel::ChannelSyncModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_user::UserModule;
-use program1_web::{create_app, AppState};
+use program1_web::{create_app, rate_limit::IpRateLimiter, AppState};
 use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -24,7 +24,7 @@ async fn setup_test_app() -> (axum::Router, String) {
     let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
-    let auth_module = Arc::new(AuthModule::new(secret.clone(), 24));
+    let auth_module = Arc::new(AuthModule::new(secret, 24));
     let catalog_module = Arc::new(CatalogModule::new(pool.clone()));
     let inventory_module = Arc::new(InventoryModule::new(pool.clone(), catalog_module.clone()));
     let channel_module = Arc::new(ChannelSyncModule::new(pool.clone()));
@@ -37,7 +37,8 @@ async fn setup_test_app() -> (axum::Router, String) {
         catalog_module.clone(),
         order_module.clone(),
     ));
-    let audit_module = Arc::new(program1_module_audit::AuditModule::new(pool.clone()));
+    let audit_module = Arc::new(AuditModule::new(pool.clone()));
+    let rate_limiter = Arc::new(IpRateLimiter::new());
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -58,10 +59,8 @@ async fn setup_test_app() -> (axum::Router, String) {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
-        rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
+        rate_limiter,
     };
-
-
 
     let router = create_app(state);
     (router, admin_token)
@@ -93,8 +92,9 @@ async fn test_invalid_email_format_returns_422() {
 
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(body["error"], "validation_failed");
-    let details = body["details"].as_array().unwrap();
+    let err = &body["error"];
+    assert_eq!(err["code"], "VALIDATION_FAILED");
+    let details = err["details"].as_array().unwrap();
     assert!(details.iter().any(|d| d.as_str().unwrap().contains("customer_email")));
 }
 
@@ -123,8 +123,9 @@ async fn test_empty_catalog_name_returns_422() {
 
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(body["error"], "validation_failed");
-    let details = body["details"].as_array().unwrap();
+    let err = &body["error"];
+    assert_eq!(err["code"], "VALIDATION_FAILED");
+    let details = err["details"].as_array().unwrap();
     assert!(details.iter().any(|d| d.as_str().unwrap().contains("name")));
 }
 
@@ -153,7 +154,8 @@ async fn test_negative_price_returns_422() {
 
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(body["error"], "validation_failed");
+    let err = &body["error"];
+    assert_eq!(err["code"], "VALIDATION_FAILED");
 }
 
 #[tokio::test]
@@ -180,8 +182,9 @@ async fn test_invalid_username_characters_returns_422() {
 
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(body["error"], "validation_failed");
-    let details = body["details"].as_array().unwrap();
+    let err = &body["error"];
+    assert_eq!(err["code"], "VALIDATION_FAILED");
+    let details = err["details"].as_array().unwrap();
     assert!(details.iter().any(|d| d.as_str().unwrap().contains("username")));
 }
 

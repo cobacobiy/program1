@@ -20,6 +20,62 @@ pub fn validate_username_regex(username: &str) -> Result<(), validator::Validati
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ErrorCode {
+    // 400
+    ValidationFailed,
+    InvalidRequest,
+
+    // 401
+    AuthenticationRequired,
+    InvalidCredentials,
+    TokenExpired,
+
+    // 403
+    InsufficientPermissions,
+
+    // 404
+    ResourceNotFound,
+
+    // 409
+    InsufficientStock,
+    DuplicateResource,
+
+    // 429
+    RateLimitExceeded,
+
+    // 500
+    InternalError,
+
+    // 502
+    ChannelSyncFailed,
+}
+
+impl ErrorCode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ErrorCode::ValidationFailed => "VALIDATION_FAILED",
+            ErrorCode::InvalidRequest => "INVALID_REQUEST",
+            ErrorCode::AuthenticationRequired => "AUTHENTICATION_REQUIRED",
+            ErrorCode::InvalidCredentials => "INVALID_CREDENTIALS",
+            ErrorCode::TokenExpired => "TOKEN_EXPIRED",
+            ErrorCode::InsufficientPermissions => "INSUFFICIENT_PERMISSIONS",
+            ErrorCode::ResourceNotFound => "RESOURCE_NOT_FOUND",
+            ErrorCode::InsufficientStock => "INSUFFICIENT_STOCK",
+            ErrorCode::DuplicateResource => "DUPLICATE_RESOURCE",
+            ErrorCode::RateLimitExceeded => "RATE_LIMIT_EXCEEDED",
+            ErrorCode::InternalError => "INTERNAL_ERROR",
+            ErrorCode::ChannelSyncFailed => "CHANNEL_SYNC_FAILED",
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Error, Debug, Serialize, Deserialize, Clone)]
 pub enum ContractError {
     #[error("Resource not found: {0}")]
@@ -37,6 +93,19 @@ pub enum ContractError {
     #[error("Internal module error: {0}")]
     Internal(String),
 }
+
+impl ContractError {
+    pub fn code(&self) -> ErrorCode {
+        match self {
+            ContractError::NotFound(_) => ErrorCode::ResourceNotFound,
+            ContractError::ValidationError(_) => ErrorCode::ValidationFailed,
+            ContractError::InsufficientStock { .. } => ErrorCode::InsufficientStock,
+            ContractError::ChannelSyncError(_) => ErrorCode::ChannelSyncFailed,
+            ContractError::Internal(_) => ErrorCode::InternalError,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ChannelType {

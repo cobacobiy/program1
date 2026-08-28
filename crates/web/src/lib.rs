@@ -1,5 +1,8 @@
+pub mod error;
 pub mod middleware;
 pub mod rate_limit;
+
+pub use error::ApiError;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,23 +10,25 @@ use std::time::Duration;
 use axum::{
     extract::{DefaultBodyLimit, FromRequest, Path, Query, Request, State},
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::json;
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::services::ServeDir;
 use uuid::Uuid;
 use validator::Validate;
 
 use program1_contracts::{
     AnalyticsContract, AuditContract, AuditLogEntry, AuthContract, AuthTokenResponse,
-    CatalogContract, ChannelSyncContract, ChannelType, ContractError, CreateCatalogItemRequest,
-    CreateUserAccountRequest, InventoryContract, LoginRequest, MarketplaceOrderReq, OrderContract,
-    RegisterUserRequest, StorefrontOrderRequest, UpdateSafetyStockRequest,
-    UpdateUserPermissionsRequest, UserContract,
+    CatalogContract, CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelSyncContract,
+    ChannelType, CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode,
+    InventoryContract, InventoryStockDto, LoginRequest, MarketplaceOrderReq, OmniOrderDto,
+    OrderContract, RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto, StorefrontOrderRequest,
+    UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserAccountDto, UserContract,
 };
 
 #[derive(Clone)]
@@ -50,12 +55,12 @@ impl<T> FromRequest<AppState> for ValidatedJson<T>
 where
     T: DeserializeOwned + Validate,
 {
-    type Rejection = (StatusCode, Json<serde_json::Value>);
+    type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &AppState) -> Result<Self, Self::Rejection> {
         let Json(value) = Json::<T>::from_request(req, state)
             .await
-            .map_err(|e| (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))))?;
+            .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string(), StatusCode::BAD_REQUEST))?;
 
         value.validate().map_err(|e| {
             let mut details = Vec::new();
@@ -70,12 +75,11 @@ where
                 }
             }
 
-            (
+            ApiError::with_details(
+                ErrorCode::ValidationFailed,
+                "Payload validation failed",
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({
-                    "error": "validation_failed",
-                    "details": details
-                })),
+                details,
             )
         })?;
 
@@ -171,6 +175,14 @@ pub fn create_app(state: AppState) -> Router {
         .merge(protected_routes)
         .merge(admin_routes)
         .merge(static_routes)
+        .layer(CatchPanicLayer::custom(|_| {
+            let err = ApiError::new(
+                ErrorCode::InternalError,
+                "An unexpected internal error occurred",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            );
+            err.into_response()
+        }))
         .layer(axum::middleware::from_fn(middleware::security_headers))
         .layer(DefaultBodyLimit::max(1024 * 1024)) // 1MB max body limit
         .layer(cors)
@@ -201,55 +213,34 @@ pub async fn get_store_info(State(state): State<AppState>) -> impl IntoResponse 
     )
 }
 
-pub fn map_contract_error(err: ContractError) -> (StatusCode, Json<serde_json::Value>) {
-    match err {
-        ContractError::NotFound(msg) => (StatusCode::NOT_FOUND, Json(json!({ "error": msg }))),
-        ContractError::ValidationError(msg) => (StatusCode::BAD_REQUEST, Json(json!({ "error": msg }))),
-        ContractError::InsufficientStock { product_id, requested, available } => (
-            StatusCode::CONFLICT,
-            Json(json!({
-                "error": "Insufficient stock",
-                "product_id": product_id,
-                "requested": requested,
-                "available": available
-            })),
-        ),
-        ContractError::ChannelSyncError(msg) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": msg }))),
-        ContractError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": msg }))),
-    }
-}
-
 // Auth Handlers
 pub async fn login_handler(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<LoginRequest>,
-) -> impl IntoResponse {
+) -> Result<Json<AuthTokenResponse>, ApiError> {
     match state.user_contract.authenticate(&payload.username, &payload.password).await {
         Ok(user) => {
-            match state.auth_contract.generate_token(&user) {
-                Ok(token) => {
-                    let _ = state.audit_contract.log_action(AuditLogEntry {
-                        id: Uuid::new_v4(),
-                        timestamp: Utc::now(),
-                        actor_id: Some(user.id),
-                        actor_username: user.username.clone(),
-                        action: "LOGIN_SUCCESS".to_string(),
-                        resource_type: "user".to_string(),
-                        resource_id: Some(user.id),
-                        details: json!({ "role": user.role }).to_string(),
-                        ip_address: None,
-                    }).await;
+            let token = state.auth_contract.generate_token(&user)?;
 
-                    let token_resp = AuthTokenResponse {
-                        access_token: token,
-                        token_type: "Bearer".to_string(),
-                        expires_in: 86400,
-                        user,
-                    };
-                    (StatusCode::OK, Json(json!(token_resp)))
-                }
-                Err(e) => map_contract_error(e),
-            }
+            let _ = state.audit_contract.log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                actor_id: Some(user.id),
+                actor_username: user.username.clone(),
+                action: "LOGIN_SUCCESS".to_string(),
+                resource_type: "user".to_string(),
+                resource_id: Some(user.id),
+                details: json!({ "role": user.role }).to_string(),
+                ip_address: None,
+            }).await;
+
+            let token_resp = AuthTokenResponse {
+                access_token: token,
+                token_type: "Bearer".to_string(),
+                expires_in: 86400,
+                user,
+            };
+            Ok(Json(token_resp))
         }
         Err(e) => {
             let _ = state.audit_contract.log_action(AuditLogEntry {
@@ -264,7 +255,7 @@ pub async fn login_handler(
                 ip_address: None,
             }).await;
 
-            map_contract_error(e)
+            Err(ApiError::from(e))
         }
     }
 }
@@ -272,185 +263,167 @@ pub async fn login_handler(
 pub async fn register_handler(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<RegisterUserRequest>,
-) -> impl IntoResponse {
-    match state.user_contract.register(payload).await {
-        Ok(user) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: Some(user.id),
-                actor_username: user.username.clone(),
-                action: "USER_REGISTERED".to_string(),
-                resource_type: "user".to_string(),
-                resource_id: Some(user.id),
-                details: json!({ "role": user.role }).to_string(),
-                ip_address: None,
-            }).await;
+) -> Result<(StatusCode, Json<UserAccountDto>), ApiError> {
+    let user = state.user_contract.register(payload).await?;
 
-            (StatusCode::CREATED, Json(json!(user)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: Some(user.id),
+        actor_username: user.username.clone(),
+        action: "USER_REGISTERED".to_string(),
+        resource_type: "user".to_string(),
+        resource_id: Some(user.id),
+        details: json!({ "role": user.role }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok((StatusCode::CREATED, Json(user)))
 }
 
 // User Accounts & RBAC Handlers
-pub async fn list_user_accounts(State(state): State<AppState>) -> impl IntoResponse {
-    match state.user_contract.list_accounts().await {
-        Ok(accounts) => (StatusCode::OK, Json(json!(accounts))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn list_user_accounts(State(state): State<AppState>) -> Result<Json<Vec<UserAccountDto>>, ApiError> {
+    let accounts = state.user_contract.list_accounts().await?;
+    Ok(Json(accounts))
 }
 
 pub async fn create_user_account(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<CreateUserAccountRequest>,
-) -> impl IntoResponse {
-    match state.user_contract.create_account(payload).await {
-        Ok(acc) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: Some(acc.id),
-                actor_username: acc.username.clone(),
-                action: "USER_CREATED".to_string(),
-                resource_type: "user".to_string(),
-                resource_id: Some(acc.id),
-                details: json!({ "role": acc.role }).to_string(),
-                ip_address: None,
-            }).await;
+) -> Result<(StatusCode, Json<UserAccountDto>), ApiError> {
+    let acc = state.user_contract.create_account(payload).await?;
 
-            (StatusCode::CREATED, Json(json!(acc)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: Some(acc.id),
+        actor_username: acc.username.clone(),
+        action: "USER_CREATED".to_string(),
+        resource_type: "user".to_string(),
+        resource_id: Some(acc.id),
+        details: json!({ "role": acc.role }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok((StatusCode::CREATED, Json(acc)))
 }
 
 pub async fn update_user_permissions(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(payload): Json<UpdateUserPermissionsRequest>,
-) -> impl IntoResponse {
-    match state.user_contract.update_permissions(id, payload.accessible_menus.clone()).await {
-        Ok(acc) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: Some(id),
-                actor_username: acc.username.clone(),
-                action: "PERMISSIONS_UPDATED".to_string(),
-                resource_type: "user".to_string(),
-                resource_id: Some(id),
-                details: json!({ "accessible_menus": payload.accessible_menus }).to_string(),
-                ip_address: None,
-            }).await;
+) -> Result<Json<UserAccountDto>, ApiError> {
+    let acc = state.user_contract.update_permissions(id, payload.accessible_menus.clone()).await?;
 
-            (StatusCode::OK, Json(json!(acc)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: Some(id),
+        actor_username: acc.username.clone(),
+        action: "PERMISSIONS_UPDATED".to_string(),
+        resource_type: "user".to_string(),
+        resource_id: Some(id),
+        details: json!({ "accessible_menus": payload.accessible_menus }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok(Json(acc))
 }
 
 // Catalog Handlers
-pub async fn list_catalog(State(state): State<AppState>) -> impl IntoResponse {
-    match state.catalog_contract.list_items().await {
-        Ok(items) => (StatusCode::OK, Json(json!(items))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn list_catalog(State(state): State<AppState>) -> Result<Json<Vec<CatalogItemDto>>, ApiError> {
+    let items = state.catalog_contract.list_items().await?;
+    Ok(Json(items))
 }
 
-pub async fn get_catalog_item(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
-    match state.catalog_contract.get_item(id).await {
-        Ok(item) => (StatusCode::OK, Json(json!(item))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn get_catalog_item(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<CatalogItemDto>, ApiError> {
+    let item = state.catalog_contract.get_item(id).await?;
+    Ok(Json(item))
 }
 
 pub async fn create_catalog_item(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<CreateCatalogItemRequest>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<CatalogItemDto>), ApiError> {
     let sku = payload.sku.clone();
-    match state.catalog_contract.create_item(payload).await {
-        Ok(item) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: None,
-                actor_username: "admin".to_string(),
-                action: "CATALOG_ITEM_CREATED".to_string(),
-                resource_type: "catalog".to_string(),
-                resource_id: Some(item.id),
-                details: json!({ "sku": sku, "name": item.name }).to_string(),
-                ip_address: None,
-            }).await;
+    let item = state.catalog_contract.create_item(payload).await?;
 
-            (StatusCode::CREATED, Json(json!(item)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: None,
+        actor_username: "admin".to_string(),
+        action: "CATALOG_ITEM_CREATED".to_string(),
+        resource_type: "catalog".to_string(),
+        resource_id: Some(item.id),
+        details: json!({ "sku": sku, "name": item.name }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok((StatusCode::CREATED, Json(item)))
 }
 
 // Inventory Ginee OMS Handlers
-pub async fn list_all_inventory(State(state): State<AppState>) -> impl IntoResponse {
-    match state.inventory_contract.get_all_stocks().await {
-        Ok(stocks) => (StatusCode::OK, Json(json!(stocks))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn list_all_inventory(State(state): State<AppState>) -> Result<Json<Vec<InventoryStockDto>>, ApiError> {
+    let stocks = state.inventory_contract.get_all_stocks().await?;
+    Ok(Json(stocks))
 }
 
-pub async fn get_inventory_stock(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
-    match state.inventory_contract.get_stock(id).await {
-        Ok(stock) => (StatusCode::OK, Json(json!(stock))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn get_inventory_stock(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<InventoryStockDto>, ApiError> {
+    let stock = state.inventory_contract.get_stock(id).await?;
+    Ok(Json(stock))
 }
 
 pub async fn update_safety_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<UpdateSafetyStockRequest>,
-) -> impl IntoResponse {
+) -> Result<Json<InventoryStockDto>, ApiError> {
     let operator = payload.updated_by.unwrap_or_else(|| "Admin Ginee".to_string());
-    match state
+    let updated = state
         .inventory_contract
         .update_safety_stock(id, payload.new_safety_stock, payload.admin_note.clone(), operator.clone())
-        .await
-    {
-        Ok(updated) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: None,
-                actor_username: operator,
-                action: "SAFETY_STOCK_UPDATED".to_string(),
-                resource_type: "inventory".to_string(),
-                resource_id: Some(id),
-                details: json!({ "new_safety_stock": payload.new_safety_stock, "note": payload.admin_note }).to_string(),
-                ip_address: None,
-            }).await;
+        .await?;
 
-            (StatusCode::OK, Json(json!(updated)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: None,
+        actor_username: operator,
+        action: "SAFETY_STOCK_UPDATED".to_string(),
+        resource_type: "inventory".to_string(),
+        resource_id: Some(id),
+        details: json!({ "new_safety_stock": payload.new_safety_stock, "note": payload.admin_note }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok(Json(updated))
 }
 
-pub async fn get_safety_stock_logs(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
-    match state.inventory_contract.get_safety_stock_logs(id).await {
-        Ok(logs) => (StatusCode::OK, Json(json!(logs))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn get_safety_stock_logs(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<SafetyStockLogDto>>, ApiError> {
+    let logs = state.inventory_contract.get_safety_stock_logs(id).await?;
+    Ok(Json(logs))
 }
 
 // Channel Sync Handlers
-pub async fn list_channels(State(state): State<AppState>) -> impl IntoResponse {
-    match state.channel_contract.get_channel_statuses().await {
-        Ok(channels) => (StatusCode::OK, Json(json!(channels))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn list_channels(State(state): State<AppState>) -> Result<Json<Vec<ChannelStatusDto>>, ApiError> {
+    let channels = state.channel_contract.get_channel_statuses().await?;
+    Ok(Json(channels))
 }
 
-pub async fn sync_channel(Path(channel_name): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
+pub async fn sync_channel(
+    Path(channel_name): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
     let channel = match channel_name.to_lowercase().as_str() {
         "tiktok" | "tiktokshop" => ChannelType::TikTokShop,
         "shopee" => ChannelType::Shopee,
@@ -458,69 +431,62 @@ pub async fn sync_channel(Path(channel_name): Path<String>, State(state): State<
         _ => ChannelType::NativeWeb,
     };
 
-    match state.channel_contract.sync_channel_stock(channel.clone()).await {
-        Ok(count) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: None,
-                actor_username: "system".to_string(),
-                action: "CHANNEL_SYNCED".to_string(),
-                resource_type: "channel".to_string(),
-                resource_id: None,
-                details: json!({ "channel": channel.to_string(), "synced_products": count }).to_string(),
-                ip_address: None,
-            }).await;
+    let count = state.channel_contract.sync_channel_stock(channel.clone()).await?;
 
-            (StatusCode::OK, Json(json!({ "synced_products": count })))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: None,
+        actor_username: "system".to_string(),
+        action: "CHANNEL_SYNCED".to_string(),
+        resource_type: "channel".to_string(),
+        resource_id: None,
+        details: json!({ "channel": channel.to_string(), "synced_products": count }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok(Json(json!({ "synced_products": count })))
 }
 
 // Order Handlers
-pub async fn list_orders(State(state): State<AppState>) -> impl IntoResponse {
-    match state.order_contract.list_orders().await {
-        Ok(orders) => (StatusCode::OK, Json(json!(orders))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn list_orders(State(state): State<AppState>) -> Result<Json<Vec<OmniOrderDto>>, ApiError> {
+    let orders = state.order_contract.list_orders().await?;
+    Ok(Json(orders))
 }
 
-pub async fn get_order(Path(id): Path<Uuid>, State(state): State<AppState>) -> impl IntoResponse {
-    match state.order_contract.get_order(id).await {
-        Ok(order) => (StatusCode::OK, Json(json!(order))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn get_order(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<OmniOrderDto>, ApiError> {
+    let order = state.order_contract.get_order(id).await?;
+    Ok(Json(order))
 }
 
 pub async fn create_storefront_order(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<StorefrontOrderRequest>,
-) -> impl IntoResponse {
-    match state.order_contract.create_storefront_order(payload).await {
-        Ok(order) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: None,
-                actor_username: order.customer_name.clone(),
-                action: "ORDER_CREATED".to_string(),
-                resource_type: "order".to_string(),
-                resource_id: Some(order.id),
-                details: json!({ "total_amount": order.total_amount, "channel": "NativeWeb" }).to_string(),
-                ip_address: None,
-            }).await;
+) -> Result<(StatusCode, Json<OmniOrderDto>), ApiError> {
+    let order = state.order_contract.create_storefront_order(payload).await?;
 
-            (StatusCode::CREATED, Json(json!(order)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: None,
+        actor_username: order.customer_name.clone(),
+        action: "ORDER_CREATED".to_string(),
+        resource_type: "order".to_string(),
+        resource_id: Some(order.id),
+        details: json!({ "total_amount": order.total_amount, "channel": "NativeWeb" }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok((StatusCode::CREATED, Json(order)))
 }
 
 pub async fn create_marketplace_order(
     State(state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<MarketplaceOrderReq>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Json<OmniOrderDto>), ApiError> {
     let channel = match payload.channel.to_lowercase().as_str() {
         "tiktok" | "tiktokshop" => ChannelType::TikTokShop,
         "shopee" => ChannelType::Shopee,
@@ -528,32 +494,30 @@ pub async fn create_marketplace_order(
         _ => ChannelType::NativeWeb,
     };
 
-    match state.order_contract.create_marketplace_order(channel.clone(), payload.customer_name.clone(), payload.items).await {
-        Ok(order) => {
-            let _ = state.audit_contract.log_action(AuditLogEntry {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                actor_id: None,
-                actor_username: order.customer_name.clone(),
-                action: "ORDER_CREATED".to_string(),
-                resource_type: "order".to_string(),
-                resource_id: Some(order.id),
-                details: json!({ "total_amount": order.total_amount, "channel": channel.to_string() }).to_string(),
-                ip_address: None,
-            }).await;
+    let order = state
+        .order_contract
+        .create_marketplace_order(channel.clone(), payload.customer_name.clone(), payload.items)
+        .await?;
 
-            (StatusCode::CREATED, Json(json!(order)))
-        }
-        Err(e) => map_contract_error(e),
-    }
+    let _ = state.audit_contract.log_action(AuditLogEntry {
+        id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        actor_id: None,
+        actor_username: order.customer_name.clone(),
+        action: "ORDER_CREATED".to_string(),
+        resource_type: "order".to_string(),
+        resource_id: Some(order.id),
+        details: json!({ "total_amount": order.total_amount, "channel": channel.to_string() }).to_string(),
+        ip_address: None,
+    }).await;
+
+    Ok((StatusCode::CREATED, Json(order)))
 }
 
 // Analytics Handlers
-pub async fn get_analytics(State(state): State<AppState>) -> impl IntoResponse {
-    match state.analytics_contract.get_sales_analytics().await {
-        Ok(analytics) => (StatusCode::OK, Json(json!(analytics))),
-        Err(e) => map_contract_error(e),
-    }
+pub async fn get_analytics(State(state): State<AppState>) -> Result<Json<SalesAnalyticsDto>, ApiError> {
+    let analytics = state.analytics_contract.get_sales_analytics().await?;
+    Ok(Json(analytics))
 }
 
 // Audit Logs Query Handlers
@@ -567,23 +531,19 @@ pub struct AuditQueryParam {
 pub async fn list_audit_logs(
     State(state): State<AppState>,
     Query(params): Query<AuditQueryParam>,
-) -> impl IntoResponse {
+) -> Result<Json<Vec<AuditLogEntry>>, ApiError> {
     let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
     let res_type = params.resource_type.as_deref();
 
-    match state.audit_contract.get_logs(res_type, limit, offset).await {
-        Ok(logs) => (StatusCode::OK, Json(json!(logs))),
-        Err(e) => map_contract_error(e),
-    }
+    let logs = state.audit_contract.get_logs(res_type, limit, offset).await?;
+    Ok(Json(logs))
 }
 
 pub async fn get_user_audit_logs(
     Path(user_id): Path<Uuid>,
     State(state): State<AppState>,
-) -> impl IntoResponse {
-    match state.audit_contract.get_logs_by_actor(user_id).await {
-        Ok(logs) => (StatusCode::OK, Json(json!(logs))),
-        Err(e) => map_contract_error(e),
-    }
+) -> Result<Json<Vec<AuditLogEntry>>, ApiError> {
+    let logs = state.audit_contract.get_logs_by_actor(user_id).await?;
+    Ok(Json(logs))
 }
