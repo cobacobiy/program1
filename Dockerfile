@@ -1,12 +1,13 @@
 # Multi-stage Dockerfile for Program1 Rust Modular Monolith
 
 # --- Stage 1: Build binary ---
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
 
 WORKDIR /usr/src/program1
 
-# Copy Cargo manifests for dependency caching
+# Copy Cargo manifests, migrations, and crate sources
 COPY Cargo.toml Cargo.lock ./
+COPY migrations ./migrations
 COPY crates ./crates
 
 # Build release binary
