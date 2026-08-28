@@ -7,6 +7,7 @@ use axum::{
 use chrono::Utc;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use program1_contracts::{AuthContract, JwtClaims};
+use program1_core::init_database;
 use program1_module_analytics::AnalyticsModule;
 use program1_module_auth::AuthModule;
 use program1_module_catalog::CatalogModule;
@@ -19,14 +20,17 @@ use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
+async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let user_module = Arc::new(UserModule::new());
+    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+
+    let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret.clone(), 24));
-    let catalog_module = Arc::new(CatalogModule::new());
-    let inventory_module = Arc::new(InventoryModule::new(catalog_module.clone()));
-    let channel_module = Arc::new(ChannelSyncModule::new());
+    let catalog_module = Arc::new(CatalogModule::new(pool.clone()));
+    let inventory_module = Arc::new(InventoryModule::new(pool.clone(), catalog_module.clone()));
+    let channel_module = Arc::new(ChannelSyncModule::new(pool.clone()));
     let order_module = Arc::new(OrderModule::new(
+        pool.clone(),
         catalog_module.clone(),
         inventory_module.clone(),
     ));
@@ -34,6 +38,10 @@ fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         catalog_module.clone(),
         order_module.clone(),
     ));
+
+    let _ = user_module.seed_default_users().await;
+    let _ = catalog_module.seed_default_catalog().await;
+    let _ = channel_module.seed_default_channels().await;
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -53,7 +61,7 @@ fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
 
 #[tokio::test]
 async fn test_public_routes_accessible_without_token() {
-    let (app, _, _) = setup_test_app();
+    let (app, _, _) = setup_test_app().await;
 
     // 1. Health check
     let req = Request::builder()
@@ -88,7 +96,7 @@ async fn test_public_routes_accessible_without_token() {
 
 #[tokio::test]
 async fn test_login_returns_valid_jwt_token() {
-    let (app, auth_module, _) = setup_test_app();
+    let (app, auth_module, _) = setup_test_app().await;
 
     let login_body = serde_json::json!({
         "username": "admin",
@@ -119,7 +127,7 @@ async fn test_login_returns_valid_jwt_token() {
 
 #[tokio::test]
 async fn test_protected_routes_reject_missing_token() {
-    let (app, _, _) = setup_test_app();
+    let (app, _, _) = setup_test_app().await;
 
     let req = Request::builder()
         .uri("/api/v1/inventory")
@@ -137,7 +145,7 @@ async fn test_protected_routes_reject_missing_token() {
 
 #[tokio::test]
 async fn test_protected_routes_accept_valid_token() {
-    let (app, auth_module, _) = setup_test_app();
+    let (app, auth_module, _) = setup_test_app().await;
 
     // Login as staff
     let staff_claims = program1_contracts::UserAccountDto {
@@ -165,7 +173,7 @@ async fn test_protected_routes_accept_valid_token() {
 
 #[tokio::test]
 async fn test_admin_routes_reject_non_admin_token() {
-    let (app, auth_module, _) = setup_test_app();
+    let (app, auth_module, _) = setup_test_app().await;
 
     let staff_claims = program1_contracts::UserAccountDto {
         id: Uuid::new_v4(),
@@ -196,7 +204,7 @@ async fn test_admin_routes_reject_non_admin_token() {
 
 #[tokio::test]
 async fn test_admin_routes_accept_admin_token() {
-    let (app, auth_module, _) = setup_test_app();
+    let (app, auth_module, _) = setup_test_app().await;
 
     let admin_claims = program1_contracts::UserAccountDto {
         id: Uuid::new_v4(),
@@ -223,7 +231,7 @@ async fn test_admin_routes_accept_admin_token() {
 
 #[tokio::test]
 async fn test_expired_token_returns_token_expired_error() {
-    let (app, _, secret) = setup_test_app();
+    let (app, _, secret) = setup_test_app().await;
 
     let now = Utc::now().timestamp();
     let expired_claims = JwtClaims {

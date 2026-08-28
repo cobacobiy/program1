@@ -5,12 +5,16 @@ edition.workspace = true
 
 [dependencies]
 program1-contracts = { path = "../../contracts" }
+program1-core = { path = "../../core" }
 async-trait.workspace = true
 tokio.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
+sqlx = { workspace = true }
+
 
 [dev-dependencies]
 program1-module-catalog = { path = "../catalog" }

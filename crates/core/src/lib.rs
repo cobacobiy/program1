@@ -1,5 +1,8 @@
 pub mod auth;
+pub mod database;
 pub use auth::{hash_password, verify_password};
+pub use database::{init_database, DbPool};
+
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 

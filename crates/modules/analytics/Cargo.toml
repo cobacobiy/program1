@@ -13,6 +13,8 @@ chrono.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+program1-core = { path = "../../core" }
 program1-module-catalog = { path = "../catalog" }
 program1-module-inventory = { path = "../inventory" }
 program1-module-order = { path = "../order" }
+

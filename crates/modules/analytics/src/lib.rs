@@ -86,15 +86,18 @@ impl AnalyticsContract for AnalyticsModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use program1_core::init_database;
     use program1_module_catalog::CatalogModule;
     use program1_module_inventory::InventoryModule;
     use program1_module_order::OrderModule;
 
     #[tokio::test]
     async fn test_analytics() {
-        let catalog = Arc::new(CatalogModule::new());
-        let inventory = Arc::new(InventoryModule::new(catalog.clone()));
-        let order = Arc::new(OrderModule::new(catalog.clone(), inventory.clone()));
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let catalog = Arc::new(CatalogModule::new(pool.clone()));
+        catalog.seed_default_catalog().await.unwrap();
+        let inventory = Arc::new(InventoryModule::new(pool.clone(), catalog.clone()));
+        let order = Arc::new(OrderModule::new(pool, catalog.clone(), inventory.clone()));
         let analytics = AnalyticsModule::new(catalog.clone(), order.clone());
 
         let stats = analytics.get_sales_analytics().await.unwrap();
