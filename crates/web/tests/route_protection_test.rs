@@ -53,7 +53,9 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         channel_contract: channel_module,
         order_contract: order_module,
         analytics_contract: analytics_module,
+        rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
     };
+
 
     let router = create_app(state);
     (router, auth_module, secret)

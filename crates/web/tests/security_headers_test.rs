@@ -44,7 +44,9 @@ async fn setup_test_app() -> axum::Router {
         channel_contract: channel_module,
         order_contract: order_module,
         analytics_contract: analytics_module,
+        rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
     };
+
 
     create_app(state)
 }
