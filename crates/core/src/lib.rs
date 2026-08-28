@@ -1,3 +1,6 @@
+pub mod auth;
+pub use auth::{hash_password, verify_password};
+
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 pub fn init_tracing() {
