@@ -3,7 +3,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use program1_core::{init_database, init_tracing};
+
 use program1_module_analytics::AnalyticsModule;
+use program1_module_audit::AuditModule;
 use program1_module_auth::AuthModule;
 use program1_module_catalog::CatalogModule;
 use program1_module_channel::ChannelSyncModule;
@@ -47,6 +49,7 @@ async fn main() {
         catalog_module.clone(),
         order_module.clone(),
     ));
+    let audit_module = Arc::new(AuditModule::new(db_pool.clone()));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -63,8 +66,10 @@ async fn main() {
         channel_contract: channel_module,
         order_contract: order_module,
         analytics_contract: analytics_module,
+        audit_contract: audit_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
     };
+
 
 
     let app = create_app(state);

@@ -355,3 +355,31 @@ pub struct SalesAnalyticsDto {
 pub trait AnalyticsContract: Send + Sync {
     async fn get_sales_analytics(&self) -> Result<SalesAnalyticsDto, ContractError>;
 }
+
+// --- AUDIT LOGGING CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogEntry {
+    pub id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub actor_id: Option<Uuid>,
+    pub actor_username: String,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: Option<Uuid>,
+    pub details: String,
+    pub ip_address: Option<String>,
+}
+
+#[async_trait]
+pub trait AuditContract: Send + Sync {
+    async fn log_action(&self, entry: AuditLogEntry) -> Result<(), ContractError>;
+    async fn get_logs(
+        &self,
+        resource_type: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<AuditLogEntry>, ContractError>;
+    async fn get_logs_by_actor(&self, actor_id: Uuid) -> Result<Vec<AuditLogEntry>, ContractError>;
+}
+

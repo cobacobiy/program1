@@ -13,12 +13,7 @@ pub struct ChannelSyncModule {
 
 impl ChannelSyncModule {
     pub fn new(pool: DbPool) -> Self {
-        let module = Self { pool };
-        let module_clone = module.clone();
-        tokio::spawn(async move {
-            let _ = module_clone.seed_default_channels().await;
-        });
-        module
+        Self { pool }
     }
 
     pub async fn seed_default_channels(&self) -> Result<(), ContractError> {
@@ -41,7 +36,7 @@ impl ChannelSyncModule {
 
         let now = Utc::now().to_rfc3339();
         for (ch, name, synced) in initial_channels {
-            let _ = sqlx::query(
+            sqlx::query(
                 "INSERT OR IGNORE INTO channel_statuses (channel, name, synced_products, total_sales, is_active, last_synced_at)
                  VALUES ($1, $2, $3, 0.0, 1, $4)",
             )
@@ -50,11 +45,13 @@ impl ChannelSyncModule {
             .bind(synced as i64)
             .bind(&now)
             .execute(&self.pool)
-            .await;
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
         }
 
         Ok(())
     }
+
 
     pub fn channel_to_db_key(channel: &ChannelType) -> &'static str {
         match channel {

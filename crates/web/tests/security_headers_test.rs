@@ -33,6 +33,7 @@ async fn setup_test_app() -> axum::Router {
         catalog_module.clone(),
         order_module.clone(),
     ));
+    let audit_module = Arc::new(program1_module_audit::AuditModule::new(pool.clone()));
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -44,8 +45,10 @@ async fn setup_test_app() -> axum::Router {
         channel_contract: channel_module,
         order_contract: order_module,
         analytics_contract: analytics_module,
+        audit_contract: audit_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
     };
+
 
 
     create_app(state)
