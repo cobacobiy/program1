@@ -33,6 +33,12 @@ if [ ! -f ".env" ]; then
     echo "[OK] .env file created."
 else
     echo "[OK] .env file exists."
+    if grep -q "CHANGE_ME" .env || grep -q "super-secret" .env; then
+        echo "[WARN] .env contains default placeholder JWT_SECRET. Update before deploying to production!"
+    fi
+    if grep -q "ADMIN_DEFAULT_PASSWORD=admin123" .env; then
+        echo "[WARN] .env contains default admin password (admin123). Update before deploying to production!"
+    fi
 fi
 
 echo "----------------------------------------------"
