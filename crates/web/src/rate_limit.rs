@@ -25,11 +25,13 @@ pub struct RateLimitRejection {
     pub retry_after_seconds: u64,
 }
 
+pub type RateLimitStore = Arc<Mutex<HashMap<(String, String), Vec<Instant>>>>;
+
 /// Thread-safe in-memory sliding window rate limiter
 #[derive(Clone, Default)]
 pub struct IpRateLimiter {
     // Map of (ip, route_key) -> list of request timestamps
-    records: Arc<Mutex<HashMap<(String, String), Vec<Instant>>>>,
+    records: RateLimitStore,
 }
 
 impl IpRateLimiter {
@@ -52,7 +54,8 @@ impl IpRateLimiter {
         let cutoff = now.checked_sub(window).unwrap_or(now);
 
         let key = (ip.to_string(), route_key.to_string());
-        let timestamps = map.entry(key).or_insert_with(Vec::new);
+        let timestamps = map.entry(key).or_default();
+
 
         // Retain only timestamps within the sliding window
         timestamps.retain(|&t| t > cutoff);
