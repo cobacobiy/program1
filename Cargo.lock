@@ -1320,6 +1320,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "program1-module-audit"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "program1-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "program1-module-auth"
 version = "0.1.0"
 dependencies = [
@@ -1424,6 +1440,7 @@ dependencies = [
  "program1-contracts",
  "program1-core",
  "program1-module-analytics",
+ "program1-module-audit",
  "program1-module-auth",
  "program1-module-catalog",
  "program1-module-channel",

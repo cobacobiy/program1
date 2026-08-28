@@ -21,6 +21,8 @@ program1-module-order = { path = "../modules/order" }
 program1-module-user = { path = "../modules/user" }
 program1-module-auth = { path = "../modules/auth" }
 program1-module-analytics = { path = "../modules/analytics" }
+program1-module-audit = { path = "../modules/audit" }
+
 
 tokio.workspace = true
 axum.workspace = true

@@ -10,8 +10,10 @@ members = [
     "crates/modules/user",
     "crates/modules/auth",
     "crates/modules/analytics",
+    "crates/modules/audit",
     "crates/web",
 ]
+
 
 [workspace.package]
 version = "0.1.0"

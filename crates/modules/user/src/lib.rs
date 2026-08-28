@@ -45,13 +45,7 @@ pub struct UserModule {
 
 impl UserModule {
     pub fn new(pool: DbPool) -> Self {
-        let module = Self { pool };
-        // Trigger non-blocking seed in background / sync check
-        let module_clone = module.clone();
-        tokio::spawn(async move {
-            let _ = module_clone.seed_default_users().await;
-        });
-        module
+        Self { pool }
     }
 
     pub async fn seed_default_users(&self) -> Result<(), ContractError> {
@@ -107,8 +101,9 @@ impl UserModule {
             ),
         ];
 
+        let now = Utc::now().to_rfc3339();
         for (id, username, full_name, role, menus) in seed_accounts {
-            let _ = sqlx::query(
+            sqlx::query(
                 "INSERT OR IGNORE INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
                  VALUES ($1, $2, $3, $4, $5, $6, 1, $7)",
             )
@@ -118,13 +113,15 @@ impl UserModule {
             .bind(full_name)
             .bind(role)
             .bind(menus)
-            .bind(Utc::now().to_rfc3339())
+            .bind(&now)
             .execute(&self.pool)
-            .await;
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
         }
 
         Ok(())
     }
+
 
     fn row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<UserAccountDto, ContractError> {
         let id_str: String = row.get("id");
