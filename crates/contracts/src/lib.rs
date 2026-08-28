@@ -54,6 +54,32 @@ pub struct UserAccountDto {
     pub created_at: DateTime<Utc>,
 }
 
+/// Request DTO untuk login
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+/// Response DTO setelah login berhasil
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthTokenResponse {
+    pub access_token: String,
+    pub token_type: String, // "Bearer"
+    pub expires_in: u64,    // seconds
+    pub user: UserAccountDto,
+}
+
+/// Request DTO untuk register (extend CreateUserAccountRequest)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterUserRequest {
+    pub username: String,
+    pub password: String,
+    pub full_name: String,
+    pub role: String,
+    pub accessible_menus: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateUserAccountRequest {
     pub username: String,
@@ -73,6 +99,12 @@ pub trait UserContract: Send + Sync {
     async fn get_account(&self, id: Uuid) -> Result<UserAccountDto, ContractError>;
     async fn create_account(&self, req: CreateUserAccountRequest) -> Result<UserAccountDto, ContractError>;
     async fn update_permissions(&self, id: Uuid, accessible_menus: Vec<String>) -> Result<UserAccountDto, ContractError>;
+
+    /// Authenticate user — returns account if credentials valid
+    async fn authenticate(&self, username: &str, password: &str) -> Result<UserAccountDto, ContractError>;
+
+    /// Register user baru dengan password
+    async fn register(&self, req: RegisterUserRequest) -> Result<UserAccountDto, ContractError>;
 }
 
 // --- CATALOG CONTRACT ---

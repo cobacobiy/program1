@@ -15,9 +15,10 @@ use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 use program1_contracts::{
-    AnalyticsContract, CatalogContract, ChannelSyncContract, ChannelType, ContractError,
-    CreateCatalogItemRequest, CreateUserAccountRequest, InventoryContract, OrderContract,
-    StorefrontOrderRequest, UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserContract,
+    AnalyticsContract, AuthTokenResponse, CatalogContract, ChannelSyncContract, ChannelType,
+    ContractError, CreateCatalogItemRequest, CreateUserAccountRequest, InventoryContract,
+    LoginRequest, OrderContract, RegisterUserRequest, StorefrontOrderRequest,
+    UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserContract,
 };
 use program1_core::init_tracing;
 use program1_module_analytics::AnalyticsModule;
@@ -80,6 +81,9 @@ async fn main() {
         // Health & Store Info
         .route("/health", get(health_check))
         .route("/api/v1/store/info", get(get_store_info))
+        // Auth Endpoints
+        .route("/api/v1/auth/login", post(login_handler))
+        .route("/api/v1/auth/register", post(register_handler))
         // User Accounts & RBAC
         .route("/api/v1/users/accounts", get(list_user_accounts).post(create_user_account))
         .route("/api/v1/users/accounts/:id/permissions", post(update_user_permissions))
@@ -169,6 +173,35 @@ fn map_contract_error(err: ContractError) -> (StatusCode, Json<serde_json::Value
         ),
         ContractError::ChannelSyncError(msg) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": msg }))),
         ContractError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": msg }))),
+    }
+}
+
+// Auth Handlers
+async fn login_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginRequest>,
+) -> impl IntoResponse {
+    match state.user_contract.authenticate(&payload.username, &payload.password).await {
+        Ok(user) => {
+            let token_resp = AuthTokenResponse {
+                access_token: format!("token-{}", user.id),
+                token_type: "Bearer".to_string(),
+                expires_in: 86400,
+                user,
+            };
+            (StatusCode::OK, Json(json!(token_resp)))
+        }
+        Err(e) => map_contract_error(e),
+    }
+}
+
+async fn register_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<RegisterUserRequest>,
+) -> impl IntoResponse {
+    match state.user_contract.register(payload).await {
+        Ok(user) => (StatusCode::CREATED, Json(json!(user))),
+        Err(e) => map_contract_error(e),
     }
 }
 

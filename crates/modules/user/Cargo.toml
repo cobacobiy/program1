@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 program1-contracts = { path = "../../contracts" }
+program1-core = { path = "../../core" }
 async-trait.workspace = true
 tokio.workspace = true
 serde.workspace = true
