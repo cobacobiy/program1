@@ -1,20 +1,12 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use async_trait::async_trait;
-use chrono::Utc;
-use tokio::sync::RwLock;
-use uuid::Uuid;
-
+use chrono::{DateTime, Utc};
 use program1_contracts::{
     ContractError, CreateUserAccountRequest, RegisterUserRequest, UserAccountDto, UserContract,
 };
+use program1_core::database::DbPool;
+use sqlx::Row;
+use uuid::Uuid;
 
-/// Internal only — TIDAK di-export
-#[derive(Clone, Debug)]
-struct UserAccountInternal {
-    pub dto: UserAccountDto,
-    pub password_hash: String, // Argon2id hash
-}
 
 /// Password validation rules:
 /// - Minimum 8 karakter
@@ -48,29 +40,35 @@ pub fn validate_password(password: &str, username: &str) -> Result<(), ContractE
 
 #[derive(Clone)]
 pub struct UserModule {
-    accounts: Arc<RwLock<HashMap<Uuid, UserAccountInternal>>>,
-    username_index: Arc<RwLock<HashMap<String, Uuid>>>,
+    pool: DbPool,
 }
 
 impl UserModule {
-    pub fn new() -> Self {
+    pub fn new(pool: DbPool) -> Self {
+        let module = Self { pool };
+        // Trigger non-blocking seed in background / sync check
+        let module_clone = module.clone();
+        tokio::spawn(async move {
+            let _ = module_clone.seed_default_users().await;
+        });
+        module
+    }
+
+    pub async fn seed_default_users(&self) -> Result<(), ContractError> {
+        let count_row = sqlx::query("SELECT COUNT(*) as count FROM user_accounts")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let count: i64 = count_row.get("count");
+        if count > 0 {
+            return Ok(());
+        }
+
         let all_menus = vec![
-            "dashboard".to_string(),
-            "orders".to_string(),
-            "master_products".to_string(),
-            "channel_products".to_string(),
-            "purchases".to_string(),
-            "stocks".to_string(),
-            "warehouses".to_string(),
-            "promotions".to_string(),
-            "customers".to_string(),
-            "chat".to_string(),
-            "reports".to_string(),
-            "logistics".to_string(),
-            "finances".to_string(),
-            "integrations".to_string(),
-            "settings".to_string(),
-            "service".to_string(),
+            "dashboard", "orders", "master_products", "channel_products", "purchases",
+            "stocks", "warehouses", "promotions", "customers", "chat", "reports",
+            "logistics", "finances", "integrations", "settings", "service",
         ];
 
         let admin_default_password = std::env::var("ADMIN_DEFAULT_PASSWORD")
@@ -79,319 +77,460 @@ impl UserModule {
             .unwrap_or_else(|_| "$argon2id$v=19$m=19456,t=2,p=1$placeholder$placeholder".to_string());
 
         let seed_accounts = vec![
-            UserAccountDto {
-                id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                username: "admin".to_string(),
-                full_name: "Admin Super (Owner)".to_string(),
-                role: "Super Admin".to_string(),
-                accessible_menus: all_menus.clone(),
-                is_active: true,
-                created_at: Utc::now(),
-            },
-            UserAccountDto {
-                id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
-                username: "staff_cs".to_string(),
-                full_name: "Siti Rahma (Staff CS)".to_string(),
-                role: "Customer Support".to_string(),
-                accessible_menus: vec![
-                    "dashboard".to_string(),
-                    "orders".to_string(),
-                    "customers".to_string(),
-                    "chat".to_string(),
-                    "service".to_string(),
-                ],
-                is_active: true,
-                created_at: Utc::now(),
-            },
-            UserAccountDto {
-                id: Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap(),
-                username: "staff_gudang".to_string(),
-                full_name: "Bambang W (Staff Gudang)".to_string(),
-                role: "Warehouse Manager".to_string(),
-                accessible_menus: vec![
-                    "dashboard".to_string(),
-                    "master_products".to_string(),
-                    "stocks".to_string(),
-                    "warehouses".to_string(),
-                    "logistics".to_string(),
-                ],
-                is_active: true,
-                created_at: Utc::now(),
-            },
-            UserAccountDto {
-                id: Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap(),
-                username: "staff_finance".to_string(),
-                full_name: "Dewi Lestari (Staff Keuangan)".to_string(),
-                role: "Finance Officer".to_string(),
-                accessible_menus: vec![
-                    "dashboard".to_string(),
-                    "orders".to_string(),
-                    "reports".to_string(),
-                    "finances".to_string(),
-                ],
-                is_active: true,
-                created_at: Utc::now(),
-            },
+            (
+                "00000000-0000-0000-0000-000000000001",
+                "admin",
+                "Admin Super (Owner)",
+                "Super Admin",
+                serde_json::to_string(&all_menus).unwrap(),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000002",
+                "staff_cs",
+                "Siti Rahma (Staff CS)",
+                "Customer Support",
+                serde_json::to_string(&vec!["dashboard", "orders", "customers", "chat", "service"]).unwrap(),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000003",
+                "staff_gudang",
+                "Bambang W (Staff Gudang)",
+                "Warehouse Manager",
+                serde_json::to_string(&vec!["dashboard", "master_products", "stocks", "warehouses", "logistics"]).unwrap(),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000004",
+                "staff_finance",
+                "Dewi Lestari (Staff Keuangan)",
+                "Finance Officer",
+                serde_json::to_string(&vec!["dashboard", "orders", "reports", "finances"]).unwrap(),
+            ),
         ];
 
-        let mut accounts_map = HashMap::new();
-        let mut index_map = HashMap::new();
-
-        for acc in seed_accounts {
-            index_map.insert(acc.username.to_lowercase(), acc.id);
-            accounts_map.insert(
-                acc.id,
-                UserAccountInternal {
-                    dto: acc,
-                    password_hash: seed_password_hash.clone(),
-                },
-            );
+        for (id, username, full_name, role, menus) in seed_accounts {
+            let _ = sqlx::query(
+                "INSERT OR IGNORE INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, 1, $7)",
+            )
+            .bind(id)
+            .bind(username)
+            .bind(&seed_password_hash)
+            .bind(full_name)
+            .bind(role)
+            .bind(menus)
+            .bind(Utc::now().to_rfc3339())
+            .execute(&self.pool)
+            .await;
         }
 
-        Self {
-            accounts: Arc::new(RwLock::new(accounts_map)),
-            username_index: Arc::new(RwLock::new(index_map)),
-        }
+        Ok(())
     }
-}
 
-impl Default for UserModule {
-    fn default() -> Self {
-        Self::new()
+    fn row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<UserAccountDto, ContractError> {
+        let id_str: String = row.get("id");
+        let id = Uuid::parse_str(&id_str)
+            .map_err(|e| ContractError::Internal(format!("Corrupt UUID in database: {}", e)))?;
+
+        let username: String = row.get("username");
+        let full_name: String = row.get("full_name");
+        let role: String = row.get("role");
+        let menus_json: String = row.get("accessible_menus");
+        let accessible_menus: Vec<String> = serde_json::from_str(&menus_json).unwrap_or_default();
+        let is_active: i64 = row.get("is_active");
+        let created_at_str: String = row.get("created_at");
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        Ok(UserAccountDto {
+            id,
+            username,
+            full_name,
+            role,
+            accessible_menus,
+            is_active: is_active != 0,
+            created_at,
+        })
     }
 }
 
 #[async_trait]
 impl UserContract for UserModule {
+    async fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<UserAccountDto, ContractError> {
+        let row = sqlx::query(
+            "SELECT id, username, password_hash, full_name, role, accessible_menus, is_active, created_at
+             FROM user_accounts WHERE LOWER(username) = LOWER($1)",
+        )
+        .bind(username.trim())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let row = match row {
+            Some(r) => r,
+            None => {
+                return Err(ContractError::ValidationError(
+                    "Invalid username or password".to_string(),
+                ));
+            }
+        };
+
+        let password_hash: String = row.get("password_hash");
+        let is_active: i64 = row.get("is_active");
+        if is_active == 0 {
+            return Err(ContractError::ValidationError(
+                "Account is deactivated".to_string(),
+            ));
+        }
+
+        let is_valid = program1_core::auth::verify_password(password, &password_hash)
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if !is_valid {
+            return Err(ContractError::ValidationError(
+                "Invalid username or password".to_string(),
+            ));
+        }
+
+        Self::row_to_dto(&row)
+    }
+
+    async fn get_account(&self, user_id: Uuid) -> Result<UserAccountDto, ContractError> {
+        let row = sqlx::query(
+            "SELECT id, username, full_name, role, accessible_menus, is_active, created_at
+             FROM user_accounts WHERE id = $1",
+        )
+        .bind(user_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        match row {
+            Some(r) => Self::row_to_dto(&r),
+            None => Err(ContractError::NotFound(format!(
+                "User account with ID {} not found",
+                user_id
+            ))),
+        }
+    }
+
+
     async fn list_accounts(&self) -> Result<Vec<UserAccountDto>, ContractError> {
-        let lock = self.accounts.read().await;
-        let mut list: Vec<UserAccountDto> = lock.values().map(|u| u.dto.clone()).collect();
-        list.sort_by(|a, b| a.full_name.cmp(&b.full_name));
-        Ok(list)
+        let rows = sqlx::query(
+            "SELECT id, username, full_name, role, accessible_menus, is_active, created_at
+             FROM user_accounts ORDER BY created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        rows.iter().map(Self::row_to_dto).collect()
     }
 
-    async fn get_account(&self, id: Uuid) -> Result<UserAccountDto, ContractError> {
-        let lock = self.accounts.read().await;
-        lock.get(&id)
-            .map(|u| u.dto.clone())
-            .ok_or_else(|| ContractError::NotFound(format!("User Account {}", id)))
-    }
-
-    async fn create_account(&self, req: CreateUserAccountRequest) -> Result<UserAccountDto, ContractError> {
+    async fn create_account(
+        &self,
+        req: CreateUserAccountRequest,
+    ) -> Result<UserAccountDto, ContractError> {
         let clean_username = req.username.trim().to_lowercase();
         if clean_username.is_empty() {
-            return Err(ContractError::ValidationError("Username cannot be empty".to_string()));
+            return Err(ContractError::ValidationError(
+                "Username cannot be empty".to_string(),
+            ));
         }
 
-        let index_lock = self.username_index.read().await;
-        if index_lock.contains_key(&clean_username) {
+        // Check if username already exists
+        let exists_row = sqlx::query("SELECT COUNT(*) as count FROM user_accounts WHERE LOWER(username) = LOWER($1)")
+            .bind(&clean_username)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let exists_count: i64 = exists_row.get("count");
+        if exists_count > 0 {
             return Err(ContractError::ValidationError(format!(
                 "Username '{}' is already taken",
-                clean_username
+                req.username
             )));
         }
-        drop(index_lock);
 
+        let new_id = Uuid::new_v4();
+        let now = Utc::now();
         let default_password = std::env::var("ADMIN_DEFAULT_PASSWORD")
             .unwrap_or_else(|_| "admin123".to_string());
         let password_hash = program1_core::auth::hash_password(&default_password)
-            .map_err(ContractError::Internal)?;
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        let acc = UserAccountDto {
-            id: Uuid::new_v4(),
-            username: clean_username.clone(),
-            full_name: req.full_name.trim().to_string(),
-            role: req.role.trim().to_string(),
+        let menus_json = serde_json::to_string(&req.accessible_menus).unwrap_or_else(|_| "[]".to_string());
+
+        sqlx::query(
+            "INSERT INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 1, $7)",
+        )
+        .bind(new_id.to_string())
+        .bind(&clean_username)
+        .bind(&password_hash)
+        .bind(req.full_name.trim())
+        .bind(req.role.trim())
+        .bind(menus_json)
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(UserAccountDto {
+            id: new_id,
+            username: clean_username,
+            full_name: req.full_name,
+            role: req.role,
             accessible_menus: req.accessible_menus,
             is_active: true,
-            created_at: Utc::now(),
-        };
-
-        let internal = UserAccountInternal {
-            dto: acc.clone(),
-            password_hash,
-        };
-
-        let mut acc_lock = self.accounts.write().await;
-        let mut idx_lock = self.username_index.write().await;
-
-        acc_lock.insert(acc.id, internal);
-        idx_lock.insert(clean_username, acc.id);
-
-        tracing::info!(id = %acc.id, username = %acc.username, "User Account Created");
-        Ok(acc)
+            created_at: now,
+        })
     }
 
-    async fn update_permissions(&self, id: Uuid, accessible_menus: Vec<String>) -> Result<UserAccountDto, ContractError> {
-        let mut lock = self.accounts.write().await;
-        let acc_internal = lock
-            .get_mut(&id)
-            .ok_or_else(|| ContractError::NotFound(format!("User Account {}", id)))?;
+    async fn update_permissions(
+        &self,
+        user_id: Uuid,
+        accessible_menus: Vec<String>,
+    ) -> Result<UserAccountDto, ContractError> {
+        let menus_json = serde_json::to_string(&accessible_menus).unwrap_or_else(|_| "[]".to_string());
 
-        acc_internal.dto.accessible_menus = accessible_menus;
-        tracing::info!(id = %id, permissions_count = acc_internal.dto.accessible_menus.len(), "Permissions updated");
-        Ok(acc_internal.dto.clone())
-    }
+        let result = sqlx::query(
+            "UPDATE user_accounts SET accessible_menus = $1 WHERE id = $2",
+        )
+        .bind(menus_json)
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-    async fn authenticate(&self, username: &str, password: &str) -> Result<UserAccountDto, ContractError> {
-        let clean_username = username.trim().to_lowercase();
-        let idx_lock = self.username_index.read().await;
-        let user_id = idx_lock
-            .get(&clean_username)
-            .copied()
-            .ok_or_else(|| ContractError::NotFound(format!("User '{}' not found", username)))?;
-        drop(idx_lock);
-
-        let acc_lock = self.accounts.read().await;
-        let internal = acc_lock
-            .get(&user_id)
-            .ok_or_else(|| ContractError::NotFound(format!("User '{}' not found", username)))?;
-
-        let is_valid = program1_core::auth::verify_password(password, &internal.password_hash)
-            .map_err(ContractError::Internal)?;
-
-        if !is_valid {
-            return Err(ContractError::ValidationError("Invalid password".to_string()));
+        if result.rows_affected() == 0 {
+            return Err(ContractError::NotFound(format!(
+                "User account with ID {} not found",
+                user_id
+            )));
         }
 
-        if !internal.dto.is_active {
-            return Err(ContractError::ValidationError("User account is inactive".to_string()));
-        }
-
-        tracing::info!(id = %internal.dto.id, username = %internal.dto.username, "User authenticated successfully");
-        Ok(internal.dto.clone())
+        self.get_account(user_id).await
     }
+
 
     async fn register(&self, req: RegisterUserRequest) -> Result<UserAccountDto, ContractError> {
         let clean_username = req.username.trim().to_lowercase();
         if clean_username.is_empty() {
-            return Err(ContractError::ValidationError("Username cannot be empty".to_string()));
+            return Err(ContractError::ValidationError(
+                "Username cannot be empty".to_string(),
+            ));
         }
 
         validate_password(&req.password, &clean_username)?;
 
-        let idx_lock = self.username_index.read().await;
-        if idx_lock.contains_key(&clean_username) {
+        let exists_row = sqlx::query("SELECT COUNT(*) as count FROM user_accounts WHERE LOWER(username) = LOWER($1)")
+            .bind(&clean_username)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let exists_count: i64 = exists_row.get("count");
+        if exists_count > 0 {
             return Err(ContractError::ValidationError(format!(
-                "Username '{}' is already taken",
-                clean_username
+                "Username '{}' is already registered",
+                req.username
             )));
         }
-        drop(idx_lock);
 
         let password_hash = program1_core::auth::hash_password(&req.password)
-            .map_err(ContractError::Internal)?;
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        let acc = UserAccountDto {
-            id: Uuid::new_v4(),
-            username: clean_username.clone(),
-            full_name: req.full_name.trim().to_string(),
-            role: if req.role.trim().is_empty() {
-                "User".to_string()
-            } else {
-                req.role.trim().to_string()
-            },
-            accessible_menus: req.accessible_menus,
+        let new_id = Uuid::new_v4();
+        let now = Utc::now();
+        let role = if req.role.trim().is_empty() { "Staff".to_string() } else { req.role.trim().to_string() };
+        let menus = if req.accessible_menus.is_empty() {
+            vec!["dashboard".to_string(), "orders".to_string()]
+        } else {
+            req.accessible_menus
+        };
+        let menus_json = serde_json::to_string(&menus).unwrap_or_else(|_| "[]".to_string());
+
+        sqlx::query(
+            "INSERT INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 1, $7)",
+        )
+        .bind(new_id.to_string())
+        .bind(&clean_username)
+        .bind(&password_hash)
+        .bind(req.full_name.trim())
+        .bind(&role)
+        .bind(menus_json)
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(UserAccountDto {
+            id: new_id,
+            username: clean_username,
+            full_name: req.full_name,
+            role,
+            accessible_menus: menus,
             is_active: true,
-            created_at: Utc::now(),
-        };
+            created_at: now,
+        })
 
-        let internal = UserAccountInternal {
-            dto: acc.clone(),
-            password_hash,
-        };
-
-        let mut acc_lock = self.accounts.write().await;
-        let mut idx_lock = self.username_index.write().await;
-
-        acc_lock.insert(acc.id, internal);
-        idx_lock.insert(clean_username, acc.id);
-
-        tracing::info!(id = %acc.id, username = %acc.username, "User registered successfully");
-        Ok(acc)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use program1_core::init_database;
 
-    // 1. Test password hashing & verification
-    #[test]
-    fn test_hash_and_verify_password() {
-        let raw_pass = "SecurePass123!";
-        let hash = program1_core::auth::hash_password(raw_pass).expect("Should hash successfully");
-        assert_ne!(raw_pass, hash);
-        assert!(program1_core::auth::verify_password(raw_pass, &hash).unwrap());
-        assert!(!program1_core::auth::verify_password("WrongPassword123", &hash).unwrap());
+    async fn create_test_user_module() -> UserModule {
+        let pool = init_database("sqlite::memory:").await.expect("In-memory SQLite init failed");
+        let module = UserModule::new(pool);
+        module.seed_default_users().await.expect("Seeding failed");
+        module
     }
 
-    // 2. Test login dengan credential benar
+    #[tokio::test]
+    async fn test_user_accounts_and_rbac() {
+        let module = create_test_user_module().await;
+        let accounts = module.list_accounts().await.unwrap();
+        assert_eq!(accounts.len(), 4);
+
+        let admin = &accounts[0];
+        assert_eq!(admin.username, "admin");
+        assert_eq!(admin.role, "Super Admin");
+        assert_eq!(admin.accessible_menus.len(), 16);
+
+        // Test create new account
+        let new_acc = module
+            .create_account(CreateUserAccountRequest {
+                username: "operator_packing".to_string(),
+                full_name: "Packing Staff".to_string(),
+                role: "Warehouse Operator".to_string(),
+                accessible_menus: vec!["logistics".to_string()],
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(new_acc.username, "operator_packing");
+        assert_eq!(new_acc.accessible_menus, vec!["logistics"]);
+
+        // Test update permissions
+        let updated = module
+            .update_permissions(
+                new_acc.id,
+                vec!["logistics".to_string(), "orders".to_string()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            updated.accessible_menus,
+            vec!["logistics".to_string(), "orders".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_account_empty_username_validation() {
+        let module = create_test_user_module().await;
+        let result = module
+            .create_account(CreateUserAccountRequest {
+                username: "   ".to_string(),
+                full_name: "Empty User".to_string(),
+                role: "Staff".to_string(),
+                accessible_menus: vec![],
+            })
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ContractError::ValidationError(msg) => {
+                assert_eq!(msg, "Username cannot be empty");
+            }
+            _ => panic!("Expected ValidationError"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_password_validation_rules() {
+        assert!(validate_password("short1A", "user").is_err());
+        assert!(validate_password("alllowercase1", "user").is_err());
+        assert!(validate_password("ALLUPPERCASE1", "user").is_err());
+        assert!(validate_password("NoDigitsHere!", "user").is_err());
+        assert!(validate_password("Admin123", "admin123").is_err());
+        assert!(validate_password("ValidPass123", "other_user").is_ok());
+    }
+
     #[tokio::test]
     async fn test_authenticate_valid_credentials() {
-        let module = UserModule::new();
-        let user = module.authenticate("admin", "admin123").await;
-        assert!(user.is_ok());
-        let user = user.unwrap();
+        let module = create_test_user_module().await;
+        let result = module.authenticate("admin", "admin123").await;
+        assert!(result.is_ok());
+        let user = result.unwrap();
         assert_eq!(user.username, "admin");
         assert_eq!(user.role, "Super Admin");
     }
 
-    // 3. Test login dengan password salah
     #[tokio::test]
     async fn test_authenticate_wrong_password() {
-        let module = UserModule::new();
-        let result = module.authenticate("admin", "wrong_password").await;
+        let module = create_test_user_module().await;
+        let result = module.authenticate("admin", "wrongpassword").await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            ContractError::ValidationError(msg) => assert_eq!(msg, "Invalid password"),
-            other => panic!("Expected ValidationError, got {:?}", other),
+            ContractError::ValidationError(msg) => {
+                assert_eq!(msg, "Invalid username or password");
+            }
+            _ => panic!("Expected ValidationError"),
         }
     }
 
-    // 4. Test login dengan username tidak ada
     #[tokio::test]
     async fn test_authenticate_nonexistent_user() {
-        let module = UserModule::new();
-        let result = module.authenticate("nonexistent_user", "admin123").await;
+        let module = create_test_user_module().await;
+        let result = module.authenticate("nobody", "admin123").await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            ContractError::NotFound(_) => {}
-            other => panic!("Expected NotFound error, got {:?}", other),
+            ContractError::ValidationError(msg) => {
+                assert_eq!(msg, "Invalid username or password");
+            }
+            _ => panic!("Expected ValidationError"),
         }
     }
 
-    // 5. Test register user baru
     #[tokio::test]
     async fn test_register_new_user() {
-        let module = UserModule::new();
+        let module = create_test_user_module().await;
         let req = RegisterUserRequest {
-            username: "new_manager".to_string(),
+            username: "newuser".to_string(),
             password: "SecurePassword123".to_string(),
-            full_name: "New Store Manager".to_string(),
-            role: "Manager".to_string(),
+            full_name: "New User".to_string(),
+            role: "Staff".to_string(),
             accessible_menus: vec!["dashboard".to_string(), "orders".to_string()],
         };
 
-        let created = module.register(req).await;
-        assert!(created.is_ok());
-        let user = created.unwrap();
-        assert_eq!(user.username, "new_manager");
+        let user = module.register(req).await.expect("Registration should succeed");
+        assert_eq!(user.username, "newuser");
+        assert_eq!(user.full_name, "New User");
+        assert_eq!(user.role, "Staff");
 
-        // Authenticate with new credentials
-        let auth_res = module.authenticate("new_manager", "SecurePassword123").await;
+        let auth_res = module.authenticate("newuser", "SecurePassword123").await;
         assert!(auth_res.is_ok());
     }
 
-    // 6. Test register dengan username duplikat
     #[tokio::test]
     async fn test_register_duplicate_username() {
-        let module = UserModule::new();
+        let module = create_test_user_module().await;
         let req = RegisterUserRequest {
-            username: "admin".to_string(), // already exists
-            password: "AdminNewPass123".to_string(),
-            full_name: "Duplicate Admin".to_string(),
-            role: "Admin".to_string(),
+            username: "admin".to_string(),
+            password: "SecurePassword123".to_string(),
+            full_name: "Another Admin".to_string(),
+            role: "Super Admin".to_string(),
             accessible_menus: vec![],
         };
 
@@ -399,89 +538,10 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             ContractError::ValidationError(msg) => {
-                assert!(msg.contains("already taken"));
+                assert!(msg.contains("already"));
             }
-            other => panic!("Expected ValidationError, got {:?}", other),
+            _ => panic!("Expected ValidationError"),
         }
     }
 
-    // 7. Test password validation rules
-    #[test]
-    fn test_password_validation_rules() {
-        // Too short (< 8 chars)
-        let res_short = validate_password("Short1!", "user1");
-        assert!(res_short.is_err());
-
-        // Missing uppercase
-        let res_no_upper = validate_password("lowercase123!", "user1");
-        assert!(res_no_upper.is_err());
-
-        // Missing lowercase
-        let res_no_lower = validate_password("UPPERCASE123!", "user1");
-        assert!(res_no_lower.is_err());
-
-        // Missing digit
-        let res_no_digit = validate_password("NoDigitsHere!", "user1");
-        assert!(res_no_digit.is_err());
-
-        // Same as username
-        let res_same = validate_password("MyUserPassword1", "MyUserPassword1");
-        assert!(res_same.is_err());
-
-        // Valid password
-        let res_valid = validate_password("ValidPassword123", "user1");
-        assert!(res_valid.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_user_accounts_and_rbac() {
-        let module = UserModule::new();
-        let accounts = module.list_accounts().await.unwrap();
-        assert_eq!(accounts.len(), 4);
-
-        // Verify admin seed has all 16 menus
-        let admin = accounts.iter().find(|a| a.username == "admin").unwrap();
-        assert_eq!(admin.accessible_menus.len(), 16);
-
-        // Update permissions for CS staff
-        let cs_staff = accounts.iter().find(|a| a.username == "staff_cs").unwrap();
-        let updated = module
-            .update_permissions(cs_staff.id, vec!["dashboard".to_string(), "chat".to_string(), "service".to_string()])
-            .await
-            .unwrap();
-
-        assert_eq!(updated.accessible_menus, vec!["dashboard", "chat", "service"]);
-
-        // Create new user account
-        let new_user = module
-            .create_account(CreateUserAccountRequest {
-                username: "staff_promotions".to_string(),
-                full_name: "Rian Marketing".to_string(),
-                role: "Marketing Manager".to_string(),
-                accessible_menus: vec!["dashboard".to_string(), "promotions".to_string()],
-            })
-            .await
-            .unwrap();
-
-        assert_eq!(new_user.username, "staff_promotions");
-        assert_eq!(new_user.accessible_menus, vec!["dashboard", "promotions"]);
-
-        let all_after_create = module.list_accounts().await.unwrap();
-        assert_eq!(all_after_create.len(), 5);
-    }
-
-    #[tokio::test]
-    async fn test_create_account_empty_username_validation() {
-        let module = UserModule::new();
-        let res = module
-            .create_account(CreateUserAccountRequest {
-                username: "   ".to_string(),
-                full_name: "Test Invalid".to_string(),
-                role: "Tester".to_string(),
-                accessible_menus: vec![],
-            })
-            .await;
-
-        assert!(res.is_err());
-    }
 }

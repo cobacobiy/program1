@@ -10,6 +10,9 @@ services:
       - .env
     environment:
       - APP_PORT=8080
+      - DATABASE_URL=sqlite:///app/data/program1.db?mode=rwc
+    volumes:
+      - program1_data:/app/data
     ports:
       - "6090:8080"
     healthcheck:
@@ -19,6 +22,10 @@ services:
       retries: 3
     networks:
       - default
+
+volumes:
+  program1_data:
+    name: program1_data
 
 networks:
   default:

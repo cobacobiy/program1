@@ -2,7 +2,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use program1_core::init_tracing;
+use program1_core::{init_database, init_tracing};
 use program1_module_analytics::AnalyticsModule;
 use program1_module_auth::AuthModule;
 use program1_module_catalog::CatalogModule;
@@ -24,14 +24,22 @@ async fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(24);
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite://./data/program1.db?mode=rwc".to_string());
 
-    // 1. Instantiate domain modules
-    let user_module = Arc::new(UserModule::new());
+    // 1. Initialize persistent database pool & run migrations
+    let db_pool = init_database(&database_url)
+        .await
+        .expect("Failed to initialize database and run migrations");
+
+    // 2. Instantiate domain modules with database pool
+    let user_module = Arc::new(UserModule::new(db_pool.clone()));
     let auth_module = Arc::new(AuthModule::new(jwt_secret, jwt_expiry_hours));
-    let catalog_module = Arc::new(CatalogModule::new());
-    let inventory_module = Arc::new(InventoryModule::new(catalog_module.clone()));
-    let channel_module = Arc::new(ChannelSyncModule::new());
+    let catalog_module = Arc::new(CatalogModule::new(db_pool.clone()));
+    let inventory_module = Arc::new(InventoryModule::new(db_pool.clone(), catalog_module.clone()));
+    let channel_module = Arc::new(ChannelSyncModule::new(db_pool.clone()));
     let order_module = Arc::new(OrderModule::new(
+        db_pool.clone(),
         catalog_module.clone(),
         inventory_module.clone(),
     ));
@@ -39,6 +47,11 @@ async fn main() {
         catalog_module.clone(),
         order_module.clone(),
     ));
+
+    // Ensure initial seed runs
+    let _ = user_module.seed_default_users().await;
+    let _ = catalog_module.seed_default_catalog().await;
+    let _ = channel_module.seed_default_channels().await;
 
     let state = AppState {
         store_name,
