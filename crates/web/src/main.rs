@@ -63,7 +63,9 @@ async fn main() {
         channel_contract: channel_module,
         order_contract: order_module,
         analytics_contract: analytics_module,
+        rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
     };
+
 
     let app = create_app(state);
 
