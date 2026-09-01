@@ -18,7 +18,7 @@ use program1_web::{create_app, rate_limit::IpRateLimiter, AppState};
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-async fn setup_test_app() -> (axum::Router, String) {
+async fn setup_test_app() -> (axum::Router, String, String) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
     let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
 
@@ -46,6 +46,9 @@ async fn setup_test_app() -> (axum::Router, String) {
     let admin_user = user_module.authenticate("admin", "admin123").await.unwrap();
     let admin_token = auth_module.generate_token(&admin_user).unwrap();
 
+    let staff_user = user_module.authenticate("staff_cs", "admin123").await.unwrap();
+    let staff_token = auth_module.generate_token(&staff_user).unwrap();
+
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
@@ -61,17 +64,17 @@ async fn setup_test_app() -> (axum::Router, String) {
         started_at: std::time::Instant::now(),
     };
 
-    (create_app(state), admin_token)
+    (create_app(state), admin_token, staff_token)
 }
 
 #[tokio::test]
 async fn test_inventory_list_and_detail_endpoints() {
-    let (app, token) = setup_test_app().await;
+    let (app, admin_token, staff_token) = setup_test_app().await;
 
-    // GET /api/v1/inventory
+    // GET /api/v1/inventory (accessible with staff token as well)
     let req = Request::builder()
         .uri("/api/v1/inventory")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
         .body(Body::empty())
         .unwrap();
 
@@ -87,7 +90,7 @@ async fn test_inventory_list_and_detail_endpoints() {
     // GET /api/v1/inventory/:id
     let req2 = Request::builder()
         .uri(format!("/api/v1/inventory/{}", product_id))
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .body(Body::empty())
         .unwrap();
 
@@ -97,12 +100,12 @@ async fn test_inventory_list_and_detail_endpoints() {
 
 #[tokio::test]
 async fn test_update_all_stock_types_and_audit_logs() {
-    let (app, token) = setup_test_app().await;
+    let (app, admin_token, _) = setup_test_app().await;
 
     // List to get product ID
     let req = Request::builder()
         .uri("/api/v1/inventory")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .body(Body::empty())
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
@@ -114,7 +117,7 @@ async fn test_update_all_stock_types_and_audit_logs() {
     let req_wh = Request::builder()
         .method("POST")
         .uri(format!("/api/v1/inventory/{}/warehouse-stock", product_id))
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(json!({
             "new_warehouse_stock": 2000,
@@ -129,7 +132,7 @@ async fn test_update_all_stock_types_and_audit_logs() {
     let req_safety = Request::builder()
         .method("POST")
         .uri(format!("/api/v1/inventory/{}/safety-stock", product_id))
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(json!({
             "new_safety_stock": 100,
@@ -144,7 +147,7 @@ async fn test_update_all_stock_types_and_audit_logs() {
     let req_spare = Request::builder()
         .method("POST")
         .uri(format!("/api/v1/inventory/{}/spare-stock", product_id))
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(json!({
             "new_spare_stock": 50,
@@ -159,7 +162,7 @@ async fn test_update_all_stock_types_and_audit_logs() {
     let req_promo = Request::builder()
         .method("POST")
         .uri(format!("/api/v1/inventory/{}/promotion-stock", product_id))
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(json!({
             "new_promotion_stock": 200,
@@ -173,7 +176,7 @@ async fn test_update_all_stock_types_and_audit_logs() {
     // 5. GET /api/v1/inventory/:id/adjustment-logs
     let req_logs = Request::builder()
         .uri(format!("/api/v1/inventory/{}/adjustment-logs", product_id))
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .body(Body::empty())
         .unwrap();
     let res_logs = app.clone().oneshot(req_logs).await.unwrap();
@@ -185,12 +188,12 @@ async fn test_update_all_stock_types_and_audit_logs() {
 
 #[tokio::test]
 async fn test_bulk_update_and_low_stock_alerts() {
-    let (app, token) = setup_test_app().await;
+    let (app, admin_token, _) = setup_test_app().await;
 
     // List products
     let req = Request::builder()
         .uri("/api/v1/inventory")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .body(Body::empty())
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
@@ -203,7 +206,7 @@ async fn test_bulk_update_and_low_stock_alerts() {
     let req_bulk = Request::builder()
         .method("POST")
         .uri("/api/v1/inventory/bulk-update")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(json!({
             "adjustments": [
@@ -235,7 +238,7 @@ async fn test_bulk_update_and_low_stock_alerts() {
     // GET /api/v1/inventory/alerts/low-stock
     let req_alert = Request::builder()
         .uri("/api/v1/inventory/alerts/low-stock")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .body(Body::empty())
         .unwrap();
 
@@ -246,4 +249,49 @@ async fn test_bulk_update_and_low_stock_alerts() {
     let alerts: Vec<Value> = serde_json::from_slice(&body_alert).unwrap();
     assert!(!alerts.is_empty());
     assert!(alerts.iter().any(|a| a["product_id"] == p1));
+}
+
+#[tokio::test]
+async fn test_non_admin_cannot_mutate_stock_forbidden() {
+    let (app, admin_token, staff_token) = setup_test_app().await;
+
+    // List to get product ID
+    let req = Request::builder()
+        .uri("/api/v1/inventory")
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let stocks: Vec<Value> = serde_json::from_slice(&body).unwrap();
+    let product_id = stocks[0]["product_id"].as_str().unwrap();
+
+    // Staff tries to update warehouse stock -> 403 Forbidden
+    let req_wh = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/inventory/{}/warehouse-stock", product_id))
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({
+            "new_warehouse_stock": 500,
+            "admin_note": "Staff coba ubah stok",
+            "updated_by": "Staff"
+        }).to_string()))
+        .unwrap();
+    let res_wh = app.clone().oneshot(req_wh).await.unwrap();
+    assert_eq!(res_wh.status(), StatusCode::FORBIDDEN);
+
+    // Staff tries bulk update -> 403 Forbidden
+    let req_bulk = Request::builder()
+        .method("POST")
+        .uri("/api/v1/inventory/bulk-update")
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({
+            "adjustments": [{ "product_id": product_id, "stock_type": "safety", "new_value": 10 }],
+            "admin_note": "Staff bulk update"
+        }).to_string()))
+        .unwrap();
+    let res_bulk = app.oneshot(req_bulk).await.unwrap();
+    assert_eq!(res_bulk.status(), StatusCode::FORBIDDEN);
 }

@@ -1,3 +1,13 @@
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 let currentOrders = [];
 let userAccounts = [];
 let activeAccount = null;
@@ -151,11 +161,11 @@ async function loadLowStockAlerts() {
           ${alerts.slice(0, 6).map(a => `
             <li class="alert-list-item">
               <div>
-                <strong>${a.product_name}</strong>
-                <div style="font-size:0.7rem; color:var(--text-muted)">MSKU: <code>${a.sku}</code></div>
+                <strong>${escapeHtml(a.product_name)}</strong>
+                <div style="font-size:0.7rem; color:var(--text-muted)">MSKU: <code>${escapeHtml(a.sku)}</code></div>
               </div>
               <div style="text-align:right">
-                <span class="badge-${a.severity}">${a.severity.toUpperCase()}</span>
+                <span class="badge-${escapeHtml(a.severity)}">${escapeHtml(a.severity.toUpperCase())}</span>
                 <div style="font-size:0.75rem; margin-top:0.2rem; color:var(--amber)">
                   Tersedia: <strong>${a.available_stock}</strong> / Safety: ${a.safety_stock}
                 </div>
@@ -475,10 +485,10 @@ function renderGineeStockList(stocks) {
       <tr>
         <td>
           <div class="product-cell">
-            <img src="${s.image_url}" class="product-thumb" alt="Product" onerror="this.src='https://via.placeholder.com/40'">
+            <img src="${escapeHtml(s.image_url)}" class="product-thumb" alt="Product" onerror="this.src='https://via.placeholder.com/40'">
             <div class="product-meta">
-              <strong>${s.product_name}</strong>
-              <span>MSKU: <code>${s.sku}</code></span>
+              <strong>${escapeHtml(s.product_name)}</strong>
+              <span>MSKU: <code>${escapeHtml(s.sku)}</code></span>
             </div>
           </div>
         </td>
@@ -494,8 +504,8 @@ function renderGineeStockList(stocks) {
         <td style="color:var(--amber); font-weight:600">${s.safety_stock} unit</td>
         <td>
           <div style="display:flex; gap:0.4rem">
-            <button class="btn-sm btn-edit-safety" onclick="openStockAdjustmentModal('${s.product_id}')">✏️ Edit Stok</button>
-            <button class="btn-sm" onclick="openUnifiedHistoryModal('${s.product_id}', '${s.product_name.replace(/'/g, "")}')">📜 Riwayat</button>
+            <button class="btn-sm btn-edit-safety" onclick="openStockAdjustmentModal('${escapeHtml(s.product_id)}')">✏️ Edit Stok</button>
+            <button class="btn-sm" onclick="openUnifiedHistoryModal('${escapeHtml(s.product_id)}', '${escapeHtml(s.product_name.replace(/'/g, ''))}')">📜 Riwayat</button>
           </div>
         </td>
       </tr>
@@ -520,15 +530,15 @@ function renderMasterProducts(catalog) {
     <tr>
       <td>
         <div class="product-cell">
-          <img src="${p.image_url}" class="product-thumb" alt="Product" onerror="this.src='https://via.placeholder.com/40'">
+          <img src="${escapeHtml(p.image_url)}" class="product-thumb" alt="Product" onerror="this.src='https://via.placeholder.com/40'">
           <div class="product-meta">
-            <strong>${p.name}</strong>
-            <span>${p.description || ""}</span>
+            <strong>${escapeHtml(p.name)}</strong>
+            <span>${escapeHtml(p.description || "")}</span>
           </div>
         </div>
       </td>
-      <td><strong style="font-family:'JetBrains Mono'; color:var(--cyan)">${p.sku}</strong></td>
-      <td>${p.category}</td>
+      <td><strong style="font-family:'JetBrains Mono'; color:var(--cyan)">${escapeHtml(p.sku)}</strong></td>
+      <td>${escapeHtml(p.category)}</td>
       <td style="font-weight:700; color:var(--emerald)">Rp ${p.price.toLocaleString("id-ID")}</td>
       <td><strong>${p.stock} units</strong></td>
     </tr>
@@ -540,7 +550,7 @@ function renderAnalyticsBreakdown(breakdown) {
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1.2rem">
       ${breakdown.map(b => `
         <div style="background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:1.2rem; border-radius:12px">
-          <span class="channel-badge ${getBadgeClass(b.channel)}">${b.channel_name}</span>
+          <span class="channel-badge ${getBadgeClass(b.channel)}">${escapeHtml(b.channel_name)}</span>
           <div style="font-size:1.4rem; font-weight:700; margin-top:0.6rem; color:var(--emerald)">Rp ${b.total_revenue.toLocaleString("id-ID")}</div>
           <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem">Total Orders: <strong>${b.total_orders}</strong></div>
         </div>
@@ -677,9 +687,9 @@ async function refreshCurrentStockLogs() {
             <span style="font-size:0.75rem; color:var(--text-muted)">${new Date(l.timestamp).toLocaleString("id-ID")}</span>
           </div>
           <p style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:0.5rem; border-radius:6px; margin:0.3rem 0">
-            📝 <em>"${l.admin_note}"</em>
+            📝 <em>"${escapeHtml(l.admin_note)}"</em>
           </p>
-          <div style="font-size:0.75rem; color:var(--text-muted)">Oleh Operator: <strong style="color:#fff">${l.updated_by}</strong></div>
+          <div style="font-size:0.75rem; color:var(--text-muted)">Oleh Operator: <strong style="color:#fff">${escapeHtml(l.updated_by)}</strong></div>
         </div>
       `;
     }).join("");
@@ -795,8 +805,8 @@ function parseAndPreviewBulkInput() {
       <tbody>
         ${parsed.map(p => `
           <tr>
-            <td><strong>${p.product_name}</strong></td>
-            <td><code>${p.stock_type}</code></td>
+            <td><strong>${escapeHtml(p.product_name)}</strong></td>
+            <td><code>${escapeHtml(p.stock_type)}</code></td>
             <td><strong style="color:var(--emerald)">${p.new_value} unit</strong></td>
           </tr>
         `).join("")}

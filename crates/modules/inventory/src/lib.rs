@@ -742,8 +742,23 @@ impl InventoryContract for InventoryModule {
                 Err(e) => {
                     failed += 1;
                     errors.push(format!("{}: {}", item.product_id, e));
+                    tracing::warn!(
+                        product_id = %item.product_id,
+                        stock_type = %item.stock_type,
+                        error = %e,
+                        "Bulk stock adjustment item failed"
+                    );
                 }
             }
+        }
+
+        if failed > 0 {
+            tracing::warn!(
+                total = request.adjustments.len(),
+                success = success,
+                failed = failed,
+                "Bulk stock update completed with partial failures"
+            );
         }
 
         Ok(BulkStockUpdateResult {
