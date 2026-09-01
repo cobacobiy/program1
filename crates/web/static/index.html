@@ -132,6 +132,9 @@
     <main>
       <!-- VIEW 1: DASHBOARD RINGKASAN -->
       <div id="view-dashboard" class="spa-view active">
+        <!-- LOW STOCK ALERT CONTAINER -->
+        <div id="dash-low-stock-alert"></div>
+
         <div class="metrics-grid">
           <div class="metric-card">
             <div class="metric-label">Gross Revenue</div>
@@ -165,36 +168,41 @@
               <tr>
                 <th>Order ID</th>
                 <th>Channel</th>
-                <th>Pembeli</th>
-                <th>Total</th>
+                <th>Pelanggan</th>
+                <th>Total Belanja</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody id="dash-orders-tbody">
-              <tr><td colspan="5">Loading recent orders...</td></tr>
+              <tr><td colspan="5">Loading orders...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- VIEW 2: PESANAN / ORDERS -->
+      <!-- VIEW 2: ORDERS WITH SUBMENU TABS -->
       <div id="view-orders" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">📦 Manajemen Pesanan Omnichannel (Orders Ledger)</h3>
+            <div>
+              <h3 class="panel-title">📦 Orders Central Ledger (Ginee OMS)</h3>
+              <p style="font-size:0.8rem; color:var(--text-muted)">Sinkronisasi multi-channel otomatis & pemrosesan resi pengiriman.</p>
+            </div>
+            <a href="/store" target="_blank" class="btn-action btn-primary">+ Buat Pesanan Baru</a>
           </div>
           <div class="tabs-bar">
-            <button class="tab-btn active" onclick="filterOrderTab('all', this)">Semua Pesanan (Past 90 Days)</button>
-            <button class="tab-btn" onclick="filterOrderTab('PAID', this)">Lunas (PAID / Pending Print)</button>
-            <button class="tab-btn" onclick="filterOrderTab('PROCESSING', this)">Diproses (Waiting Pickup / Shipped)</button>
+            <button class="tab-btn active" onclick="filterOrderTab('all', this)">Semua Pesanan</button>
+            <button class="tab-btn" onclick="filterOrderTab('PAID', this)">Pending / Diproses</button>
+            <button class="tab-btn" onclick="filterOrderTab('SHIPPED', this)">Dalam Pengiriman</button>
+            <button class="tab-btn" onclick="filterOrderTab('COMPLETED', this)">Selesai</button>
           </div>
           <table>
             <thead>
               <tr>
-                <th>ID Pesanan</th>
-                <th>Channel Toko</th>
-                <th>Nama Pembeli</th>
-                <th>Email / Alamat</th>
+                <th>Order ID</th>
+                <th>Channel</th>
+                <th>Pelanggan</th>
+                <th>Email</th>
                 <th>Total Nilai</th>
                 <th>Status</th>
                 <th>Waktu</th>
@@ -269,12 +277,17 @@
       <div id="view-stocks" class="spa-view">
         <div class="panel-card">
           <div class="panel-header">
-            <h3 class="panel-title">🏷️ Ginee OMS Stock List (Multi-Type Inventory)</h3>
-            <span style="font-size:0.8rem; color:var(--cyan)">⚡ Synchronized across TikTok, Shopee, Tokopedia</span>
+            <div>
+              <h3 class="panel-title">🏷️ Ginee OMS Stock List (Multi-Type Inventory)</h3>
+              <p style="font-size:0.8rem; color:var(--cyan)">⚡ Synchronized across TikTok, Shopee, Tokopedia & Web Storefront</p>
+            </div>
+            <div style="display:flex; gap:0.6rem">
+              <button class="btn-action btn-primary" onclick="openBulkStockModal()">📦 Bulk Update / CSV</button>
+            </div>
           </div>
           <div class="tabs-bar">
-            <button class="tab-btn active">Semua Stok</button>
-            <button class="tab-btn">Stok Menipis / Warning</button>
+            <button class="tab-btn active" id="tab-stock-all" onclick="filterStockTab('all', this)">Semua Stok</button>
+            <button class="tab-btn" id="tab-stock-low" onclick="filterStockTab('low', this)">🚨 Stok Menipis (Warning)</button>
           </div>
           <table>
             <thead>
@@ -445,48 +458,122 @@
   </div>
 
   <!-- MODALS -->
-  <div class="modal-overlay" id="edit-safety-modal">
+  <!-- 1. MULTI-STOCK ADJUSTMENT MODAL -->
+  <div class="modal-overlay" id="edit-stock-modal">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 style="font-size:1.2rem; font-weight:700">🛡️ Update Safety Stock</h3>
-        <button class="modal-close" onclick="closeEditSafetyModal()">&times;</button>
+        <h3 style="font-size:1.2rem; font-weight:700" id="stock-modal-title">🏷️ Ubah Stok Produk</h3>
+        <button class="modal-close" onclick="closeEditStockModal()">&times;</button>
       </div>
-      <form id="edit-safety-form">
-        <input type="hidden" id="edit-product-id">
+      <form id="edit-stock-form">
+        <input type="hidden" id="stock-modal-product-id">
         <div class="form-group">
-          <label>Nama Produk</label>
-          <input type="text" id="edit-product-name" class="form-control" readonly style="opacity:0.7">
+          <label>Nama Produk & SKU</label>
+          <input type="text" id="stock-modal-product-name" class="form-control" readonly style="opacity:0.75">
         </div>
+
         <div class="form-group">
-          <label>Safety Stock Unit (Batas Stok Aman)</label>
-          <input type="number" id="edit-safety-val" class="form-control" min="0" required>
+          <label>Jenis Stok yang Ingin Diubah</label>
+          <select id="stock-modal-type" class="form-control" onchange="onStockTypeChange()">
+            <option value="safety">🛡️ Safety Stock (Batas Stok Cadangan Kritis)</option>
+            <option value="warehouse">🏬 Stok Gudang Utama (Warehouse Stock)</option>
+            <option value="spare">📦 Stok Cadangan (Spare Stock / Sampel)</option>
+            <option value="promotion">🎟️ Stok Promosi (Flash Sale / Campaign)</option>
+          </select>
         </div>
+
         <div class="form-group">
-          <label>Alasan Perubahan / Catatan Admin</label>
-          <textarea id="edit-admin-note" class="form-control" rows="3" placeholder="Contoh: Naikkan safety stock menyambut Promo 9.9 Mega Sale" required></textarea>
+          <label id="stock-modal-value-label">Nilai Stok Baru (Unit)</label>
+          <input type="number" id="stock-modal-value" class="form-control" min="0" max="999999" required oninput="calculateLiveStockPreview()">
+        </div>
+
+        <!-- LIVE FORMULA CALCULATION PREVIEW -->
+        <div class="stock-calc-preview" id="stock-calc-preview">
+          <div style="font-weight:600; color:var(--cyan); margin-bottom:0.3rem">⚡ Live Available Stock Recalculation:</div>
+          <div id="stock-calc-formula" style="font-family:'JetBrains Mono'; font-size:0.75rem; color:var(--text-muted)">
+            available = warehouse - (locked + spare + promo + safety)
+          </div>
+          <div style="margin-top:0.4rem; display:flex; justify-content:space-between; align-items:center">
+            <span>Stok Tersedia Saat Ini: <strong id="stock-calc-old-avail" style="color:var(--text)">-</strong></span>
+            <span>&rarr; Estimasi Baru: <strong id="stock-calc-new-avail" style="color:var(--emerald)">-</strong></span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Alasan Perubahan / Catatan Admin (Wajib)</label>
+          <textarea id="stock-modal-note" class="form-control" rows="3" placeholder="Contoh: Penyesuaian stok menyambut Promo 9.9 Mega Sale" required></textarea>
         </div>
         <div class="form-group">
           <label>Nama Operator Admin</label>
-          <input type="text" id="edit-operator" class="form-control" value="Admin Ginee" required>
+          <input type="text" id="stock-modal-operator" class="form-control" value="Admin Ginee" required>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:0.8rem; margin-top:1.5rem">
-          <button type="button" class="btn-action" onclick="closeEditSafetyModal()">Batal</button>
-          <button type="submit" class="btn-action btn-primary">Simpan Safety Stock</button>
+          <button type="button" class="btn-action" onclick="closeEditStockModal()">Batal</button>
+          <button type="submit" class="btn-action btn-primary">Simpan Perubahan Stok</button>
         </div>
       </form>
     </div>
   </div>
 
-  <div class="modal-overlay" id="history-safety-modal">
-    <div class="modal-card">
+  <!-- 2. UNIFIED HISTORY LOGS MODAL -->
+  <div class="modal-overlay" id="history-stock-modal">
+    <div class="modal-card" style="max-width:650px">
       <div class="modal-header">
-        <h3 style="font-size:1.2rem; font-weight:700">📜 Riwayat Catatan Safety Stock</h3>
-        <button class="modal-close" onclick="closeHistoryModal()">&times;</button>
+        <div>
+          <h3 style="font-size:1.2rem; font-weight:700">📜 Riwayat Perubahan Stok (Audit Trail)</h3>
+          <p style="font-size:0.85rem; color:var(--cyan); margin-top:0.2rem" id="history-stock-product-title"></p>
+        </div>
+        <button class="modal-close" onclick="closeHistoryStockModal()">&times;</button>
       </div>
-      <p style="font-size:0.85rem; color:var(--cyan); margin-bottom:1rem" id="history-product-title"></p>
-      <div id="history-logs-container" style="max-height:400px; overflow-y:auto"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem">
+        <label style="font-size:0.8rem; color:var(--text-muted)">Filter Jenis Perubahan:</label>
+        <select id="history-filter-type" class="form-control" style="width:auto; padding:0.4rem 0.8rem" onchange="refreshCurrentStockLogs()">
+          <option value="">Semua Jenis Stok</option>
+          <option value="warehouse">🏬 Gudang (Warehouse)</option>
+          <option value="safety">🛡️ Safety Stock</option>
+          <option value="spare">📦 Cadangan (Spare)</option>
+          <option value="promotion">🎟️ Promosi (Promotion)</option>
+        </select>
+      </div>
+      <div id="history-stock-logs-container" style="max-height:380px; overflow-y:auto"></div>
       <div style="display:flex; justify-content:flex-end; margin-top:1.5rem">
-        <button type="button" class="btn-action" onclick="closeHistoryModal()">Tutup</button>
+        <button type="button" class="btn-action" onclick="closeHistoryStockModal()">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. BULK STOCK UPDATE & CSV MODAL -->
+  <div class="modal-overlay" id="bulk-stock-modal">
+    <div class="modal-card" style="max-width:700px">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size:1.2rem; font-weight:700">📦 Update Stok Massal (Bulk / CSV)</h3>
+          <p style="font-size:0.8rem; color:var(--text-muted)">Update multi-produk sekaligus via input batch atau CSV spreadsheet.</p>
+        </div>
+        <button class="modal-close" onclick="closeBulkStockModal()">&times;</button>
+      </div>
+      <div style="margin-bottom:1rem; display:flex; gap:0.6rem">
+        <button type="button" class="btn-sm" onclick="downloadCsvTemplate()">📥 Unduh Template CSV</button>
+        <label class="btn-sm" style="cursor:pointer; display:inline-flex; align-items:center">
+          📂 Unggah File CSV
+          <input type="file" id="bulk-csv-file" accept=".csv" style="display:none" onchange="handleCsvFileUpload(event)">
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Format Baris: <code>product_id,stock_type,new_value</code> (Pisahkan baris baru)</label>
+        <textarea id="bulk-csv-textarea" class="form-control" rows="5" placeholder="Contoh:&#10;550e8400-e29b-41d4-a716-446655440000,warehouse,1200&#10;550e8400-e29b-41d4-a716-446655440001,safety,50" oninput="parseAndPreviewBulkInput()"></textarea>
+      </div>
+      <div id="bulk-preview-area" style="display:none">
+        <label style="font-size:0.8rem; color:var(--cyan); font-weight:600">Pratinjau Data Batch:</label>
+        <div class="csv-preview-table" id="bulk-preview-table-container"></div>
+      </div>
+      <div class="form-group">
+        <label>Catatan Admin untuk Batch Ini (Wajib)</label>
+        <input type="text" id="bulk-admin-note" class="form-control" placeholder="Contoh: Stock opname fisik akhir bulan" required>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.8rem; margin-top:1.5rem">
+        <button type="button" class="btn-action" onclick="closeBulkStockModal()">Batal</button>
+        <button type="button" class="btn-action btn-primary" onclick="submitBulkStockUpdate()">🚀 Eksekusi Update Massal</button>
       </div>
     </div>
   </div>

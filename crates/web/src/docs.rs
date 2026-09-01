@@ -6,11 +6,14 @@ use utoipa::{
 use crate::error::ApiError;
 use crate::handlers;
 use program1_contracts::{
-    AuditLogEntry, AuthTokenResponse, CatalogItemDto, ChannelRevenueDto, ChannelStatusDto,
-    ChannelType, CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode,
-    InventoryStockDto, JwtClaims, LoginRequest, MarketplaceOrderReq, OmniOrderDto, OrderItemDto,
-    RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto, StorefrontOrderItemRequest,
-    StorefrontOrderRequest, UpdateSafetyStockRequest, UpdateUserPermissionsRequest, UserAccountDto,
+    AuditLogEntry, AuthTokenResponse, BulkStockAdjustmentItem, BulkStockUpdateRequest,
+    BulkStockUpdateResult, CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelType,
+    CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode, InventoryStockDto, JwtClaims,
+    LoginRequest, LowStockAlertDto, MarketplaceOrderReq, OmniOrderDto, OrderItemDto,
+    RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto, StockAdjustmentLogDto,
+    StorefrontOrderItemRequest, StorefrontOrderRequest, UpdatePromotionStockRequest,
+    UpdateSafetyStockRequest, UpdateSpareStockRequest, UpdateUserPermissionsRequest,
+    UpdateWarehouseStockRequest, UserAccountDto,
 };
 
 struct SecurityAddon;
@@ -51,6 +54,12 @@ impl Modify for SecurityAddon {
         handlers::get_inventory_stock,
         handlers::update_safety_stock,
         handlers::get_safety_stock_logs,
+        handlers::update_warehouse_stock,
+        handlers::update_spare_stock,
+        handlers::update_promotion_stock,
+        handlers::get_adjustment_logs,
+        handlers::get_low_stock_alerts,
+        handlers::bulk_update_stock,
         handlers::list_channels,
         handlers::sync_channel,
         handlers::list_orders,
@@ -77,6 +86,14 @@ impl Modify for SecurityAddon {
             InventoryStockDto,
             SafetyStockLogDto,
             UpdateSafetyStockRequest,
+            UpdateWarehouseStockRequest,
+            UpdateSpareStockRequest,
+            UpdatePromotionStockRequest,
+            StockAdjustmentLogDto,
+            LowStockAlertDto,
+            BulkStockAdjustmentItem,
+            BulkStockUpdateRequest,
+            BulkStockUpdateResult,
             ChannelType,
             ChannelStatusDto,
             OrderItemDto,
@@ -109,3 +126,4 @@ impl Modify for SecurityAddon {
     )
 )]
 pub struct ApiDoc;
+

@@ -60,6 +60,11 @@ async function authFetch(url, options = {}) {
   return res;
 }
 
+let currentStocks = [];
+let activeStockFilter = "all";
+let selectedStockItem = null;
+let currentHistoryProductId = null;
+
 async function loadData() {
   try {
     await fetchUserAccounts();
@@ -90,16 +95,78 @@ async function loadData() {
     }
 
     if (stocksRes.ok) {
-      const stocks = await stocksRes.json();
-      renderGineeStockList(stocks);
+      currentStocks = await stocksRes.json();
+      renderGineeStockList(currentStocks);
     }
 
     if (catalogRes.ok) {
       const catalog = await catalogRes.json();
       renderMasterProducts(catalog);
     }
+
+    await loadLowStockAlerts();
   } catch (e) {
     console.error("Error loading OMS dashboard data:", e);
+  }
+}
+
+// --- LOW STOCK ALERTS ---
+async function loadLowStockAlerts() {
+  const container = document.getElementById("dash-low-stock-alert");
+  if (!container) return;
+
+  try {
+    const res = await authFetch("/api/v1/inventory/alerts/low-stock");
+    if (!res.ok) {
+      container.innerHTML = "";
+      return;
+    }
+
+    const alerts = await res.json();
+    if (alerts.length === 0) {
+      container.innerHTML = "";
+      const lowTab = document.getElementById("tab-stock-low");
+      if (lowTab) lowTab.innerText = "🚨 Stok Menipis (0)";
+      return;
+    }
+
+    const lowTab = document.getElementById("tab-stock-low");
+    if (lowTab) lowTab.innerText = `🚨 Stok Menipis (${alerts.length})`;
+
+    const hasCritical = alerts.some(a => a.severity === "critical");
+    const alertBoxClass = hasCritical ? "alert-box alert-critical" : "alert-box";
+
+    container.innerHTML = `
+      <div class="${alertBoxClass}">
+        <div class="alert-header">
+          <h4>🚨 Peringatan Stok Menipis / Kritis (${alerts.length} Produk)</h4>
+          <button class="btn-sm" style="background:rgba(255,255,255,0.15); color:#fff" onclick="switchView('stocks'); filterStockTab('low');">
+            Lihat di Inventaris &rarr;
+          </button>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.8rem">
+          Terdapat produk dengan stok tersedia (available stock) di bawah batas safety stock yang ditentukan:
+        </p>
+        <ul class="alert-list">
+          ${alerts.slice(0, 6).map(a => `
+            <li class="alert-list-item">
+              <div>
+                <strong>${a.product_name}</strong>
+                <div style="font-size:0.7rem; color:var(--text-muted)">MSKU: <code>${a.sku}</code></div>
+              </div>
+              <div style="text-align:right">
+                <span class="badge-${a.severity}">${a.severity.toUpperCase()}</span>
+                <div style="font-size:0.75rem; margin-top:0.2rem; color:var(--amber)">
+                  Tersedia: <strong>${a.available_stock}</strong> / Safety: ${a.safety_stock}
+                </div>
+              </div>
+            </li>
+          `).join("")}
+        </ul>
+      </div>
+    `;
+  } catch (err) {
+    console.error("Failed to load low stock alerts:", err);
   }
 }
 
@@ -378,33 +445,74 @@ function filterOrderTab(status, btn) {
   }
 }
 
+// --- STOCK INVENTORY TABLE & FILTERING ---
 function renderGineeStockList(stocks) {
-  document.getElementById("ginee-stock-tbody").innerHTML = stocks.map(s => `
-    <tr>
-      <td>
-        <div class="product-cell">
-          <img src="${s.image_url}" class="product-thumb" alt="Product">
-          <div class="product-meta">
-            <strong>${s.product_name}</strong>
-            <span>MSKU: ${s.sku}</span>
+  currentStocks = stocks;
+  const filtered = activeStockFilter === "low"
+    ? stocks.filter(s => s.available_stock <= s.safety_stock)
+    : stocks;
+
+  const tbody = document.getElementById("ginee-stock-tbody");
+  if (!tbody) return;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:2rem">
+      ${activeStockFilter === "low" ? "✅ Tidak ada produk yang menipis! Semua stok di atas batas safety stock." : "Belum ada data inventaris."}
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(s => {
+    const isLow = s.available_stock <= s.safety_stock;
+    const isCritical = s.available_stock === 0 || (s.safety_stock > 0 && s.available_stock < s.safety_stock * 0.5);
+    const badgeHtml = isCritical
+      ? `<span class="badge-critical" style="margin-left:0.4rem">KRITIS</span>`
+      : isLow
+      ? `<span class="badge-warning" style="margin-left:0.4rem">MENIPIS</span>`
+      : "";
+
+    return `
+      <tr>
+        <td>
+          <div class="product-cell">
+            <img src="${s.image_url}" class="product-thumb" alt="Product" onerror="this.src='https://via.placeholder.com/40'">
+            <div class="product-meta">
+              <strong>${s.product_name}</strong>
+              <span>MSKU: <code>${s.sku}</code></span>
+            </div>
           </div>
-        </div>
-      </td>
-      <td>Rp ${s.average_purchase_price.toLocaleString("id-ID")}</td>
-      <td><strong>${s.warehouse_stock}</strong></td>
-      <td>${s.spare_stock}</td>
-      <td style="color:var(--rose)">${s.locked_stock}</td>
-      <td>${s.promotion_stock}</td>
-      <td style="font-weight:700; color:var(--emerald)">${s.available_stock}</td>
-      <td style="color:var(--amber); font-weight:600">${s.safety_stock} unit</td>
-      <td>
-        <div style="display:flex; gap:0.4rem">
-          <button class="btn-sm btn-edit-safety" onclick="openEditSafetyModal('${s.product_id}', '${s.product_name.replace(/'/g, "")}', ${s.safety_stock})">✏️ Safety Stock</button>
-          <button class="btn-sm" onclick="openHistoryModal('${s.product_id}', '${s.product_name.replace(/'/g, "")}')">📜 History</button>
-        </div>
-      </td>
-    </tr>
-  `).join("");
+        </td>
+        <td>Rp ${s.average_purchase_price.toLocaleString("id-ID")}</td>
+        <td><strong style="color:#fff">${s.warehouse_stock}</strong></td>
+        <td>${s.spare_stock}</td>
+        <td style="color:var(--rose)">${s.locked_stock}</td>
+        <td>${s.promotion_stock}</td>
+        <td>
+          <strong style="color:var(--emerald); font-size:0.95rem">${s.available_stock}</strong>
+          ${badgeHtml}
+        </td>
+        <td style="color:var(--amber); font-weight:600">${s.safety_stock} unit</td>
+        <td>
+          <div style="display:flex; gap:0.4rem">
+            <button class="btn-sm btn-edit-safety" onclick="openStockAdjustmentModal('${s.product_id}')">✏️ Edit Stok</button>
+            <button class="btn-sm" onclick="openUnifiedHistoryModal('${s.product_id}', '${s.product_name.replace(/'/g, "")}')">📜 Riwayat</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function filterStockTab(filter, btn) {
+  activeStockFilter = filter;
+  document.querySelectorAll("#view-stocks .tab-btn").forEach(el => el.classList.remove("active"));
+  if (btn) {
+    btn.classList.add("active");
+  } else {
+    const target = filter === "low" ? document.getElementById("tab-stock-low") : document.getElementById("tab-stock-all");
+    if (target) target.classList.add("active");
+  }
+  renderGineeStockList(currentStocks);
 }
 
 function renderMasterProducts(catalog) {
@@ -412,7 +520,7 @@ function renderMasterProducts(catalog) {
     <tr>
       <td>
         <div class="product-cell">
-          <img src="${p.image_url}" class="product-thumb" alt="Product">
+          <img src="${p.image_url}" class="product-thumb" alt="Product" onerror="this.src='https://via.placeholder.com/40'">
           <div class="product-meta">
             <strong>${p.name}</strong>
             <span>${p.description || ""}</span>
@@ -441,45 +549,324 @@ function renderAnalyticsBreakdown(breakdown) {
   `;
 }
 
-/* MODAL HANDLERS FOR SAFETY STOCK */
+// --- MULTI-STOCK ADJUSTMENT MODAL ---
+function openStockAdjustmentModal(productId) {
+  const stock = currentStocks.find(s => s.product_id === productId);
+  if (!stock) return;
+
+  selectedStockItem = stock;
+  document.getElementById("stock-modal-product-id").value = stock.product_id;
+  document.getElementById("stock-modal-product-name").value = `${stock.product_name} (MSKU: ${stock.sku})`;
+  document.getElementById("stock-modal-type").value = "safety";
+  document.getElementById("stock-modal-value").value = stock.safety_stock;
+  document.getElementById("stock-modal-note").value = "";
+  document.getElementById("stock-modal-operator").value = activeAccount ? activeAccount.full_name : "Admin Ginee";
+
+  onStockTypeChange();
+  document.getElementById("edit-stock-modal").style.display = "flex";
+}
+
+function closeEditStockModal() {
+  document.getElementById("edit-stock-modal").style.display = "none";
+  selectedStockItem = null;
+}
+
+function onStockTypeChange() {
+  if (!selectedStockItem) return;
+  const type = document.getElementById("stock-modal-type").value;
+  const valInput = document.getElementById("stock-modal-value");
+  const label = document.getElementById("stock-modal-value-label");
+
+  if (type === "safety") {
+    label.innerText = "Safety Stock Baru (Batas Aman)";
+    valInput.value = selectedStockItem.safety_stock;
+  } else if (type === "warehouse") {
+    label.innerText = "Stok Gudang Baru (Warehouse Total)";
+    valInput.value = selectedStockItem.warehouse_stock;
+  } else if (type === "spare") {
+    label.innerText = "Stok Cadangan Baru (Spare)";
+    valInput.value = selectedStockItem.spare_stock;
+  } else if (type === "promotion") {
+    label.innerText = "Stok Promosi Baru (Promotion)";
+    valInput.value = selectedStockItem.promotion_stock;
+  }
+
+  calculateLiveStockPreview();
+}
+
+function calculateLiveStockPreview() {
+  if (!selectedStockItem) return;
+  const type = document.getElementById("stock-modal-type").value;
+  const inputVal = parseInt(document.getElementById("stock-modal-value").value) || 0;
+
+  let wh = selectedStockItem.warehouse_stock;
+  let locked = selectedStockItem.locked_stock;
+  let spare = selectedStockItem.spare_stock;
+  let promo = selectedStockItem.promotion_stock;
+  let safety = selectedStockItem.safety_stock;
+
+  if (type === "warehouse") wh = inputVal;
+  else if (type === "safety") safety = inputVal;
+  else if (type === "spare") spare = inputVal;
+  else if (type === "promotion") promo = inputVal;
+
+  const currentAvail = selectedStockItem.available_stock;
+  const newAvail = Math.max(0, wh - (locked + spare + promo + safety));
+
+  document.getElementById("stock-calc-old-avail").innerText = `${currentAvail} unit`;
+  document.getElementById("stock-calc-new-avail").innerText = `${newAvail} unit`;
+  document.getElementById("stock-calc-formula").innerText = `${wh} (gudang) - (${locked} locked + ${spare} spare + ${promo} promo + ${safety} safety) = ${newAvail} available`;
+}
+
+// Backward compatibility alias for any older modal calls
 function openEditSafetyModal(productId, productName, currentSafety) {
-  document.getElementById("edit-product-id").value = productId;
-  document.getElementById("edit-product-name").value = productName;
-  document.getElementById("edit-safety-val").value = currentSafety;
-  document.getElementById("edit-admin-note").value = "";
-  document.getElementById("edit-safety-modal").style.display = "flex";
+  openStockAdjustmentModal(productId);
 }
-
 function closeEditSafetyModal() {
-  document.getElementById("edit-safety-modal").style.display = "none";
+  closeEditStockModal();
 }
 
-async function openHistoryModal(productId, productName) {
-  document.getElementById("history-product-title").innerText = productName;
-  document.getElementById("history-safety-modal").style.display = "flex";
-  const res = await authFetch(`/api/v1/inventory/${productId}/safety-stock-logs`);
-  const logs = await res.json();
-  const container = document.getElementById("history-logs-container");
-  if (logs.length === 0) {
-    container.innerHTML = '<p style="color:var(--text-muted)">Belum ada catatan perubahan admin untuk produk ini.</p>';
+// --- UNIFIED HISTORY LOGS MODAL ---
+async function openUnifiedHistoryModal(productId, productName) {
+  currentHistoryProductId = productId;
+  document.getElementById("history-stock-product-title").innerText = productName;
+  document.getElementById("history-filter-type").value = "";
+  document.getElementById("history-stock-modal").style.display = "flex";
+  await refreshCurrentStockLogs();
+}
+
+async function refreshCurrentStockLogs() {
+  if (!currentHistoryProductId) return;
+  const filterType = document.getElementById("history-filter-type").value;
+  const url = filterType
+    ? `/api/v1/inventory/${currentHistoryProductId}/adjustment-logs?adjustment_type=${filterType}`
+    : `/api/v1/inventory/${currentHistoryProductId}/adjustment-logs`;
+
+  const container = document.getElementById("history-stock-logs-container");
+  container.innerHTML = '<p style="color:var(--text-muted)">Memuat riwayat log...</p>';
+
+  try {
+    const res = await authFetch(url);
+    if (!res.ok) {
+      container.innerHTML = '<p style="color:var(--rose)">Gagal memuat riwayat log.</p>';
+      return;
+    }
+    const logs = await res.json();
+    if (logs.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-muted); padding:1rem 0">Belum ada catatan perubahan stok untuk filter ini.</p>';
+      return;
+    }
+
+    const typeIcons = {
+      warehouse: "🏬 Gudang",
+      safety: "🛡️ Safety Stock",
+      spare: "📦 Cadangan",
+      promotion: "🎟️ Promosi"
+    };
+
+    container.innerHTML = logs.map(l => {
+      const typeLabel = typeIcons[l.adjustment_type] || l.adjustment_type;
+      const arrow = l.new_value >= l.old_value ? "🔺" : "🔻";
+      return `
+        <div class="log-item">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem">
+            <div>
+              <span class="channel-badge badge-native" style="font-size:0.7rem">${typeLabel}</span>
+              <strong style="color:var(--cyan); margin-left:0.4rem">${l.old_value} &rarr; ${arrow} ${l.new_value} unit</strong>
+            </div>
+            <span style="font-size:0.75rem; color:var(--text-muted)">${new Date(l.timestamp).toLocaleString("id-ID")}</span>
+          </div>
+          <p style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:0.5rem; border-radius:6px; margin:0.3rem 0">
+            📝 <em>"${l.admin_note}"</em>
+          </p>
+          <div style="font-size:0.75rem; color:var(--text-muted)">Oleh Operator: <strong style="color:#fff">${l.updated_by}</strong></div>
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--rose)">Error: ${err.message}</p>`;
+  }
+}
+
+function closeHistoryStockModal() {
+  document.getElementById("history-stock-modal").style.display = "none";
+  currentHistoryProductId = null;
+}
+
+// Backward compatibility alias
+function openHistoryModal(productId, productName) {
+  openUnifiedHistoryModal(productId, productName);
+}
+function closeHistoryModal() {
+  closeHistoryStockModal();
+}
+
+// --- BULK STOCK UPDATE & CSV PARSER ---
+function openBulkStockModal() {
+  document.getElementById("bulk-csv-textarea").value = "";
+  document.getElementById("bulk-admin-note").value = "Stock opname fisik & penyesuaian multi-channel";
+  document.getElementById("bulk-preview-area").style.display = "none";
+  document.getElementById("bulk-stock-modal").style.display = "flex";
+}
+
+function closeBulkStockModal() {
+  document.getElementById("bulk-stock-modal").style.display = "none";
+}
+
+function downloadCsvTemplate() {
+  let csv = "product_id,product_name,sku,stock_type,new_value\n";
+  currentStocks.forEach(s => {
+    csv += `"${s.product_id}","${s.product_name}","${s.sku}","safety",${s.safety_stock}\n`;
+  });
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", "template_bulk_stock_update.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function handleCsvFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById("bulk-csv-textarea").value = e.target.result;
+    parseAndPreviewBulkInput();
+  };
+  reader.readAsText(file);
+}
+
+function parseAndPreviewBulkInput() {
+  const text = document.getElementById("bulk-csv-textarea").value.trim();
+  const previewArea = document.getElementById("bulk-preview-area");
+  const tableContainer = document.getElementById("bulk-preview-table-container");
+
+  if (!text) {
+    previewArea.style.display = "none";
     return;
   }
-  container.innerHTML = logs.map(l => `
-    <div class="log-item">
-      <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem">
-        <strong style="color:var(--amber)">Safety Stock: ${l.old_safety_stock} &rarr; ${l.new_safety_stock} unit</strong>
-        <span style="font-size:0.75rem; color:var(--text-muted)">${new Date(l.timestamp).toLocaleString()}</span>
-      </div>
-      <p style="font-size:0.85rem; color:#fff; background:rgba(255,255,255,0.05); padding:0.5rem; border-radius:6px; margin-bottom:0.3rem">
-        📝 <em>"${l.admin_note}"</em>
-      </p>
-      <div style="font-size:0.75rem; color:var(--cyan)">Oleh Operator: ${l.updated_by}</div>
-    </div>
-  `).join("");
+
+  const lines = text.split("\n");
+  const parsed = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    // Skip header line if detected
+    if (i === 0 && (raw.toLowerCase().includes("product_id") || raw.toLowerCase().includes("sku"))) {
+      continue;
+    }
+    const cols = raw.split(",").map(c => c.replace(/^["']|["']$/g, "").trim());
+    if (cols.length >= 3) {
+      // Find UUID (col 0 or scan)
+      const productId = cols[0];
+      const stockType = cols.length === 3 ? cols[1] : cols[3];
+      const newVal = parseInt(cols.length === 3 ? cols[2] : cols[4]);
+      if (productId && stockType && !isNaN(newVal)) {
+        const prod = currentStocks.find(s => s.product_id === productId);
+        parsed.push({
+          product_id: productId,
+          product_name: prod ? prod.product_name : productId.substring(0, 8) + "...",
+          stock_type: stockType,
+          new_value: newVal
+        });
+      }
+    }
+  }
+
+  if (parsed.length === 0) {
+    previewArea.style.display = "none";
+    return;
+  }
+
+  previewArea.style.display = "block";
+  tableContainer.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Produk</th>
+          <th>Tipe Stok</th>
+          <th>Nilai Baru</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${parsed.map(p => `
+          <tr>
+            <td><strong>${p.product_name}</strong></td>
+            <td><code>${p.stock_type}</code></td>
+            <td><strong style="color:var(--emerald)">${p.new_value} unit</strong></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
-function closeHistoryModal() {
-  document.getElementById("history-safety-modal").style.display = "none";
+async function submitBulkStockUpdate() {
+  const text = document.getElementById("bulk-csv-textarea").value.trim();
+  const admin_note = document.getElementById("bulk-admin-note").value.trim();
+  if (!text) {
+    alert("Silakan masukkan data baris CSV atau unggah file CSV!");
+    return;
+  }
+  if (!admin_note) {
+    alert("Catatan admin wajib diisi!");
+    return;
+  }
+
+  const lines = text.split("\n");
+  const adjustments = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    if (i === 0 && (raw.toLowerCase().includes("product_id") || raw.toLowerCase().includes("sku"))) {
+      continue;
+    }
+    const cols = raw.split(",").map(c => c.replace(/^["']|["']$/g, "").trim());
+    if (cols.length >= 3) {
+      const product_id = cols[0];
+      const stock_type = cols.length === 3 ? cols[1] : cols[3];
+      const new_value = parseInt(cols.length === 3 ? cols[2] : cols[4]);
+      if (product_id && stock_type && !isNaN(new_value)) {
+        adjustments.push({ product_id, stock_type, new_value });
+      }
+    }
+  }
+
+  if (adjustments.length === 0) {
+    alert("Format CSV tidak valid atau tidak ada data yang bisa diproses.");
+    return;
+  }
+
+  const payload = {
+    adjustments,
+    admin_note,
+    updated_by: activeAccount ? activeAccount.full_name : "Admin Ginee"
+  };
+
+  try {
+    const res = await authFetch("/api/v1/inventory/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const result = await res.json();
+      alert(`✅ Bulk Update Selesai!\nTotal: ${result.total_requested}\nBerhasil: ${result.total_success}\nGagal: ${result.total_failed}`);
+      closeBulkStockModal();
+      loadData();
+    } else {
+      const err = await res.json();
+      alert(`❌ Gagal bulk update: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (err) {
+    alert(`❌ Gagal: ${err.message}`);
+  }
 }
 
 async function syncChannel(channel) {
@@ -545,31 +932,54 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  const editSafetyForm = document.getElementById("edit-safety-form");
-  if (editSafetyForm) {
-    editSafetyForm.onsubmit = async (e) => {
+  // Multi-stock edit form handler
+  const editStockForm = document.getElementById("edit-stock-form");
+  if (editStockForm) {
+    editStockForm.onsubmit = async (e) => {
       e.preventDefault();
-      const productId = document.getElementById("edit-product-id").value;
-      const new_safety_stock = parseInt(document.getElementById("edit-safety-val").value);
-      const admin_note = document.getElementById("edit-admin-note").value;
-      const updated_by = document.getElementById("edit-operator").value;
+      const productId = document.getElementById("stock-modal-product-id").value;
+      const stockType = document.getElementById("stock-modal-type").value;
+      const newVal = parseInt(document.getElementById("stock-modal-value").value);
+      const admin_note = document.getElementById("stock-modal-note").value.trim();
+      const updated_by = document.getElementById("stock-modal-operator").value.trim();
 
-      const res = await authFetch(`/api/v1/inventory/${productId}/safety-stock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ new_safety_stock, admin_note, updated_by })
-      });
+      let endpoint = `/api/v1/inventory/${productId}/safety-stock`;
+      let payload = { admin_note, updated_by };
 
-      if (res.ok) {
-        alert("🛡️ Safety Stock & Catatan Admin Berhasil Diperbarui!");
-        closeEditSafetyModal();
-        loadData();
-      } else {
-        const err = await res.json();
-        alert(`Gagal update: ${err.error || JSON.stringify(err)}`);
+      if (stockType === "warehouse") {
+        endpoint = `/api/v1/inventory/${productId}/warehouse-stock`;
+        payload.new_warehouse_stock = newVal;
+      } else if (stockType === "safety") {
+        payload.new_safety_stock = newVal;
+      } else if (stockType === "spare") {
+        endpoint = `/api/v1/inventory/${productId}/spare-stock`;
+        payload.new_spare_stock = newVal;
+      } else if (stockType === "promotion") {
+        endpoint = `/api/v1/inventory/${productId}/promotion-stock`;
+        payload.new_promotion_stock = newVal;
+      }
+
+      try {
+        const res = await authFetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          alert(`✅ Stok ${stockType} Berhasil Diperbarui!`);
+          closeEditStockModal();
+          loadData();
+        } else {
+          const err = await res.json();
+          alert(`❌ Gagal update stok: ${err.message || err.error || JSON.stringify(err)}`);
+        }
+      } catch (err) {
+        alert(`❌ Gagal: ${err.message}`);
       }
     };
   }
 
   loadData();
 });
+
