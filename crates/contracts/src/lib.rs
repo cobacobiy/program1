@@ -308,6 +308,86 @@ pub struct UpdateSafetyStockRequest {
     pub updated_by: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateWarehouseStockRequest {
+    #[validate(range(max = 999999, message = "Stok gudang tidak boleh melebihi 999,999"))]
+    pub new_warehouse_stock: u32,
+    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    pub admin_note: String,
+    #[validate(length(max = 100))]
+    pub updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateSpareStockRequest {
+    #[validate(range(max = 999999, message = "Stok cadangan tidak boleh melebihi 999,999"))]
+    pub new_spare_stock: u32,
+    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    pub admin_note: String,
+    #[validate(length(max = 100))]
+    pub updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdatePromotionStockRequest {
+    #[validate(range(max = 999999, message = "Stok promosi tidak boleh melebihi 999,999"))]
+    pub new_promotion_stock: u32,
+    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    pub admin_note: String,
+    #[validate(length(max = 100))]
+    pub updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct StockAdjustmentLogDto {
+    pub id: Uuid,
+    pub product_id: Uuid,
+    pub adjustment_type: String, // "warehouse", "safety", "spare", "promotion"
+    pub old_value: u32,
+    pub new_value: u32,
+    pub admin_note: String,
+    pub updated_by: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LowStockAlertDto {
+    pub product_id: Uuid,
+    pub product_name: String,
+    pub sku: String,
+    pub available_stock: u32,
+    pub safety_stock: u32,
+    pub deficit: u32,
+    pub severity: String, // "critical", "warning", "caution"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct BulkStockAdjustmentItem {
+    pub product_id: Uuid,
+    #[validate(length(min = 1, max = 20, message = "Tipe stok wajib diisi (warehouse/safety/spare/promotion)"))]
+    pub stock_type: String,
+    #[validate(range(max = 999999, message = "Nilai stok tidak boleh melebihi 999,999"))]
+    pub new_value: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct BulkStockUpdateRequest {
+    #[validate(length(min = 1, max = 100, message = "Batch harus berisi 1-100 item"), nested)]
+    pub adjustments: Vec<BulkStockAdjustmentItem>,
+    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    pub admin_note: String,
+    #[validate(length(max = 100))]
+    pub updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BulkStockUpdateResult {
+    pub total_requested: u32,
+    pub total_success: u32,
+    pub total_failed: u32,
+    pub errors: Vec<String>,
+}
+
 #[async_trait]
 pub trait InventoryContract: Send + Sync {
     async fn get_all_stocks(&self) -> Result<Vec<InventoryStockDto>, ContractError>;
@@ -321,6 +401,37 @@ pub trait InventoryContract: Send + Sync {
         updated_by: String,
     ) -> Result<InventoryStockDto, ContractError>;
     async fn get_safety_stock_logs(&self, product_id: Uuid) -> Result<Vec<SafetyStockLogDto>, ContractError>;
+    async fn update_warehouse_stock(
+        &self,
+        product_id: Uuid,
+        new_warehouse_stock: u32,
+        admin_note: String,
+        updated_by: String,
+    ) -> Result<InventoryStockDto, ContractError>;
+    async fn update_spare_stock(
+        &self,
+        product_id: Uuid,
+        new_spare_stock: u32,
+        admin_note: String,
+        updated_by: String,
+    ) -> Result<InventoryStockDto, ContractError>;
+    async fn update_promotion_stock(
+        &self,
+        product_id: Uuid,
+        new_promotion_stock: u32,
+        admin_note: String,
+        updated_by: String,
+    ) -> Result<InventoryStockDto, ContractError>;
+    async fn get_adjustment_logs(
+        &self,
+        product_id: Uuid,
+        adjustment_type: Option<&str>,
+    ) -> Result<Vec<StockAdjustmentLogDto>, ContractError>;
+    async fn get_low_stock_alerts(&self) -> Result<Vec<LowStockAlertDto>, ContractError>;
+    async fn bulk_update_stock(
+        &self,
+        request: BulkStockUpdateRequest,
+    ) -> Result<BulkStockUpdateResult, ContractError>;
 }
 
 // --- CHANNEL SYNC CONTRACT ---

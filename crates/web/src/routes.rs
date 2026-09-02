@@ -57,6 +57,14 @@ pub fn create_app(state: AppState) -> Router {
         }
     });
 
+    let inventory_limiter = limiter.clone();
+    let inventory_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = inventory_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(lim, "inventory_mutation", 10, Duration::from_secs(60), req, next).await
+        }
+    });
+
     // 1. Public routes (no authentication required)
     let public_routes = Router::new()
         .route("/health", get(health_check))
@@ -71,9 +79,10 @@ pub fn create_app(state: AppState) -> Router {
     let protected_routes = Router::new()
         .route("/api/v1/catalog", post(create_catalog_item).route_layer(catalog_limit_layer))
         .route("/api/v1/inventory", get(list_all_inventory))
+        .route("/api/v1/inventory/alerts/low-stock", get(get_low_stock_alerts))
         .route("/api/v1/inventory/:id", get(get_inventory_stock))
-        .route("/api/v1/inventory/:id/safety-stock", post(update_safety_stock))
         .route("/api/v1/inventory/:id/safety-stock-logs", get(get_safety_stock_logs))
+        .route("/api/v1/inventory/:id/adjustment-logs", get(get_adjustment_logs))
         .route("/api/v1/channels", get(list_channels))
         .route("/api/v1/channels/sync/:channel", post(sync_channel))
         .route("/api/v1/orders", get(list_orders))
@@ -86,6 +95,11 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/auth/register", post(register_handler).route_layer(register_limit_layer))
         .route("/api/v1/users/accounts", get(list_user_accounts).post(create_user_account))
         .route("/api/v1/users/accounts/:id/permissions", post(update_user_permissions))
+        .route("/api/v1/inventory/bulk-update", post(bulk_update_stock).route_layer(inventory_limit_layer.clone()))
+        .route("/api/v1/inventory/:id/safety-stock", post(update_safety_stock).route_layer(inventory_limit_layer.clone()))
+        .route("/api/v1/inventory/:id/warehouse-stock", post(update_warehouse_stock).route_layer(inventory_limit_layer.clone()))
+        .route("/api/v1/inventory/:id/spare-stock", post(update_spare_stock).route_layer(inventory_limit_layer.clone()))
+        .route("/api/v1/inventory/:id/promotion-stock", post(update_promotion_stock).route_layer(inventory_limit_layer))
         .route("/api/v1/analytics", get(get_analytics))
         .route("/api/v1/audit/logs", get(list_audit_logs))
         .route("/api/v1/audit/logs/user/:id", get(get_user_audit_logs))
