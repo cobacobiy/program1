@@ -593,26 +593,35 @@ function openGineeStockModal(productId, stockType) {
   const whValEl = document.getElementById("ginee-table-wh-val");
   const inputVal = document.getElementById("stock-modal-value");
 
+  const colWhHeader = document.getElementById("ginee-col-wh-header");
+  const colWhCell = document.getElementById("ginee-col-wh-cell");
+
   whValEl.innerText = stock.warehouse_stock;
 
   if (targetType === "warehouse") {
     titleEl.innerText = "Edit Warehouse Stock";
-    currHeader.innerText = "Warehouse Stock";
+    if (colWhHeader) colWhHeader.style.display = "none";
+    if (colWhCell) colWhCell.style.display = "none";
+    currHeader.innerText = "Current Warehouse Stock";
     newHeader.innerText = "New Warehouse Stock";
     currValEl.innerText = stock.warehouse_stock;
     inputVal.value = stock.warehouse_stock;
-  } else if (targetType === "spare") {
-    titleEl.innerText = "Edit Spare Stock";
-    currHeader.innerText = "Spare Stock";
-    newHeader.innerText = "New Spare Stock";
-    currValEl.innerText = stock.spare_stock;
-    inputVal.value = stock.spare_stock;
-  } else if (targetType === "safety") {
-    titleEl.innerText = "Edit Safety Stock (Pengingat)";
-    currHeader.innerText = "Safety Stock";
-    newHeader.innerText = "New Safety Stock";
-    currValEl.innerText = stock.safety_stock;
-    inputVal.value = stock.safety_stock;
+  } else {
+    if (colWhHeader) colWhHeader.style.display = "";
+    if (colWhCell) colWhCell.style.display = "";
+    if (targetType === "spare") {
+      titleEl.innerText = "Edit Spare Stock";
+      currHeader.innerText = "Current Spare Stock";
+      newHeader.innerText = "New Spare Stock";
+      currValEl.innerText = stock.spare_stock;
+      inputVal.value = stock.spare_stock;
+    } else if (targetType === "safety") {
+      titleEl.innerText = "Edit Safety Stock (Pengingat)";
+      currHeader.innerText = "Current Safety Stock";
+      newHeader.innerText = "New Safety Stock";
+      currValEl.innerText = stock.safety_stock;
+      inputVal.value = stock.safety_stock;
+    }
   }
 
   document.getElementById("ginee-quick-input").value = "";
@@ -621,6 +630,12 @@ function openGineeStockModal(productId, stockType) {
 
   calculateLiveStockPreview();
   document.getElementById("edit-stock-modal").style.display = "flex";
+
+  // Auto focus input field so user can type immediately without clicking or scrolling
+  setTimeout(() => {
+    inputVal.focus();
+    inputVal.select();
+  }, 60);
 }
 
 function applyGineeQuickStock() {

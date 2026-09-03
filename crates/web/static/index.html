@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=2.0.2">
-  <script src="/assets/app.js?v=2.0.2" defer></script>
+  <link rel="stylesheet" href="/assets/style.css?v=2.0.3">
+  <script src="/assets/app.js?v=2.0.3" defer></script>
 </head>
 <body>
   <!-- SIDEBAR LEFT GINEE OMS OFFICIAL STRUCTURE -->
@@ -458,7 +458,7 @@
   <!-- MODALS -->
   <!-- 1. GINEE-STYLE STOCK ADJUSTMENT MODAL -->
   <div class="modal-overlay" id="edit-stock-modal">
-    <div class="modal-card" style="max-width:720px">
+    <div class="modal-card modal-card-wide" style="max-width:1040px; width:95%">
       <div class="modal-header">
         <h3 style="font-size:1.25rem; font-weight:700" id="stock-modal-title">Edit Spare Stock</h3>
         <button class="modal-close" onclick="closeEditStockModal()">&times;</button>
@@ -482,16 +482,16 @@
         <input type="hidden" id="stock-modal-product-id">
         <input type="hidden" id="stock-modal-type" value="spare">
 
-        <!-- GINEE WAREHOUSE TABLE -->
+        <!-- GINEE WAREHOUSE TABLE (WIDE NO-SCROLL) -->
         <div class="ginee-table-container">
           <table class="ginee-table">
             <thead>
               <tr>
-                <th>Warehouse Name</th>
-                <th>Location Number</th>
-                <th>Warehouse Stock</th>
-                <th id="ginee-table-curr-header">Spare Stock</th>
-                <th id="ginee-table-new-header">New Spare Stock</th>
+                <th style="width:28%">Warehouse Name</th>
+                <th style="width:18%">Location Number</th>
+                <th id="ginee-col-wh-header" style="width:18%">Warehouse Stock</th>
+                <th id="ginee-table-curr-header" style="width:18%">Spare Stock</th>
+                <th id="ginee-table-new-header" style="width:18%">New Spare Stock</th>
               </tr>
             </thead>
             <tbody>
@@ -501,10 +501,10 @@
                   <div style="font-size:0.75rem; color:var(--text-muted)">Gudang Utama Jakarta</div>
                 </td>
                 <td style="color:var(--text-muted); font-size:0.85rem">Default Shelf</td>
-                <td><span id="ginee-table-wh-val" class="ginee-wh-highlight">0</span></td>
+                <td id="ginee-col-wh-cell"><span id="ginee-table-wh-val" class="ginee-wh-highlight">0</span></td>
                 <td><span id="ginee-table-curr-val" style="font-weight:600; color:var(--text)">0</span></td>
                 <td>
-                  <input type="number" id="stock-modal-value" class="form-control" style="width:130px; font-weight:600" min="0" max="999999" placeholder="Please Enter" required oninput="calculateLiveStockPreview()">
+                  <input type="number" id="stock-modal-value" class="form-control" style="width:100%; max-width:160px; font-weight:700; font-size:1.05rem; text-align:center" min="0" max="999999" placeholder="Please Enter" required oninput="calculateLiveStockPreview()">
                 </td>
               </tr>
             </tbody>

@@ -758,9 +758,15 @@ th {
   border: 1px solid var(--card-border);
 }
 
+.modal-card-wide {
+  max-width: 1040px !important;
+  width: 95% !important;
+  padding: 2rem 2.2rem;
+}
+
 .ginee-table-container {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   margin-bottom: 1.2rem;
   border: 1px solid var(--card-border);
   border-radius: 8px;
@@ -770,21 +776,22 @@ th {
 .ginee-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   text-align: left;
+  table-layout: fixed;
 }
 
 .ginee-table th {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-muted);
-  padding: 0.65rem 0.85rem;
+  padding: 0.75rem 0.9rem;
   font-weight: 600;
   border-bottom: 1px solid var(--card-border);
   white-space: nowrap;
 }
 
 .ginee-table td {
-  padding: 0.75rem 0.85rem;
+  padding: 0.8rem 0.9rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   vertical-align: middle;
 }
