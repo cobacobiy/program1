@@ -456,6 +456,8 @@ function filterOrderTab(status, btn) {
 }
 
 // --- STOCK INVENTORY TABLE & FILTERING ---
+const PENCIL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pencil-svg"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+
 function renderGineeStockList(stocks) {
   currentStocks = stocks;
   const filtered = activeStockFilter === "low"
@@ -494,15 +496,15 @@ function renderGineeStockList(stocks) {
         </td>
         <td>Rp ${s.average_purchase_price.toLocaleString("id-ID")}</td>
         <td>
-          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'warehouse')" title="Klik ikon pensil untuk edit Warehouse Stock">
+          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'warehouse')" title="Klik untuk edit Warehouse Stock">
             <strong style="color:#fff">${s.warehouse_stock}</strong>
-            <button type="button" class="btn-pencil-edit" title="Edit Warehouse Stock">✏️</button>
+            <span class="btn-pencil-edit" title="Edit Warehouse Stock">${PENCIL_SVG}</span>
           </div>
         </td>
         <td>
-          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'spare')" title="Klik ikon pensil untuk edit Spare Stock">
+          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'spare')" title="Klik untuk edit Spare Stock">
             <span style="font-weight:600">${s.spare_stock}</span>
-            <button type="button" class="btn-pencil-edit" title="Edit Spare Stock">✏️</button>
+            <span class="btn-pencil-edit" title="Edit Spare Stock">${PENCIL_SVG}</span>
           </div>
         </td>
         <td style="color:var(--rose)">${s.locked_stock}</td>
@@ -512,9 +514,9 @@ function renderGineeStockList(stocks) {
           ${badgeHtml}
         </td>
         <td>
-          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'safety')" title="Klik ikon pensil untuk edit Safety Stock">
+          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'safety')" title="Klik untuk edit Safety Stock">
             <span style="color:var(--amber); font-weight:600">${s.safety_stock}</span>
-            <button type="button" class="btn-pencil-edit" title="Edit Safety Stock">✏️</button>
+            <span class="btn-pencil-edit" title="Edit Safety Stock">${PENCIL_SVG}</span>
           </div>
         </td>
         <td>
