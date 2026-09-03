@@ -24,8 +24,8 @@ impl InventoryModule {
         }
     }
 
-    fn calculate_available(warehouse: u32, locked: u32, spare: u32, promo: u32, safety: u32) -> u32 {
-        warehouse.saturating_sub(locked + spare + promo + safety)
+    fn calculate_available(warehouse: u32, locked: u32, spare: u32, promo: u32, _safety: u32) -> u32 {
+        warehouse.saturating_sub(locked + spare + promo)
     }
 
     fn row_to_stock_dto(row: &sqlx::sqlite::SqliteRow) -> Result<InventoryStockDto, ContractError> {
@@ -42,7 +42,13 @@ impl InventoryModule {
         let locked: i64 = row.get("locked_stock");
         let promo: i64 = row.get("promotion_stock");
         let safety: i64 = row.get("safety_stock");
-        let available: i64 = row.get("available_stock");
+        let available = Self::calculate_available(
+            warehouse as u32,
+            locked as u32,
+            spare as u32,
+            promo as u32,
+            safety as u32,
+        );
         let last_updated_str: String = row.get("last_updated");
         let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
             .map(|dt| dt.with_timezone(&Utc))
@@ -59,7 +65,7 @@ impl InventoryModule {
             locked_stock: locked as u32,
             promotion_stock: promo as u32,
             safety_stock: safety as u32,
-            available_stock: available as u32,
+            available_stock: available,
             last_updated,
         })
     }

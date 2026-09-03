@@ -660,19 +660,17 @@ function calculateLiveStockPreview() {
   let locked = selectedStockItem.locked_stock;
   let spare = selectedStockItem.spare_stock;
   let promo = selectedStockItem.promotion_stock;
-  let safety = selectedStockItem.safety_stock;
 
   if (type === "warehouse") wh = inputVal;
-  else if (type === "safety") safety = inputVal;
   else if (type === "spare") spare = inputVal;
   else if (type === "promotion") promo = inputVal;
 
-  const currentAvail = selectedStockItem.available_stock;
-  const newAvail = Math.max(0, wh - (locked + spare + promo + safety));
+  const currentAvail = Math.max(0, selectedStockItem.warehouse_stock - (selectedStockItem.spare_stock + selectedStockItem.locked_stock + selectedStockItem.promotion_stock));
+  const newAvail = Math.max(0, wh - (spare + locked + promo));
 
   document.getElementById("stock-calc-old-avail").innerText = `${currentAvail} unit`;
   document.getElementById("stock-calc-new-avail").innerText = `${newAvail} unit`;
-  document.getElementById("stock-calc-formula").innerText = `${wh} (gudang) - (${locked} locked + ${spare} spare + ${promo} promo + ${safety} safety) = ${newAvail} available`;
+  document.getElementById("stock-calc-formula").innerText = `${wh} (gudang) - ${spare} (spare) - ${locked} (terkunci) - ${promo} (promosi) = ${newAvail} tersedia`;
 }
 
 // Backward compatibility alias for any older modal calls

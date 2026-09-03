@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=2.0.3">
-  <script src="/assets/app.js?v=2.0.3" defer></script>
+  <link rel="stylesheet" href="/assets/style.css?v=2.0.4">
+  <script src="/assets/app.js?v=2.0.4" defer></script>
 </head>
 <body>
   <!-- SIDEBAR LEFT GINEE OMS OFFICIAL STRUCTURE -->
@@ -515,7 +515,7 @@
         <div class="stock-calc-preview" id="stock-calc-preview">
           <div style="font-weight:600; color:var(--cyan); margin-bottom:0.3rem">⚡ Live Available Stock Recalculation (Sync Omnichannel):</div>
           <div id="stock-calc-formula" style="font-family:'JetBrains Mono'; font-size:0.75rem; color:var(--text-muted)">
-            available = warehouse - (locked + spare + promo + safety)
+            tersedia = warehouse - spare - locked - promo
           </div>
           <div style="margin-top:0.4rem; display:flex; justify-content:space-between; align-items:center">
             <span>Stok Tersedia Saat Ini: <strong id="stock-calc-old-avail" style="color:var(--text)">-</strong></span>
