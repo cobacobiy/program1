@@ -236,11 +236,11 @@ impl InventoryContract for InventoryModule {
         admin_note: String,
         updated_by: String,
     ) -> Result<InventoryStockDto, ContractError> {
-        if admin_note.trim().is_empty() {
-            return Err(ContractError::ValidationError(
-                "Catatan Admin (Alasan Perubahan Safety Stock) wajib diisi!".to_string(),
-            ));
-        }
+        let admin_note = if admin_note.trim().is_empty() {
+            "Penyesuaian safety stock".to_string()
+        } else {
+            admin_note.trim().to_string()
+        };
 
         let stock = self.ensure_product_initialized(product_id).await?;
         let old_safety_stock = stock.safety_stock;
@@ -358,11 +358,11 @@ impl InventoryContract for InventoryModule {
         admin_note: String,
         updated_by: String,
     ) -> Result<InventoryStockDto, ContractError> {
-        if admin_note.trim().is_empty() {
-            return Err(ContractError::ValidationError(
-                "Catatan Admin (Alasan Perubahan Stok Gudang) wajib diisi!".to_string(),
-            ));
-        }
+        let admin_note = if admin_note.trim().is_empty() {
+            "Penyesuaian stok gudang".to_string()
+        } else {
+            admin_note.trim().to_string()
+        };
 
         let stock = self.ensure_product_initialized(product_id).await?;
         let old_warehouse_stock = stock.warehouse_stock;
@@ -373,12 +373,11 @@ impl InventoryContract for InventoryModule {
             updated_by.trim().to_string()
         };
 
-        let total_allocated = stock.locked_stock + stock.spare_stock + stock.promotion_stock + stock.safety_stock;
-        if new_warehouse_stock < total_allocated {
+        if new_warehouse_stock < stock.locked_stock {
             return Err(ContractError::ValidationError(
                 format!(
-                    "Stok gudang baru ({}) tidak boleh lebih kecil dari total stok teralokasi (locked + spare + promo + safety = {})",
-                    new_warehouse_stock, total_allocated
+                    "Stok gudang baru ({}) tidak boleh lebih kecil dari stok terkunci pesanan ({})",
+                    new_warehouse_stock, stock.locked_stock
                 ),
             ));
         }
@@ -433,11 +432,11 @@ impl InventoryContract for InventoryModule {
         admin_note: String,
         updated_by: String,
     ) -> Result<InventoryStockDto, ContractError> {
-        if admin_note.trim().is_empty() {
-            return Err(ContractError::ValidationError(
-                "Catatan Admin (Alasan Perubahan Stok Cadangan) wajib diisi!".to_string(),
-            ));
-        }
+        let admin_note = if admin_note.trim().is_empty() {
+            "Penyesuaian stok cadangan".to_string()
+        } else {
+            admin_note.trim().to_string()
+        };
 
         let stock = self.ensure_product_initialized(product_id).await?;
         let old_spare_stock = stock.spare_stock;
@@ -448,12 +447,11 @@ impl InventoryContract for InventoryModule {
             updated_by.trim().to_string()
         };
 
-        let total_allocated = stock.locked_stock + new_spare_stock + stock.promotion_stock + stock.safety_stock;
-        if total_allocated > stock.warehouse_stock {
+        if new_spare_stock + stock.locked_stock > stock.warehouse_stock {
             return Err(ContractError::ValidationError(
                 format!(
-                    "Total stok teralokasi ({}) melebihi stok gudang ({})",
-                    total_allocated, stock.warehouse_stock
+                    "Stok cadangan baru ({}) ditambah stok terkunci pesanan ({}) melebihi stok gudang ({})",
+                    new_spare_stock, stock.locked_stock, stock.warehouse_stock
                 ),
             ));
         }
@@ -508,11 +506,11 @@ impl InventoryContract for InventoryModule {
         admin_note: String,
         updated_by: String,
     ) -> Result<InventoryStockDto, ContractError> {
-        if admin_note.trim().is_empty() {
-            return Err(ContractError::ValidationError(
-                "Catatan Admin (Alasan Perubahan Stok Promosi) wajib diisi!".to_string(),
-            ));
-        }
+        let admin_note = if admin_note.trim().is_empty() {
+            "Penyesuaian stok promosi".to_string()
+        } else {
+            admin_note.trim().to_string()
+        };
 
         let stock = self.ensure_product_initialized(product_id).await?;
         let old_promotion_stock = stock.promotion_stock;
@@ -523,12 +521,11 @@ impl InventoryContract for InventoryModule {
             updated_by.trim().to_string()
         };
 
-        let total_allocated = stock.locked_stock + stock.spare_stock + new_promotion_stock + stock.safety_stock;
-        if total_allocated > stock.warehouse_stock {
+        if new_promotion_stock + stock.locked_stock > stock.warehouse_stock {
             return Err(ContractError::ValidationError(
                 format!(
-                    "Total stok teralokasi ({}) melebihi stok gudang ({})",
-                    total_allocated, stock.warehouse_stock
+                    "Stok promosi baru ({}) ditambah stok terkunci pesanan ({}) melebihi stok gudang ({})",
+                    new_promotion_stock, stock.locked_stock, stock.warehouse_stock
                 ),
             ));
         }

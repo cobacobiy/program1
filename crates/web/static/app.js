@@ -985,12 +985,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const productId = document.getElementById("stock-modal-product-id").value;
       const stockType = document.getElementById("stock-modal-type").value;
       const newVal = parseInt(document.getElementById("stock-modal-value").value);
-      const admin_note = document.getElementById("stock-modal-note").value.trim();
-      const updated_by = document.getElementById("stock-modal-operator").value.trim();
+      let admin_note = document.getElementById("stock-modal-note").value.trim();
+      const updated_by = document.getElementById("stock-modal-operator").value.trim() || "Admin Ginee";
+
+      if (isNaN(newVal) || newVal < 0) {
+        alert("Harap masukkan nilai stok yang valid (angka >= 0).");
+        return;
+      }
 
       if (!admin_note) {
-        alert("Catatan / alasan perubahan stok wajib diisi agar tercatat di audit trail.");
-        return;
+        admin_note = "Penyesuaian stok manual";
       }
 
       let endpoint = `/api/v1/inventory/${productId}/safety-stock`;
@@ -1022,7 +1026,8 @@ document.addEventListener("DOMContentLoaded", () => {
           loadData();
         } else {
           const err = await res.json();
-          alert(`❌ Gagal update stok: ${err.message || err.error || JSON.stringify(err)}`);
+          const errorMsg = err.error?.message || err.message || (typeof err.error === "string" ? err.error : "") || JSON.stringify(err);
+          alert(`❌ Gagal update stok: ${errorMsg}`);
         }
       } catch (err) {
         alert(`❌ Gagal: ${err.message}`);

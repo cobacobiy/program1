@@ -302,7 +302,7 @@ pub struct SafetyStockLogDto {
 pub struct UpdateSafetyStockRequest {
     #[validate(range(max = 999999, message = "Safety stock cannot exceed 999,999"))]
     pub new_safety_stock: u32,
-    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    #[validate(length(max = 500, message = "Catatan Admin max 500 karakter"))]
     pub admin_note: String,
     #[validate(length(max = 100))]
     pub updated_by: Option<String>,
@@ -312,7 +312,7 @@ pub struct UpdateSafetyStockRequest {
 pub struct UpdateWarehouseStockRequest {
     #[validate(range(max = 999999, message = "Stok gudang tidak boleh melebihi 999,999"))]
     pub new_warehouse_stock: u32,
-    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    #[validate(length(max = 500, message = "Catatan Admin max 500 karakter"))]
     pub admin_note: String,
     #[validate(length(max = 100))]
     pub updated_by: Option<String>,
@@ -322,7 +322,7 @@ pub struct UpdateWarehouseStockRequest {
 pub struct UpdateSpareStockRequest {
     #[validate(range(max = 999999, message = "Stok cadangan tidak boleh melebihi 999,999"))]
     pub new_spare_stock: u32,
-    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    #[validate(length(max = 500, message = "Catatan Admin max 500 karakter"))]
     pub admin_note: String,
     #[validate(length(max = 100))]
     pub updated_by: Option<String>,
@@ -332,7 +332,7 @@ pub struct UpdateSpareStockRequest {
 pub struct UpdatePromotionStockRequest {
     #[validate(range(max = 999999, message = "Stok promosi tidak boleh melebihi 999,999"))]
     pub new_promotion_stock: u32,
-    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    #[validate(length(max = 500, message = "Catatan Admin max 500 karakter"))]
     pub admin_note: String,
     #[validate(length(max = 100))]
     pub updated_by: Option<String>,
@@ -374,7 +374,7 @@ pub struct BulkStockAdjustmentItem {
 pub struct BulkStockUpdateRequest {
     #[validate(length(min = 1, max = 100, message = "Batch harus berisi 1-100 item"), nested)]
     pub adjustments: Vec<BulkStockAdjustmentItem>,
-    #[validate(length(min = 1, max = 500, message = "Catatan Admin wajib diisi (max 500 karakter)"))]
+    #[validate(length(max = 500, message = "Catatan Admin max 500 karakter"))]
     pub admin_note: String,
     #[validate(length(max = 100))]
     pub updated_by: Option<String>,
