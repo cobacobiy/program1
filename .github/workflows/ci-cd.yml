@@ -3,9 +3,20 @@ name: CI/CD Pipeline — Program1 (Rust Modular Monolith)
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - '.dockerignore'
+      - '.gitignore'
+      - 'docs/**'
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, closed]
+    paths-ignore:
+      - '**.md'
+      - '.dockerignore'
+      - '.gitignore'
+      - 'docs/**'
+  workflow_dispatch:
 
 jobs:
   # ============================================
