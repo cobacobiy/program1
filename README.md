@@ -81,6 +81,9 @@ graph TD
 - **Contract-Driven Design**: Strict `#[async_trait]` interfaces in `crates/contracts` guarantee zero direct internal coupling between domain modules.
 - **SQLite Persistence & Embedded Migrations**: Managed via SQLx with WAL mode and transaction safety.
 - **Argon2id & JWT RBAC**: Enterprise-grade password hashing and role-based access control with JWT middleware.
+- **Interactive OpenAPI 3.0 & Swagger UI**: Auto-generated API documentation via `utoipa` with live interactive testing at `/swagger-ui`.
+- **Ginee OMS Multi-Stock Inventory**: Multi-warehouse allocation, physical warehouse stock, spare stock, promotional stock, low-stock threshold alerting, and bulk CSV batch updates.
+- **Health & Readiness Observability**: Kubernetes/Docker compatible `/health` liveness probe and `/health/ready` subsystem readiness verification.
 - **Input Validation & Sanitization**: Strict JSON payload validation returning HTTP 422 with field-level details and HTML sanitization.
 - **Rate Limiting & Abuse Protection**: Thread-safe sliding window rate limiting with standard `Retry-After` headers.
 - **Audit Logging & Activity Trail**: Immutable activity recording for compliance and administrative oversight.
@@ -119,21 +122,27 @@ program1/
 ### Public Endpoints
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/health` | Application health check |
+| `GET` | `/health` | Liveness health check & uptime probe |
+| `GET` | `/health/ready` | Readiness probe (database & subsystem health verification) |
+| `GET` | `/swagger-ui/` | Interactive OpenAPI 3.0 Swagger UI documentation |
+| `GET` | `/api-doc/openapi.json` | Raw OpenAPI specification schema (JSON) |
 | `GET` | `/api/v1/store/info` | Store metadata & currency |
 | `POST` | `/api/v1/auth/login` | Authenticate user & get JWT token (Rate limited: 5/min) |
 | `GET` | `/api/v1/catalog` | List catalog items |
 | `GET` | `/api/v1/catalog/:id` | Get catalog item details |
 | `POST` | `/api/v1/orders` | Place storefront order (Rate limited: 10/min) |
+| `GET` | `/store` (or `/`) | Customer storefront UI |
+| `GET` | `/admin` | Ginee Hub admin dashboard |
 
 ### Protected Endpoints (JWT Required)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/catalog` | Create catalog item (Rate limited: 20/min) |
-| `GET` | `/api/v1/inventory` | List all inventory stocks & safety levels |
+| `GET` | `/api/v1/inventory` | List all inventory stocks & multi-stock levels |
+| `GET` | `/api/v1/inventory/alerts/low-stock` | List items currently below safety stock threshold |
 | `GET` | `/api/v1/inventory/:id` | Get inventory stock details |
-| `POST` | `/api/v1/inventory/:id/safety-stock` | Update safety stock & record log |
 | `GET` | `/api/v1/inventory/:id/safety-stock-logs` | Get safety stock audit trail |
+| `GET` | `/api/v1/inventory/:id/adjustment-logs` | Get unified multi-stock adjustment history (warehouse, spare, promo, safety) |
 | `GET` | `/api/v1/channels` | List marketplace channel statuses |
 | `POST` | `/api/v1/channels/sync/:channel` | Sync inventory stock with external channel |
 | `GET` | `/api/v1/orders` | List order history |
@@ -147,6 +156,11 @@ program1/
 | `GET` | `/api/v1/users/accounts` | List user accounts & assigned roles |
 | `POST` | `/api/v1/users/accounts` | Create user account |
 | `POST` | `/api/v1/users/accounts/:id/permissions` | Update user menu permissions |
+| `POST` | `/api/v1/inventory/bulk-update` | Bulk batch update stock via CSV/JSON (Rate limited: 10/min) |
+| `POST` | `/api/v1/inventory/:id/warehouse-stock` | Update physical warehouse stock quantity (Rate limited: 10/min) |
+| `POST` | `/api/v1/inventory/:id/safety-stock` | Update safety stock threshold & record audit note (Rate limited: 10/min) |
+| `POST` | `/api/v1/inventory/:id/spare-stock` | Update spare stock quantity (Rate limited: 10/min) |
+| `POST` | `/api/v1/inventory/:id/promotion-stock` | Update promotional reserved stock quantity (Rate limited: 10/min) |
 | `GET` | `/api/v1/analytics` | Sales analytics & revenue breakdown |
 | `GET` | `/api/v1/audit/logs` | Query system audit logs with filters |
 | `GET` | `/api/v1/audit/logs/user/:id` | Query audit logs by actor ID |
@@ -157,15 +171,15 @@ program1/
 
 ### Prerequisites
 - Rust 1.75+ (Cargo)
-- Docker & Docker Compose (optional for containerized deployment)
+- Docker & Docker Compose (for containerized deployment)
 
-### Build & Run
+### Option A: Local Development (Cargo)
 1. **First-Run Dependency Check**:
    ```bash
    ./scripts/check_dependencies.sh
    ```
 
-2. **Run All Unit & Integration Tests**:
+2. **Run Workspace Unit & Integration Tests**:
    ```bash
    cargo test --workspace
    ```
@@ -175,9 +189,28 @@ program1/
    cargo run --package program1-web
    ```
 
-4. **Open Dashboards**:
+4. **Access Dashboards**:
    - Storefront: [http://localhost:8080/store](http://localhost:8080/store)
    - Admin Hub: [http://localhost:8080/admin](http://localhost:8080/admin)
+   - Swagger UI: [http://localhost:8080/swagger-ui/](http://localhost:8080/swagger-ui/)
+   - Default Admin: `admin` / `admin123`
+
+### Option B: Containerized Deployment (Docker Compose)
+1. **Copy Environment Template**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Start Multiplatform Container**:
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. **Access via Exposed Host Port (`6090`)**:
+   - Storefront: [http://localhost:6090/store](http://localhost:6090/store)
+   - Admin Hub: [http://localhost:6090/admin](http://localhost:6090/admin)
+   - Swagger UI: [http://localhost:6090/swagger-ui/](http://localhost:6090/swagger-ui/)
+   - Health Probe: [http://localhost:6090/health](http://localhost:6090/health)
 
 ---
 

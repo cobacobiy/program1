@@ -294,13 +294,13 @@
               <tr>
                 <th>Image & Name</th>
                 <th>Harga Modal</th>
-                <th>Gudang</th>
-                <th>Cadangan</th>
+                <th>Warehouse Stock</th>
+                <th>Spare Stock</th>
                 <th>Terkunci</th>
                 <th>Promosi</th>
                 <th>Tersedia (Sync)</th>
                 <th>Safety Stock</th>
-                <th>Aksi Admin</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody id="ginee-stock-tbody">
@@ -458,38 +458,64 @@
   </div>
 
   <!-- MODALS -->
-  <!-- 1. MULTI-STOCK ADJUSTMENT MODAL -->
+  <!-- 1. GINEE-STYLE STOCK ADJUSTMENT MODAL -->
   <div class="modal-overlay" id="edit-stock-modal">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width:720px">
       <div class="modal-header">
-        <h3 style="font-size:1.2rem; font-weight:700" id="stock-modal-title">🏷️ Ubah Stok Produk</h3>
+        <h3 style="font-size:1.25rem; font-weight:700" id="stock-modal-title">Edit Spare Stock</h3>
         <button class="modal-close" onclick="closeEditStockModal()">&times;</button>
       </div>
+
+      <div style="margin-bottom:1.2rem">
+        <div style="font-size:0.95rem; color:var(--text); margin-bottom:0.25rem">
+          Master SKU: <strong id="ginee-modal-sku" style="color:var(--cyan); font-family:'JetBrains Mono'">-</strong>
+        </div>
+        <div id="ginee-modal-product-name" style="font-size:0.85rem; color:var(--text-muted)"></div>
+      </div>
+
+      <!-- QUICK ACTION: CHANGE STOCK TO + APPLY TO ALL -->
+      <div class="ginee-quick-bar">
+        <span style="font-size:0.85rem; color:var(--text-muted); font-weight:600">Change Stock to ▾</span>
+        <input type="number" id="ginee-quick-input" class="form-control" placeholder="Please Enter" style="width:160px" min="0">
+        <button type="button" class="ginee-btn-purple" onclick="applyGineeQuickStock()">Apply to All</button>
+      </div>
+
       <form id="edit-stock-form">
         <input type="hidden" id="stock-modal-product-id">
-        <div class="form-group">
-          <label>Nama Produk & SKU</label>
-          <input type="text" id="stock-modal-product-name" class="form-control" readonly style="opacity:0.75">
-        </div>
+        <input type="hidden" id="stock-modal-type" value="spare">
 
-        <div class="form-group">
-          <label>Jenis Stok yang Ingin Diubah</label>
-          <select id="stock-modal-type" class="form-control" onchange="onStockTypeChange()">
-            <option value="safety">🛡️ Safety Stock (Batas Stok Cadangan Kritis)</option>
-            <option value="warehouse">🏬 Stok Gudang Utama (Warehouse Stock)</option>
-            <option value="spare">📦 Stok Cadangan (Spare Stock / Sampel)</option>
-            <option value="promotion">🎟️ Stok Promosi (Flash Sale / Campaign)</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label id="stock-modal-value-label">Nilai Stok Baru (Unit)</label>
-          <input type="number" id="stock-modal-value" class="form-control" min="0" max="999999" required oninput="calculateLiveStockPreview()">
+        <!-- GINEE WAREHOUSE TABLE -->
+        <div class="ginee-table-container">
+          <table class="ginee-table">
+            <thead>
+              <tr>
+                <th>Warehouse Name</th>
+                <th>Location Number</th>
+                <th>Warehouse Stock</th>
+                <th id="ginee-table-curr-header">Spare Stock</th>
+                <th id="ginee-table-new-header">New Spare Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong style="color:#fff">001-DefaultWarehouse</strong>
+                  <div style="font-size:0.75rem; color:var(--text-muted)">Gudang Utama Jakarta</div>
+                </td>
+                <td style="color:var(--text-muted); font-size:0.85rem">Default Shelf</td>
+                <td><span id="ginee-table-wh-val" class="ginee-wh-highlight">0</span></td>
+                <td><span id="ginee-table-curr-val" style="font-weight:600; color:var(--text)">0</span></td>
+                <td>
+                  <input type="number" id="stock-modal-value" class="form-control" style="width:130px; font-weight:600" min="0" max="999999" placeholder="Please Enter" required oninput="calculateLiveStockPreview()">
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- LIVE FORMULA CALCULATION PREVIEW -->
         <div class="stock-calc-preview" id="stock-calc-preview">
-          <div style="font-weight:600; color:var(--cyan); margin-bottom:0.3rem">⚡ Live Available Stock Recalculation:</div>
+          <div style="font-weight:600; color:var(--cyan); margin-bottom:0.3rem">⚡ Live Available Stock Recalculation (Sync Omnichannel):</div>
           <div id="stock-calc-formula" style="font-family:'JetBrains Mono'; font-size:0.75rem; color:var(--text-muted)">
             available = warehouse - (locked + spare + promo + safety)
           </div>
@@ -499,17 +525,19 @@
           </div>
         </div>
 
+        <!-- CATATAN / ALASAN PERUBAHAN STOK (WAJIB) -->
         <div class="form-group">
-          <label>Alasan Perubahan / Catatan Admin (Wajib)</label>
-          <textarea id="stock-modal-note" class="form-control" rows="3" placeholder="Contoh: Penyesuaian stok menyambut Promo 9.9 Mega Sale" required></textarea>
+          <label>Alasan Perubahan / Catatan Admin <span style="color:var(--rose)">*</span></label>
+          <textarea id="stock-modal-note" class="form-control" rows="2" placeholder="Contoh: Koreksi fisik stok opname / Buffer promo flash sale" required></textarea>
         </div>
         <div class="form-group">
           <label>Nama Operator Admin</label>
           <input type="text" id="stock-modal-operator" class="form-control" value="Admin Ginee" required>
         </div>
+
         <div style="display:flex; justify-content:flex-end; gap:0.8rem; margin-top:1.5rem">
-          <button type="button" class="btn-action" onclick="closeEditStockModal()">Batal</button>
-          <button type="submit" class="btn-action btn-primary">Simpan Perubahan Stok</button>
+          <button type="button" class="ginee-btn-cancel" onclick="closeEditStockModal()">Cancel</button>
+          <button type="submit" class="ginee-btn-purple" style="min-width:90px">OK</button>
         </div>
       </form>
     </div>

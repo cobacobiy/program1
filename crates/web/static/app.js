@@ -493,20 +493,32 @@ function renderGineeStockList(stocks) {
           </div>
         </td>
         <td>Rp ${s.average_purchase_price.toLocaleString("id-ID")}</td>
-        <td><strong style="color:#fff">${s.warehouse_stock}</strong></td>
-        <td>${s.spare_stock}</td>
+        <td>
+          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'warehouse')" title="Klik ikon pensil untuk edit Warehouse Stock">
+            <strong style="color:#fff">${s.warehouse_stock}</strong>
+            <button type="button" class="btn-pencil-edit" title="Edit Warehouse Stock">✏️</button>
+          </div>
+        </td>
+        <td>
+          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'spare')" title="Klik ikon pensil untuk edit Spare Stock">
+            <span style="font-weight:600">${s.spare_stock}</span>
+            <button type="button" class="btn-pencil-edit" title="Edit Spare Stock">✏️</button>
+          </div>
+        </td>
         <td style="color:var(--rose)">${s.locked_stock}</td>
         <td>${s.promotion_stock}</td>
         <td>
           <strong style="color:var(--emerald); font-size:0.95rem">${s.available_stock}</strong>
           ${badgeHtml}
         </td>
-        <td style="color:var(--amber); font-weight:600">${s.safety_stock} unit</td>
         <td>
-          <div style="display:flex; gap:0.4rem">
-            <button class="btn-sm btn-edit-safety" onclick="openStockAdjustmentModal('${escapeHtml(s.product_id)}')">✏️ Edit Stok</button>
-            <button class="btn-sm" onclick="openUnifiedHistoryModal('${escapeHtml(s.product_id)}', '${escapeHtml(s.product_name.replace(/'/g, ''))}')">📜 Riwayat</button>
+          <div class="stock-editable-cell" onclick="openGineeStockModal('${escapeHtml(s.product_id)}', 'safety')" title="Klik ikon pensil untuk edit Safety Stock">
+            <span style="color:var(--amber); font-weight:600">${s.safety_stock}</span>
+            <button type="button" class="btn-pencil-edit" title="Edit Safety Stock">✏️</button>
           </div>
+        </td>
+        <td>
+          <button class="btn-sm" onclick="openUnifiedHistoryModal('${escapeHtml(s.product_id)}', '${escapeHtml(s.product_name.replace(/'/g, ''))}')">📜 Riwayat</button>
         </td>
       </tr>
     `;
@@ -559,49 +571,67 @@ function renderAnalyticsBreakdown(breakdown) {
   `;
 }
 
-// --- MULTI-STOCK ADJUSTMENT MODAL ---
-function openStockAdjustmentModal(productId) {
+// --- GINEE-STYLE MULTI-STOCK ADJUSTMENT MODAL ---
+function openGineeStockModal(productId, stockType) {
   const stock = currentStocks.find(s => s.product_id === productId);
   if (!stock) return;
 
   selectedStockItem = stock;
+  const targetType = stockType || "warehouse";
+
   document.getElementById("stock-modal-product-id").value = stock.product_id;
-  document.getElementById("stock-modal-product-name").value = `${stock.product_name} (MSKU: ${stock.sku})`;
-  document.getElementById("stock-modal-type").value = "safety";
-  document.getElementById("stock-modal-value").value = stock.safety_stock;
+  document.getElementById("stock-modal-type").value = targetType;
+  document.getElementById("ginee-modal-sku").innerText = stock.sku;
+  document.getElementById("ginee-modal-product-name").innerText = `${stock.product_name} • Harga Modal: Rp ${stock.average_purchase_price.toLocaleString("id-ID")}`;
+
+  const titleEl = document.getElementById("stock-modal-title");
+  const currHeader = document.getElementById("ginee-table-curr-header");
+  const newHeader = document.getElementById("ginee-table-new-header");
+  const currValEl = document.getElementById("ginee-table-curr-val");
+  const whValEl = document.getElementById("ginee-table-wh-val");
+  const inputVal = document.getElementById("stock-modal-value");
+
+  whValEl.innerText = stock.warehouse_stock;
+
+  if (targetType === "warehouse") {
+    titleEl.innerText = "Edit Warehouse Stock";
+    currHeader.innerText = "Warehouse Stock";
+    newHeader.innerText = "New Warehouse Stock";
+    currValEl.innerText = stock.warehouse_stock;
+    inputVal.value = stock.warehouse_stock;
+  } else if (targetType === "spare") {
+    titleEl.innerText = "Edit Spare Stock";
+    currHeader.innerText = "Spare Stock";
+    newHeader.innerText = "New Spare Stock";
+    currValEl.innerText = stock.spare_stock;
+    inputVal.value = stock.spare_stock;
+  } else if (targetType === "safety") {
+    titleEl.innerText = "Edit Safety Stock (Pengingat)";
+    currHeader.innerText = "Safety Stock";
+    newHeader.innerText = "New Safety Stock";
+    currValEl.innerText = stock.safety_stock;
+    inputVal.value = stock.safety_stock;
+  }
+
+  document.getElementById("ginee-quick-input").value = "";
   document.getElementById("stock-modal-note").value = "";
   document.getElementById("stock-modal-operator").value = activeAccount ? activeAccount.full_name : "Admin Ginee";
 
-  onStockTypeChange();
+  calculateLiveStockPreview();
   document.getElementById("edit-stock-modal").style.display = "flex";
+}
+
+function applyGineeQuickStock() {
+  const quickVal = document.getElementById("ginee-quick-input").value;
+  if (quickVal !== "") {
+    document.getElementById("stock-modal-value").value = parseInt(quickVal) || 0;
+    calculateLiveStockPreview();
+  }
 }
 
 function closeEditStockModal() {
   document.getElementById("edit-stock-modal").style.display = "none";
   selectedStockItem = null;
-}
-
-function onStockTypeChange() {
-  if (!selectedStockItem) return;
-  const type = document.getElementById("stock-modal-type").value;
-  const valInput = document.getElementById("stock-modal-value");
-  const label = document.getElementById("stock-modal-value-label");
-
-  if (type === "safety") {
-    label.innerText = "Safety Stock Baru (Batas Aman)";
-    valInput.value = selectedStockItem.safety_stock;
-  } else if (type === "warehouse") {
-    label.innerText = "Stok Gudang Baru (Warehouse Total)";
-    valInput.value = selectedStockItem.warehouse_stock;
-  } else if (type === "spare") {
-    label.innerText = "Stok Cadangan Baru (Spare)";
-    valInput.value = selectedStockItem.spare_stock;
-  } else if (type === "promotion") {
-    label.innerText = "Stok Promosi Baru (Promotion)";
-    valInput.value = selectedStockItem.promotion_stock;
-  }
-
-  calculateLiveStockPreview();
 }
 
 function calculateLiveStockPreview() {
@@ -629,8 +659,11 @@ function calculateLiveStockPreview() {
 }
 
 // Backward compatibility alias for any older modal calls
+function openStockAdjustmentModal(productId, stockType) {
+  openGineeStockModal(productId, stockType || "warehouse");
+}
 function openEditSafetyModal(productId, productName, currentSafety) {
-  openStockAdjustmentModal(productId);
+  openGineeStockModal(productId, "safety");
 }
 function closeEditSafetyModal() {
   closeEditStockModal();
@@ -952,6 +985,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const newVal = parseInt(document.getElementById("stock-modal-value").value);
       const admin_note = document.getElementById("stock-modal-note").value.trim();
       const updated_by = document.getElementById("stock-modal-operator").value.trim();
+
+      if (!admin_note) {
+        alert("Catatan / alasan perubahan stok wajib diisi agar tercatat di audit trail.");
+        return;
+      }
 
       let endpoint = `/api/v1/inventory/${productId}/safety-stock`;
       let payload = { admin_note, updated_by };

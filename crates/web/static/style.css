@@ -695,3 +695,132 @@ th {
   margin-top: 0;
 }
 
+/* GINEE OMS PENCIL INLINE EDIT & MODAL STYLES */
+.stock-editable-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  transition: all 0.15s ease-in-out;
+  border: 1px solid transparent;
+}
+
+.stock-editable-cell:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(6, 182, 212, 0.3);
+}
+
+.btn-pencil-edit {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  opacity: 0.7;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: all 0.15s ease-in-out;
+}
+
+.stock-editable-cell:hover .btn-pencil-edit,
+.btn-pencil-edit:hover {
+  opacity: 1;
+  color: var(--cyan);
+  transform: scale(1.18);
+}
+
+.ginee-quick-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+  padding: 0.6rem 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+}
+
+.ginee-table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin-bottom: 1.2rem;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ginee-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.ginee-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  padding: 0.65rem 0.85rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.ginee-table td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+
+.ginee-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ginee-wh-highlight {
+  color: #818cf8;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+}
+
+.ginee-btn-purple {
+  background: #6366f1;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1.2rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+}
+
+.ginee-btn-purple:hover {
+  background: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
+}
+
+.ginee-btn-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 0.5rem 1.2rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ginee-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+
