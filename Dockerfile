@@ -13,10 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Cargo manifests, migrations, and crate sources
+# Copy Cargo manifests and database migrations
 COPY Cargo.toml Cargo.lock ./
 COPY migrations ./migrations
-COPY crates ./crates
+
+# Copy Rust crate sources (excluding static assets so frontend edits don't invalidate Rust build cache)
+COPY crates/contracts ./crates/contracts
+COPY crates/core ./crates/core
+COPY crates/modules ./crates/modules
+COPY crates/web/Cargo.toml ./crates/web/Cargo.toml
+COPY crates/web/src ./crates/web/src
 
 # Build release binary
 RUN cargo build --release --package program1-web
@@ -34,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy compiled binary from builder
 COPY --from=builder /usr/src/program1/target/release/program1 /app/program1
 
-# Copy static Web UI assets
+# Copy static Web UI assets (separate layer for instant frontend updates)
 COPY crates/web/static /app/crates/web/static
 
 ENV RUST_LOG=info,program1=debug
