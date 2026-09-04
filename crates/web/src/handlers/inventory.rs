@@ -91,7 +91,13 @@ pub async fn update_safety_stock(
     Extension(claims): Extension<JwtClaims>,
     ValidatedJson(payload): ValidatedJson<UpdateSafetyStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
-    let operator = claims.username.clone();
+    let operator = payload
+        .updated_by
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
         .update_safety_stock(id, payload.new_safety_stock, payload.admin_note.clone(), operator.clone())
@@ -101,11 +107,11 @@ pub async fn update_safety_stock(
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
         actor_id: Some(claims.sub),
-        actor_username: operator,
+        actor_username: claims.username.clone(),
         action: "SAFETY_STOCK_UPDATED".to_string(),
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
-        details: json!({ "new_safety_stock": payload.new_safety_stock, "note": payload.admin_note }).to_string(),
+        details: json!({ "new_safety_stock": payload.new_safety_stock, "note": payload.admin_note, "operator": operator }).to_string(),
         ip_address: None,
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for safety stock update");
@@ -164,7 +170,13 @@ pub async fn update_warehouse_stock(
     Extension(claims): Extension<JwtClaims>,
     ValidatedJson(payload): ValidatedJson<UpdateWarehouseStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
-    let operator = claims.username.clone();
+    let operator = payload
+        .updated_by
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
         .update_warehouse_stock(id, payload.new_warehouse_stock, payload.admin_note.clone(), operator.clone())
@@ -174,11 +186,11 @@ pub async fn update_warehouse_stock(
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
         actor_id: Some(claims.sub),
-        actor_username: operator,
+        actor_username: claims.username.clone(),
         action: "WAREHOUSE_STOCK_UPDATED".to_string(),
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
-        details: json!({ "new_warehouse_stock": payload.new_warehouse_stock, "note": payload.admin_note }).to_string(),
+        details: json!({ "new_warehouse_stock": payload.new_warehouse_stock, "note": payload.admin_note, "operator": operator }).to_string(),
         ip_address: None,
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for warehouse stock update");
@@ -213,7 +225,13 @@ pub async fn update_spare_stock(
     Extension(claims): Extension<JwtClaims>,
     ValidatedJson(payload): ValidatedJson<UpdateSpareStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
-    let operator = claims.username.clone();
+    let operator = payload
+        .updated_by
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
         .update_spare_stock(id, payload.new_spare_stock, payload.admin_note.clone(), operator.clone())
@@ -223,11 +241,11 @@ pub async fn update_spare_stock(
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
         actor_id: Some(claims.sub),
-        actor_username: operator,
+        actor_username: claims.username.clone(),
         action: "SPARE_STOCK_UPDATED".to_string(),
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
-        details: json!({ "new_spare_stock": payload.new_spare_stock, "note": payload.admin_note }).to_string(),
+        details: json!({ "new_spare_stock": payload.new_spare_stock, "note": payload.admin_note, "operator": operator }).to_string(),
         ip_address: None,
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for spare stock update");
@@ -262,7 +280,13 @@ pub async fn update_promotion_stock(
     Extension(claims): Extension<JwtClaims>,
     ValidatedJson(payload): ValidatedJson<UpdatePromotionStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
-    let operator = claims.username.clone();
+    let operator = payload
+        .updated_by
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
         .update_promotion_stock(id, payload.new_promotion_stock, payload.admin_note.clone(), operator.clone())
@@ -272,11 +296,11 @@ pub async fn update_promotion_stock(
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
         actor_id: Some(claims.sub),
-        actor_username: operator,
+        actor_username: claims.username.clone(),
         action: "PROMOTION_STOCK_UPDATED".to_string(),
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
-        details: json!({ "new_promotion_stock": payload.new_promotion_stock, "note": payload.admin_note }).to_string(),
+        details: json!({ "new_promotion_stock": payload.new_promotion_stock, "note": payload.admin_note, "operator": operator }).to_string(),
         ip_address: None,
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for promotion stock update");
@@ -355,7 +379,13 @@ pub async fn bulk_update_stock(
     Extension(claims): Extension<JwtClaims>,
     ValidatedJson(payload): ValidatedJson<BulkStockUpdateRequest>,
 ) -> Result<Json<BulkStockUpdateResult>, ApiError> {
-    let operator = claims.username.clone();
+    let operator = payload
+        .updated_by
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| claims.username.clone());
     let note = payload.admin_note.clone();
     let count = payload.adjustments.len();
 
@@ -368,7 +398,7 @@ pub async fn bulk_update_stock(
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
         actor_id: Some(claims.sub),
-        actor_username: operator,
+        actor_username: claims.username.clone(),
         action: "BULK_STOCK_UPDATED".to_string(),
         resource_type: "inventory".to_string(),
         resource_id: None,

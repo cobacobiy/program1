@@ -11,8 +11,81 @@
   <script src="/assets/app.js?v=2.0.4" defer></script>
 </head>
 <body>
-  <!-- SIDEBAR LEFT GINEE OMS OFFICIAL STRUCTURE -->
-  <aside>
+  <!-- SELLER LOGIN SCREEN (Shown when unauthenticated) -->
+  <div id="seller-login-screen" class="seller-login-container" style="display:none">
+    <div class="seller-login-card">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem">
+        <div style="display:flex; align-items:center; gap:0.9rem">
+          <div class="seller-login-logo">G</div>
+          <div>
+            <h2 style="font-size:1.35rem; font-weight:700; color:var(--text-heading); line-height:1.2">Ginee Hub OMS</h2>
+            <p style="font-size:0.8rem; color:#818cf8; font-weight:600">SELLER &amp; MERCHANT PORTAL</p>
+          </div>
+        </div>
+        <button class="theme-toggle-btn" onclick="toggleAdminTheme()" title="Ganti Tema (Gelap / Terang)">
+          <span class="theme-icon admin-theme-icon">☀️</span>
+        </button>
+      </div>
+
+      <div id="login-error-alert" style="display:none; margin-bottom:1.2rem; padding:0.75rem 1rem; border-radius:8px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#fca5a5; font-size:0.85rem"></div>
+
+      <form id="seller-login-form" onsubmit="handleSellerLogin(event)">
+        <div class="form-group">
+          <label>Username Sub-Akun</label>
+          <input type="text" id="login-username" class="form-control" placeholder="admin / staff_gudang / staff_cs" required autofocus>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••" value="admin123" required>
+        </div>
+        <button type="submit" id="btn-submit-seller-login" class="ginee-btn-purple" style="width:100%; padding:0.75rem; font-size:0.95rem; margin-top:0.5rem">
+          🚀 Masuk ke Seller Portal
+        </button>
+      </form>
+
+      <div style="margin-top:1.8rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1.2rem">
+        <div style="font-size:0.8rem; font-weight:600; color:var(--text-muted); margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center">
+          <span>⚡ PILIH CEPAT SUB-AKUN (DEMO):</span>
+          <span style="font-size:0.7rem; color:#a78bfa">Password: admin123</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem">
+          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('admin')">
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">👑 Super Admin</span>
+            <span class="badge-role" style="font-size:0.65rem; background:rgba(239,68,68,0.2); color:#fca5a5">ADMIN</span>
+          </div>
+          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('admin_ops')">
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">🛡️ Admin Ops</span>
+            <span class="badge-role" style="font-size:0.65rem; background:rgba(239,68,68,0.2); color:#fca5a5">ADMIN</span>
+          </div>
+          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('manager_gudang')">
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">🏬 Mgr Gudang</span>
+            <span class="badge-role" style="font-size:0.65rem; background:rgba(59,130,246,0.2); color:#93c5fd">MGR</span>
+          </div>
+          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('staff_gudang')">
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">📦 Staff Gudang</span>
+            <span class="badge-role" style="font-size:0.65rem; background:rgba(16,185,129,0.2); color:#6ee7b7">STAFF</span>
+          </div>
+          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('staff_finance')">
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">💰 Staff Finance</span>
+            <span class="badge-role" style="font-size:0.65rem; background:rgba(16,185,129,0.2); color:#6ee7b7">STAFF</span>
+          </div>
+          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('staff_cs')">
+            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">🎧 Staff CS</span>
+            <span class="badge-role" style="font-size:0.65rem; background:rgba(245,158,11,0.2); color:#fcd34d">CS</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem; text-align:center">
+        <a href="/store" target="_blank" style="font-size:0.8rem; color:var(--cyan); text-decoration:none">🛒 Buka Toko / Storefront Pembeli &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN ADMIN APP CONTAINER (Shown when authenticated) -->
+  <div id="admin-main-app" style="display:flex; width:100%; min-height:100vh">
+    <!-- SIDEBAR LEFT GINEE OMS OFFICIAL STRUCTURE -->
+    <aside>
     <div class="sidebar-header">
       <div class="ginee-logo">G</div>
       <div class="ginee-title">
@@ -109,6 +182,11 @@
         <a href="/store" class="btn-action" target="_blank">🛒 Storefront &rarr;</a>
         <button class="btn-action btn-primary" onclick="syncAllChannels()">⚡ Sync Channel</button>
 
+        <!-- THEME TOGGLE BUTTON -->
+        <button class="theme-toggle-btn" id="admin-theme-toggle" onclick="toggleAdminTheme()" title="Ganti Tema (Gelap / Terang)">
+          <span class="theme-icon admin-theme-icon">☀️</span>
+        </button>
+
         <!-- TOP HEADER USER ACCOUNT SWITCHER -->
         <div class="user-switcher-container">
           <div class="user-badge-dropdown" onclick="toggleUserDropdown()">
@@ -124,6 +202,9 @@
             <div id="user-dropdown-list"></div>
           </div>
         </div>
+
+        <!-- LOGOUT BUTTON -->
+        <button class="btn-action" style="background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3)" onclick="logoutAdmin()">🚪 Logout</button>
       </div>
     </header>
 
@@ -454,6 +535,7 @@
       </div>
     </main>
   </div>
+  </div><!-- END #admin-main-app -->
 
   <!-- MODALS -->
   <!-- 1. GINEE-STYLE STOCK ADJUSTMENT MODAL -->
@@ -529,8 +611,12 @@
           <textarea id="stock-modal-note" class="form-control" rows="2" placeholder="Contoh: Koreksi fisik stok opname / Buffer promo (opsional)"></textarea>
         </div>
         <div class="form-group">
-          <label>Nama Operator Admin</label>
-          <input type="text" id="stock-modal-operator" class="form-control" value="Admin Ginee" required>
+          <label>Nama Operator (Sesuai Akun Login Session)</label>
+          <div style="position:relative">
+            <input type="text" id="stock-modal-operator" class="form-control" readonly style="background:rgba(255,255,255,0.06); cursor:not-allowed; color:#c4b5fd; font-weight:600; padding-left:2.2rem" required>
+            <span style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%); font-size:0.9rem">👤</span>
+          </div>
+          <small style="color:var(--text-muted); font-size:0.75rem; margin-top:0.25rem; display:block">🔒 Terisi otomatis dari sesi akun login aktif (tidak dapat diubah manual untuk integritas audit).</small>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:0.8rem; margin-top:1.5rem">
@@ -612,6 +698,9 @@
       </div>
       <form id="edit-permissions-form">
         <input type="hidden" id="edit-perm-user-id">
+        <div id="edit-perm-admin-banner" style="display:none; margin-bottom:1rem; padding:0.75rem 1rem; border-radius:8px; background:rgba(139, 92, 246, 0.15); border:1px solid rgba(139, 92, 246, 0.35); color:#c4b5fd; font-size:0.85rem; line-height:1.4">
+          👑 <strong>Akun Tingkat Admin:</strong> Level Admin memiliki hak akses penuh ke <strong>seluruh 16 menu</strong>. Seluruh menu akan selalu terbuka dan ditampilkan untuk akun ini.
+        </div>
         <div class="form-group">
           <label>Nama Account & Role</label>
           <input type="text" id="edit-perm-user-label" class="form-control" readonly style="opacity:0.75">
@@ -647,8 +736,17 @@
           <input type="text" id="create-fullname" class="form-control" placeholder="Rian Marketing" required>
         </div>
         <div class="form-group">
-          <label>Role / Jabatan</label>
-          <input type="text" id="create-role" class="form-control" placeholder="Marketing Executive" required>
+          <label>Tingkat Role / Jabatan</label>
+          <select id="create-role-preset" class="form-control" onchange="onRolePresetChange(this.value)" style="margin-bottom:0.5rem">
+            <option value="Super Admin">👑 Super Admin (Level Admin - Akses Penuh 16 Menu)</option>
+            <option value="Admin Operasional">🛡️ Admin Operasional (Level Admin - Akses Penuh 16 Menu)</option>
+            <option value="Warehouse Manager">🏬 Warehouse Manager (Level Manager - Menu Dapat Diatur)</option>
+            <option value="Staff Gudang & Stok">📦 Staff Gudang & Stok (Level Staff - Menu Dapat Diatur)</option>
+            <option value="Finance Officer">💰 Finance Officer (Level Staff - Menu Dapat Diatur)</option>
+            <option value="Customer Support" selected>🎧 Customer Support (Level CS - Menu Dapat Diatur)</option>
+            <option value="custom">✏️ Kustom / Input Manual...</option>
+          </select>
+          <input type="text" id="create-role" class="form-control" value="Customer Support" placeholder="Marketing Executive" required>
         </div>
         <div class="form-group">
           <label>Hak Akses Menu Awal</label>

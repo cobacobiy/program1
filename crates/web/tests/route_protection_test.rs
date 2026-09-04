@@ -16,7 +16,7 @@ use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -270,4 +270,76 @@ async fn test_expired_token_returns_token_expired_error() {
     let body_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(body_json["error"], "token_expired");
+}
+
+#[tokio::test]
+async fn test_multi_tier_accounts_and_user_list_access() {
+    let (app, auth_module, _) = setup_test_app().await;
+
+    // 1. Non-admin staff token (e.g. Customer Support)
+    let staff_claims = program1_contracts::UserAccountDto {
+        id: Uuid::new_v4(),
+        username: "staff_cs".to_string(),
+        full_name: "Staff CS".to_string(),
+        role: "Customer Support".to_string(),
+        accessible_menus: vec!["chat".to_string(), "orders".to_string()],
+        is_active: true,
+        created_at: Utc::now(),
+    };
+    let staff_token = auth_module.generate_token(&staff_claims).unwrap();
+
+    // GET /api/v1/users/accounts should succeed for authenticated staff (used by account switcher)
+    let req_list = Request::builder()
+        .uri("/api/v1/users/accounts")
+        .method("GET")
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_list = app.clone().oneshot(req_list).await.unwrap();
+    assert_eq!(res_list.status(), StatusCode::OK);
+
+    let body_bytes = to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
+    let accounts: Vec<Value> = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(accounts.len(), 6); // 6 seeded multi-tier accounts
+
+    // 2. Staff tries to modify permissions -> 403 Forbidden
+    let target_user_id = accounts[0]["id"].as_str().unwrap();
+    let req_perm = Request::builder()
+        .uri(format!("/api/v1/users/accounts/{}/permissions", target_user_id))
+        .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({
+            "accessible_menus": ["dashboard"]
+        }).to_string()))
+        .unwrap();
+
+    let res_perm = app.clone().oneshot(req_perm).await.unwrap();
+    assert_eq!(res_perm.status(), StatusCode::FORBIDDEN);
+
+    // 3. Admin modifies permissions -> 200 OK
+    let admin_claims = program1_contracts::UserAccountDto {
+        id: Uuid::new_v4(),
+        username: "admin".to_string(),
+        full_name: "Admin Super".to_string(),
+        role: "Super Admin".to_string(),
+        accessible_menus: vec![],
+        is_active: true,
+        created_at: Utc::now(),
+    };
+    let admin_token = auth_module.generate_token(&admin_claims).unwrap();
+
+    let req_perm_admin = Request::builder()
+        .uri(format!("/api/v1/users/accounts/{}/permissions", target_user_id))
+        .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({
+            "accessible_menus": ["dashboard", "orders"]
+        }).to_string()))
+        .unwrap();
+
+    let res_perm_admin = app.oneshot(req_perm_admin).await.unwrap();
+    assert_eq!(res_perm_admin.status(), StatusCode::OK);
 }

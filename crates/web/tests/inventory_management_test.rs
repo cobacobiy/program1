@@ -184,7 +184,11 @@ async fn test_update_all_stock_types_and_audit_logs() {
     let body_logs = to_bytes(res_logs.into_body(), usize::MAX).await.unwrap();
     let logs: Vec<Value> = serde_json::from_slice(&body_logs).unwrap();
     assert_eq!(logs.len(), 4);
+    assert!(logs.iter().any(|l| l["updated_by"] == "Admin Warehouse"));
+    assert!(logs.iter().any(|l| l["updated_by"] == "Admin Marketing"));
+    assert!(logs.iter().any(|l| l["updated_by"] == "Admin Promo"));
 }
+
 
 #[tokio::test]
 async fn test_bulk_update_and_low_stock_alerts() {

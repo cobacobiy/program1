@@ -9,9 +9,34 @@ let activeCategory = "ALL";
 let searchQuery = "";
 let activeBuyer = null;
 
+// --- THEME ENGINE (DARK / LIGHT) ---
+function initStoreTheme() {
+  const savedTheme = localStorage.getItem("shopee_store_theme") || "dark";
+  applyStoreTheme(savedTheme);
+}
+
+function applyStoreTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("shopee_store_theme", theme);
+  const icon = document.getElementById("store-theme-icon");
+  if (icon) {
+    icon.innerText = theme === "light" ? "🌙" : "☀️";
+  }
+}
+
+function toggleStoreTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+  const newTheme = currentTheme === "light" ? "dark" : "light";
+  applyStoreTheme(newTheme);
+}
+
+window.toggleStoreTheme = toggleStoreTheme;
+initStoreTheme();
+
 // Initialize Storefront
 async function initStore() {
   try {
+    initStoreTheme();
     // 1. Check Storefront Buyer Session
     checkBuyerSession();
 

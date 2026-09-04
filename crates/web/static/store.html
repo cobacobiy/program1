@@ -38,7 +38,10 @@
           <span id="buyer-name-label" style="font-size:0.8rem; font-weight:600; color:#fff">Pembeli</span>
         </div>
 
-        <a href="/admin" class="btn-admin">⚙️ Admin Penjual</a>
+        <!-- THEME TOGGLE BUTTON -->
+        <button class="theme-toggle-btn" id="store-theme-toggle" onclick="toggleStoreTheme()" title="Ganti Tema (Gelap / Terang)">
+          <span class="theme-icon" id="store-theme-icon">☀️</span>
+        </button>
 
         <button class="cart-trigger" onclick="openCart()">
           🛒 <span class="cart-label">Keranjang</span> <span class="cart-badge" id="cart-count">0</span>
@@ -79,6 +82,26 @@
       <p style="color:var(--text-muted); grid-column:1/-1; text-align:center; padding:2rem">Loading catalog items...</p>
     </div>
   </main>
+
+  <!-- SHOPEE STYLE FOOTER WITH SELLER CENTRE LINK -->
+  <footer class="store-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <div class="brand-logo" style="width:32px; height:32px; font-size:1.1rem">S</div>
+        <div>
+          <div style="font-size:0.9rem; font-weight:700; color:var(--text-heading)">AURA Storefront</div>
+          <div style="font-size:0.75rem; color:var(--text-muted)">Official Shopee Mall Omnichannel Partner</div>
+        </div>
+      </div>
+      <div class="footer-actions">
+        <a href="/admin" class="footer-seller-link">
+          <span>🏬</span>
+          <span>Seller Centre / Portal Penjual &rarr;</span>
+        </a>
+        <span style="font-size:0.75rem; color:var(--text-muted); margin-left:1rem">© 2026 Program1 Monolith</span>
+      </div>
+    </div>
+  </footer>
 
   <!-- BUYER LOGIN / REGISTER MODAL -->
   <div class="modal-overlay" id="buyer-login-modal">

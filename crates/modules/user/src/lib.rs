@@ -79,18 +79,25 @@ impl UserModule {
                 serde_json::to_string(&all_menus).unwrap(),
             ),
             (
-                "00000000-0000-0000-0000-000000000002",
-                "staff_cs",
-                "Siti Rahma (Staff CS)",
-                "Customer Support",
-                serde_json::to_string(&vec!["dashboard", "orders", "customers", "chat", "service"]).unwrap(),
+                "00000000-0000-0000-0000-000000000005",
+                "admin_ops",
+                "Budi Hartono (Admin Ops)",
+                "Admin Operasional",
+                serde_json::to_string(&all_menus).unwrap(),
             ),
             (
                 "00000000-0000-0000-0000-000000000003",
-                "staff_gudang",
-                "Bambang W (Staff Gudang)",
+                "manager_gudang",
+                "Bambang W (Manager Gudang)",
                 "Warehouse Manager",
-                serde_json::to_string(&vec!["dashboard", "master_products", "stocks", "warehouses", "logistics"]).unwrap(),
+                serde_json::to_string(&vec!["dashboard", "master_products", "channel_products", "stocks", "warehouses", "logistics"]).unwrap(),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000006",
+                "staff_gudang",
+                "Joko Susilo (Staff Gudang)",
+                "Staff Gudang & Stok",
+                serde_json::to_string(&vec!["dashboard", "stocks", "master_products"]).unwrap(),
             ),
             (
                 "00000000-0000-0000-0000-000000000004",
@@ -98,6 +105,13 @@ impl UserModule {
                 "Dewi Lestari (Staff Keuangan)",
                 "Finance Officer",
                 serde_json::to_string(&vec!["dashboard", "orders", "reports", "finances"]).unwrap(),
+            ),
+            (
+                "00000000-0000-0000-0000-000000000002",
+                "staff_cs",
+                "Siti Rahma (Staff CS)",
+                "Customer Support",
+                serde_json::to_string(&vec!["dashboard", "orders", "customers", "chat", "service"]).unwrap(),
             ),
         ];
 
@@ -132,7 +146,17 @@ impl UserModule {
         let full_name: String = row.get("full_name");
         let role: String = row.get("role");
         let menus_json: String = row.get("accessible_menus");
-        let accessible_menus: Vec<String> = serde_json::from_str(&menus_json).unwrap_or_default();
+        let mut accessible_menus: Vec<String> = serde_json::from_str(&menus_json).unwrap_or_default();
+        if role.to_lowercase().contains("admin") {
+            accessible_menus = vec![
+                "dashboard".to_string(), "orders".to_string(), "master_products".to_string(),
+                "channel_products".to_string(), "purchases".to_string(), "stocks".to_string(),
+                "warehouses".to_string(), "promotions".to_string(), "customers".to_string(),
+                "chat".to_string(), "reports".to_string(), "logistics".to_string(),
+                "finances".to_string(), "integrations".to_string(), "settings".to_string(),
+                "service".to_string(),
+            ];
+        }
         let is_active: i64 = row.get("is_active");
         let created_at_str: String = row.get("created_at");
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
@@ -278,12 +302,24 @@ impl UserContract for UserModule {
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
+        let mut final_menus = req.accessible_menus;
+        if req.role.to_lowercase().contains("admin") {
+            final_menus = vec![
+                "dashboard".to_string(), "orders".to_string(), "master_products".to_string(),
+                "channel_products".to_string(), "purchases".to_string(), "stocks".to_string(),
+                "warehouses".to_string(), "promotions".to_string(), "customers".to_string(),
+                "chat".to_string(), "reports".to_string(), "logistics".to_string(),
+                "finances".to_string(), "integrations".to_string(), "settings".to_string(),
+                "service".to_string(),
+            ];
+        }
+
         Ok(UserAccountDto {
             id: new_id,
             username: clean_username,
             full_name: req.full_name,
             role: req.role,
-            accessible_menus: req.accessible_menus,
+            accessible_menus: final_menus,
             is_active: true,
             created_at: now,
         })
@@ -397,7 +433,7 @@ mod tests {
     async fn test_user_accounts_and_rbac() {
         let module = create_test_user_module().await;
         let accounts = module.list_accounts().await.unwrap();
-        assert_eq!(accounts.len(), 4);
+        assert_eq!(accounts.len(), 6);
 
         let admin = &accounts[0];
         assert_eq!(admin.username, "admin");

@@ -88,12 +88,13 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/orders", get(list_orders))
         .route("/api/v1/orders/:id", get(get_order))
         .route("/api/v1/orders/marketplace", post(create_marketplace_order).route_layer(order_limit_layer))
+        .route("/api/v1/users/accounts", get(list_user_accounts))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware::require_auth));
 
     // 3. Admin-only routes (valid JWT with admin role required)
     let admin_routes = Router::new()
         .route("/api/v1/auth/register", post(register_handler).route_layer(register_limit_layer))
-        .route("/api/v1/users/accounts", get(list_user_accounts).post(create_user_account))
+        .route("/api/v1/users/accounts", post(create_user_account))
         .route("/api/v1/users/accounts/:id/permissions", post(update_user_permissions))
         .route("/api/v1/inventory/bulk-update", post(bulk_update_stock).route_layer(inventory_limit_layer.clone()))
         .route("/api/v1/inventory/:id/safety-stock", post(update_safety_stock).route_layer(inventory_limit_layer.clone()))

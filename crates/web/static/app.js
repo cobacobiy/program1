@@ -11,7 +11,7 @@ function escapeHtml(str) {
 let currentOrders = [];
 let userAccounts = [];
 let activeAccount = null;
-let authToken = localStorage.getItem("program1_jwt_token") || null;
+let authToken = localStorage.getItem("program1_seller_jwt_token") || localStorage.getItem("program1_jwt_token") || null;
 
 const ALL_MENU_ITEMS = [
   { id: "dashboard", label: "📊 Dashboard" },
@@ -32,43 +32,153 @@ const ALL_MENU_ITEMS = [
   { id: "service", label: "🎧 Service & Support" }
 ];
 
-async function getAuthToken(username = "admin", password = "admin123") {
+// --- ADMIN THEME ENGINE (DARK / LIGHT) ---
+function initAdminTheme() {
+  const savedTheme = localStorage.getItem("program1_admin_theme") || "dark";
+  applyAdminTheme(savedTheme);
+}
+
+function applyAdminTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("program1_admin_theme", theme);
+  const icons = document.querySelectorAll(".admin-theme-icon");
+  icons.forEach(ic => {
+    ic.innerText = theme === "light" ? "🌙" : "☀️";
+  });
+}
+
+function toggleAdminTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+  const newTheme = currentTheme === "light" ? "dark" : "light";
+  applyAdminTheme(newTheme);
+}
+
+window.toggleAdminTheme = toggleAdminTheme;
+initAdminTheme();
+
+// --- SELLER PORTAL AUTHENTICATION & LOGIN ENGINE ---
+function showSellerLoginScreen() {
+  const loginScreen = document.getElementById("seller-login-screen");
+  const adminApp = document.getElementById("admin-main-app");
+  if (loginScreen) loginScreen.style.display = "flex";
+  if (adminApp) adminApp.style.display = "none";
+  const errAlert = document.getElementById("login-error-alert");
+  if (errAlert) {
+    errAlert.style.display = "none";
+    errAlert.innerText = "";
+  }
+  const uInput = document.getElementById("login-username");
+  if (uInput) setTimeout(() => uInput.focus(), 50);
+}
+
+function showAdminMainApp() {
+  const loginScreen = document.getElementById("seller-login-screen");
+  const adminApp = document.getElementById("admin-main-app");
+  if (loginScreen) loginScreen.style.display = "none";
+  if (adminApp) adminApp.style.display = "flex";
+}
+
+async function loginAdmin(username, password) {
+  const errAlert = document.getElementById("login-error-alert");
+  const submitBtn = document.getElementById("btn-submit-seller-login");
+  if (errAlert) {
+    errAlert.style.display = "none";
+    errAlert.innerText = "";
+  }
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = "⏳ Memverifikasi Akun...";
+  }
+
   try {
     const res = await fetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })
     });
+
     if (res.ok) {
       const data = await res.json();
       authToken = data.access_token;
-      localStorage.setItem("program1_jwt_token", authToken);
-      return authToken;
+      localStorage.setItem("program1_seller_jwt_token", authToken);
+      localStorage.setItem("program1_seller_active_user", username);
+      showAdminMainApp();
+      await loadData();
+      return true;
+    } else {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.error || err.message || "Username atau password salah. Silakan coba lagi.";
+      if (errAlert) {
+        errAlert.innerText = `❌ Login Gagal: ${msg}`;
+        errAlert.style.display = "block";
+      }
+      return false;
     }
-  } catch (err) {
-    console.error("Login authentication failed:", err);
+  } catch (e) {
+    if (errAlert) {
+      errAlert.innerText = `❌ Kesalahan koneksi: ${e.message}`;
+      errAlert.style.display = "block";
+    }
+    return false;
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "🚀 Masuk ke Seller Portal";
+    }
   }
-  return null;
+}
+
+function handleSellerLogin(event) {
+  if (event) event.preventDefault();
+  const uInput = document.getElementById("login-username");
+  const pInput = document.getElementById("login-password");
+  const username = uInput ? uInput.value.trim() : "";
+  const password = pInput ? pInput.value : "";
+  if (!username || !password) {
+    alert("Harap isi username dan password sub-akun.");
+    return;
+  }
+  loginAdmin(username, password);
+}
+
+function quickLoginSubAccount(username) {
+  const uInput = document.getElementById("login-username");
+  const pInput = document.getElementById("login-password");
+  if (uInput) uInput.value = username;
+  if (pInput) pInput.value = "admin123";
+  loginAdmin(username, "admin123");
+}
+
+function logoutAdmin() {
+  authToken = null;
+  activeAccount = null;
+  localStorage.removeItem("program1_seller_jwt_token");
+  localStorage.removeItem("program1_jwt_token");
+  localStorage.removeItem("program1_seller_active_user");
+  showSellerLoginScreen();
 }
 
 async function authFetch(url, options = {}) {
   if (!authToken) {
-    await getAuthToken();
+    logoutAdmin();
+    throw new Error("Authentication required. Please log in.");
   }
   options.headers = options.headers || {};
-  if (authToken) {
-    options.headers["Authorization"] = `Bearer ${authToken}`;
-  }
-  let res = await fetch(url, options);
+  options.headers["Authorization"] = `Bearer ${authToken}`;
+  const res = await fetch(url, options);
   if (res.status === 401) {
-    await getAuthToken(activeAccount ? activeAccount.username : "admin", "admin123");
-    if (authToken) {
-      options.headers["Authorization"] = `Bearer ${authToken}`;
-      res = await fetch(url, options);
-    }
+    console.warn("Session expired or unauthorized (401). Showing login screen...");
+    logoutAdmin();
   }
   return res;
 }
+
+window.showSellerLoginScreen = showSellerLoginScreen;
+window.showAdminMainApp = showAdminMainApp;
+window.loginAdmin = loginAdmin;
+window.handleSellerLogin = handleSellerLogin;
+window.quickLoginSubAccount = quickLoginSubAccount;
+window.logoutAdmin = logoutAdmin;
 
 let currentStocks = [];
 let activeStockFilter = "all";
@@ -186,7 +296,10 @@ async function fetchUserAccounts() {
     const res = await authFetch("/api/v1/users/accounts");
     if (res.ok) {
       userAccounts = await res.json();
-      if (!activeAccount && userAccounts.length > 0) {
+      const savedUser = localStorage.getItem("program1_seller_active_user");
+      if (savedUser) {
+        activeAccount = userAccounts.find(a => a.username === savedUser) || userAccounts[0];
+      } else if (!activeAccount && userAccounts.length > 0) {
         activeAccount = userAccounts.find(a => a.username === "admin") || userAccounts[0];
       } else if (activeAccount) {
         activeAccount = userAccounts.find(a => a.id === activeAccount.id) || userAccounts[0];
@@ -200,6 +313,20 @@ async function fetchUserAccounts() {
   }
 }
 
+function getRoleBadge(role) {
+  const r = (role || "").toLowerCase();
+  if (r.includes("admin")) {
+    return `<span class="badge-role" style="background:rgba(239,68,68,0.2); color:#fca5a5; font-size:0.65rem; font-weight:700">ADMIN</span>`;
+  }
+  if (r.includes("manager")) {
+    return `<span class="badge-role" style="background:rgba(59,130,246,0.2); color:#93c5fd; font-size:0.65rem; font-weight:700">MANAGER</span>`;
+  }
+  if (r.includes("cs") || r.includes("support")) {
+    return `<span class="badge-role" style="background:rgba(245,158,11,0.2); color:#fcd34d; font-size:0.65rem; font-weight:700">CS</span>`;
+  }
+  return `<span class="badge-role" style="background:rgba(16,185,129,0.2); color:#6ee7b7; font-size:0.65rem; font-weight:700">STAFF</span>`;
+}
+
 function renderUserAccountSwitcher() {
   if (!activeAccount) return;
   document.getElementById("header-user-avatar").innerText = activeAccount.full_name.charAt(0).toUpperCase();
@@ -207,15 +334,21 @@ function renderUserAccountSwitcher() {
   document.getElementById("header-user-role").innerText = activeAccount.role;
 
   const dropdownList = document.getElementById("user-dropdown-list");
-  dropdownList.innerHTML = userAccounts.map(acc => `
+  dropdownList.innerHTML = userAccounts.map(acc => {
+    const isAdmin = acc.role.toLowerCase().includes("admin");
+    const menuLabel = isAdmin ? "Semua 16 Menu" : `${acc.accessible_menus.length} Menu`;
+    return `
     <div class="dropdown-item ${acc.id === activeAccount.id ? "active" : ""}" onclick="switchActiveAccount('${acc.id}')">
       <div>
-        <div style="font-size:0.8rem; font-weight:600; color:#fff">${acc.full_name}</div>
-        <div style="font-size:0.7rem; color:var(--text-muted)">${acc.role}</div>
+        <div style="display:flex; align-items:center; gap:0.4rem">
+          <span style="font-size:0.8rem; font-weight:600; color:#fff">${acc.full_name}</span>
+          ${getRoleBadge(acc.role)}
+        </div>
+        <div style="font-size:0.7rem; color:var(--text-muted)">${acc.role} (@${acc.username})</div>
       </div>
-      <span style="font-size:0.7rem; color:var(--cyan); font-weight:700">${acc.accessible_menus.length} Menu</span>
+      <span style="font-size:0.7rem; color:${isAdmin ? 'var(--purple)' : 'var(--cyan)'}; font-weight:700">${menuLabel}</span>
     </div>
-  `).join("");
+  `}).join("");
 }
 
 function toggleUserDropdown() {
@@ -232,12 +365,14 @@ window.onclick = function(e) {
 async function switchActiveAccount(userId) {
   const acc = userAccounts.find(a => a.id === userId);
   if (acc) {
-    activeAccount = acc;
-    await getAuthToken(acc.username, "admin123");
-    renderUserAccountSwitcher();
-    applyRBACPermissions(activeAccount);
-    document.getElementById("user-dropdown-menu").classList.remove("show");
-    loadData();
+    const success = await loginAdmin(acc.username, "admin123");
+    if (success) {
+      activeAccount = acc;
+      renderUserAccountSwitcher();
+      applyRBACPermissions(activeAccount);
+      const dropdown = document.getElementById("user-dropdown-menu");
+      if (dropdown) dropdown.classList.remove("show");
+    }
   }
 }
 
@@ -245,10 +380,13 @@ function applyRBACPermissions(account) {
   if (!account) return;
   const navItems = document.querySelectorAll(".nav-item[data-menu-id]");
   let activeTabVisible = false;
+  const isAdmin = account.role && account.role.toLowerCase().includes("admin");
 
   navItems.forEach(item => {
     const menuId = item.getAttribute("data-menu-id");
-    if (account.accessible_menus.includes(menuId)) {
+    // Aturan: Level Admin bisa buka & lihat SEMUA menu.
+    // Level di bawahnya (Manager, Staff, CS) hanya menampilkan menu yang dicentang di accessible_menus.
+    if (isAdmin || (account.accessible_menus && account.accessible_menus.includes(menuId))) {
       item.style.display = "flex";
       if (item.classList.contains("active")) {
         activeTabVisible = true;
@@ -258,11 +396,16 @@ function applyRBACPermissions(account) {
     }
   });
 
-  if (!activeTabVisible && account.accessible_menus.length > 0) {
-    const firstMenu = account.accessible_menus[0];
-    const firstNavItem = document.querySelector(`.nav-item[data-menu-id="${firstMenu}"]`);
-    if (firstNavItem) {
-      switchView(firstMenu, firstNavItem);
+  if (!activeTabVisible) {
+    if (isAdmin) {
+      const firstNavItem = document.querySelector(`.nav-item[data-menu-id="dashboard"]`) || navItems[0];
+      if (firstNavItem) switchView("dashboard", firstNavItem);
+    } else if (account.accessible_menus && account.accessible_menus.length > 0) {
+      const firstMenu = account.accessible_menus[0];
+      const firstNavItem = document.querySelector(`.nav-item[data-menu-id="${firstMenu}"]`);
+      if (firstNavItem) {
+        switchView(firstMenu, firstNavItem);
+      }
     }
   }
 }
@@ -301,13 +444,22 @@ function openEditPermissionsModal(userId) {
   document.getElementById("edit-perm-user-id").value = user.id;
   document.getElementById("edit-perm-user-label").value = `${user.full_name} (${user.role})`;
 
+  const isAdmin = user.role && user.role.toLowerCase().includes("admin");
+  const banner = document.getElementById("edit-perm-admin-banner");
+  if (banner) {
+    banner.style.display = isAdmin ? "block" : "none";
+  }
+
   const grid = document.getElementById("perm-checkboxes-grid");
-  grid.innerHTML = ALL_MENU_ITEMS.map(m => `
-    <label class="perm-item">
-      <input type="checkbox" name="perm_menu" value="${m.id}" ${user.accessible_menus.includes(m.id) ? "checked" : ""}>
+  grid.innerHTML = ALL_MENU_ITEMS.map(m => {
+    const isChecked = isAdmin || user.accessible_menus.includes(m.id);
+    const isDisabled = isAdmin ? "disabled" : "";
+    return `
+    <label class="perm-item" style="${isAdmin ? 'opacity:0.75; cursor:not-allowed;' : ''}">
+      <input type="checkbox" name="perm_menu" value="${m.id}" ${isChecked ? "checked" : ""} ${isDisabled}>
       <span>${m.label}</span>
     </label>
-  `).join("");
+  `}).join("");
   document.getElementById("edit-permissions-modal").style.display = "flex";
 }
 
@@ -316,18 +468,55 @@ function closeEditPermissionsModal() {
 }
 
 function toggleAllPermCheckboxes(checked) {
-  document.querySelectorAll('#perm-checkboxes-grid input[name="perm_menu"]').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('#perm-checkboxes-grid input[name="perm_menu"]:not([disabled])').forEach(cb => cb.checked = checked);
+}
+
+// ROLE PRESET HANDLER FOR CREATING USER
+function onRolePresetChange(preset) {
+  const roleInput = document.getElementById("create-role");
+  if (preset === "custom") {
+    roleInput.value = "";
+    roleInput.focus();
+    return;
+  }
+  roleInput.value = preset;
+
+  const checkboxes = document.querySelectorAll('#create-perm-checkboxes-grid input[name="create_perm_menu"]');
+  if (preset.toLowerCase().includes("admin")) {
+    checkboxes.forEach(cb => { cb.checked = true; cb.disabled = true; });
+  } else {
+    checkboxes.forEach(cb => { cb.disabled = false; });
+    let defaultMenus = [];
+    if (preset === "Warehouse Manager") {
+      defaultMenus = ["dashboard", "master_products", "channel_products", "stocks", "warehouses", "logistics"];
+    } else if (preset === "Staff Gudang & Stok") {
+      defaultMenus = ["dashboard", "stocks", "master_products"];
+    } else if (preset === "Finance Officer") {
+      defaultMenus = ["dashboard", "orders", "reports", "finances"];
+    } else if (preset === "Customer Support") {
+      defaultMenus = ["dashboard", "orders", "customers", "chat", "service"];
+    } else {
+      defaultMenus = ["dashboard", "orders"];
+    }
+    checkboxes.forEach(cb => {
+      cb.checked = defaultMenus.includes(cb.value);
+    });
+  }
 }
 
 // CREATE USER MODAL HANDLERS
 function openCreateUserModal() {
   document.getElementById("create-username").value = "";
   document.getElementById("create-fullname").value = "";
-  document.getElementById("create-role").value = "";
+  const presetSelect = document.getElementById("create-role-preset");
+  if (presetSelect) presetSelect.value = "Customer Support";
+  document.getElementById("create-role").value = "Customer Support";
+
+  const csMenus = ["dashboard", "orders", "customers", "chat", "service"];
   const grid = document.getElementById("create-perm-checkboxes-grid");
   grid.innerHTML = ALL_MENU_ITEMS.map(m => `
     <label class="perm-item">
-      <input type="checkbox" name="create_perm_menu" value="${m.id}" checked>
+      <input type="checkbox" name="create_perm_menu" value="${m.id}" ${csMenus.includes(m.id) ? "checked" : ""}>
       <span>${m.label}</span>
     </label>
   `).join("");
@@ -348,6 +537,14 @@ function toggleSubmenu(id) {
 
 // --- NAVIGATION & RENDERING ---
 function switchView(viewName, navEl) {
+  if (activeAccount) {
+    const isAdmin = activeAccount.role && activeAccount.role.toLowerCase().includes("admin");
+    if (!isAdmin && activeAccount.accessible_menus && !activeAccount.accessible_menus.includes(viewName)) {
+      alert(`⚠️ Akses Ditolak: Akun Anda (${activeAccount.role}) tidak memiliki izin untuk membuka menu '${viewName}'. Silakan hubungi Administrator.`);
+      return;
+    }
+  }
+
   document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
   if (navEl) navEl.classList.add("active");
   document.querySelectorAll(".spa-view").forEach(el => el.classList.remove("active"));
@@ -626,7 +823,8 @@ function openGineeStockModal(productId, stockType) {
 
   document.getElementById("ginee-quick-input").value = "";
   document.getElementById("stock-modal-note").value = "";
-  document.getElementById("stock-modal-operator").value = activeAccount ? activeAccount.full_name : "Admin Ginee";
+  const sessionOperator = activeAccount ? `${activeAccount.full_name} (${activeAccount.role})` : "Admin Super (Owner)";
+  document.getElementById("stock-modal-operator").value = sessionOperator;
 
   calculateLiveStockPreview();
   document.getElementById("edit-stock-modal").style.display = "flex";
@@ -947,7 +1145,12 @@ document.addEventListener("DOMContentLoaded", () => {
     editPermForm.onsubmit = async (e) => {
       e.preventDefault();
       const userId = document.getElementById("edit-perm-user-id").value;
-      const checked = Array.from(document.querySelectorAll('#perm-checkboxes-grid input[name="perm_menu"]:checked')).map(cb => cb.value);
+      const user = userAccounts.find(u => u.id === userId);
+      const isAdmin = user && user.role && user.role.toLowerCase().includes("admin");
+      const checked = isAdmin
+        ? ALL_MENU_ITEMS.map(m => m.id)
+        : Array.from(document.querySelectorAll('#perm-checkboxes-grid input[name="perm_menu"]:checked')).map(cb => cb.value);
+
       const res = await authFetch(`/api/v1/users/accounts/${userId}/permissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -971,7 +1174,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const username = document.getElementById("create-username").value;
       const full_name = document.getElementById("create-fullname").value;
       const role = document.getElementById("create-role").value;
-      const accessible_menus = Array.from(document.querySelectorAll('#create-perm-checkboxes-grid input[name="create_perm_menu"]:checked')).map(cb => cb.value);
+      const isAdmin = role.toLowerCase().includes("admin");
+      const accessible_menus = isAdmin
+        ? ALL_MENU_ITEMS.map(m => m.id)
+        : Array.from(document.querySelectorAll('#create-perm-checkboxes-grid input[name="create_perm_menu"]:checked')).map(cb => cb.value);
 
       const res = await authFetch("/api/v1/users/accounts", {
         method: "POST",
@@ -999,7 +1205,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const stockType = document.getElementById("stock-modal-type").value;
       const newVal = parseInt(document.getElementById("stock-modal-value").value);
       let admin_note = document.getElementById("stock-modal-note").value.trim();
-      const updated_by = document.getElementById("stock-modal-operator").value.trim() || "Admin Ginee";
+      const sessionOperator = activeAccount ? `${activeAccount.full_name} (${activeAccount.role})` : "Admin Super (Owner)";
+      const updated_by = document.getElementById("stock-modal-operator").value.trim() || sessionOperator;
 
       if (isNaN(newVal) || newVal < 0) {
         alert("Harap masukkan nilai stok yang valid (angka >= 0).");
@@ -1048,6 +1255,12 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  loadData();
+  // Authentication initialization: Check if authenticated
+  if (!authToken) {
+    showSellerLoginScreen();
+  } else {
+    showAdminMainApp();
+    loadData();
+  }
 });
 
