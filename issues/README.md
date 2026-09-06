@@ -54,9 +54,9 @@ program1/
 | 15 | [#36 Order Status Workflow & State Machine](https://github.com/cobacobiy/program1/issues/36) | 🟡 HIGH | 2-3 hari | `[x]` DONE (In PR) — Order Status Workflow & State Machine (#36) |
 | 16 | [#37 Product Image Upload & File Storage](https://github.com/cobacobiy/program1/issues/37) | 🟡 HIGH | 2-3 hari | `[x]` DONE (In PR) — Product Image Upload & File Storage (#37) |
 | 17 | [#38 Catalog Pagination, Search & Filtering](https://github.com/cobacobiy/program1/issues/38) | 🟡 HIGH | 2 hari | `[x]` DONE (In PR) — Catalog Pagination, Search & Filtering (#38) |
-| 18 | [#39 Email Notification System](https://github.com/cobacobiy/program1/issues/39) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
-| 19 | [#40 Frontend Modularization (store.js Refactor)](https://github.com/cobacobiy/program1/issues/40) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
-| 20 | [#41 Buyer Order History & Profile Page](https://github.com/cobacobiy/program1/issues/41) | 🟡 HIGH | 2 hari | `[ ]` Open |
+| 18 | [#39 Email Notification System](https://github.com/cobacobiy/program1/issues/39) | 🟢 MEDIUM | 2-3 hari | `[x]` DONE — ConsoleEmailSender + SmtpEmailSender + OrderModule email hooks |
+| 19 | [#40 Frontend Modularization (store.js Refactor)](https://github.com/cobacobiy/program1/issues/40) | 🟢 MEDIUM | 2-3 hari | `[x]` DONE — 15 modular JS files in store/ & admin/ |
+| 20 | [#41 Buyer Order History & Profile Page](https://github.com/cobacobiy/program1/issues/41) | 🟡 HIGH | 2 hari | `[x]` DONE — Buyer dashboard, order history & profile update |
 | 21 | [#42 CI/CD Pipeline Optimization](https://github.com/cobacobiy/program1/issues/42) | 🟡 HIGH | 1-2 hari | `[x]` DONE — Parallel validate + build-ghcr with cargo caching (#43) |
 
 ---
@@ -118,13 +118,60 @@ graph TD
 
 ---
 
+### 🚀 Phase 2 — Advanced E-Commerce Features (Issue Guides)
+
+> Setiap issue di bawah punya file panduan step-by-step di folder `issues/`.
+> File panduan dirancang agar bisa dikerjakan oleh **junior developer** atau **AI agent murah** secara independen.
+
+| # | Issue Guide | GitHub Issue | Prioritas | Estimasi | Dependency |
+|---|-------------|--------------|-----------|----------|------------|
+| 1 | [Product Variant Support](issue1-product-variant-support.md) | [#52 Product Variant Support](https://github.com/cobacobiy/program1/issues/52) | 🟡 HIGH | 3-4 hari | Independen |
+| 2 | [Wishlist / Favorite Products](issue2-wishlist-favorite-products.md) | [#53 Wishlist / Favorite Products](https://github.com/cobacobiy/program1/issues/53) | 🟢 MEDIUM | 2-3 hari | Independen |
+| 3 | [Kupon Diskon & Promo Code](issue3-coupon-promo-code.md) | [#54 Coupon & Promo Code System](https://github.com/cobacobiy/program1/issues/54) | 🔴 CRITICAL | 3-4 hari | Independen |
+| 4 | [Product Review & Rating](issue4-product-review-rating.md) | [#55 Product Review & Rating System](https://github.com/cobacobiy/program1/issues/55) | 🟡 HIGH | 3-4 hari | Order Delivered |
+| 5 | [Shipping & Ongkir (RajaOngkir)](issue5-shipping-ongkir-integration.md) | [#56 Shipping / Ongkir Integration](https://github.com/cobacobiy/program1/issues/56) | 🔴 CRITICAL | 4-5 hari | Buyer Address |
+| 6 | [Sales Report & Export CSV/PDF](issue6-sales-report-export.md) | [#57 Sales Report & Export CSV/PDF](https://github.com/cobacobiy/program1/issues/57) | 🟡 HIGH | 2-3 hari | Analytics Module |
+| 7 | [Product Category & Filtering](issue7-product-category-filtering.md) | [#58 Product Category & Filtering](https://github.com/cobacobiy/program1/issues/58) | 🟡 HIGH | 2-3 hari | Independen |
+| 8 | [Multi-Language (i18n)](issue8-multi-language-i18n.md) | [#59 Multi-Language (i18n) Support](https://github.com/cobacobiy/program1/issues/59) | 🟢 MEDIUM | 2-3 hari | Independen |
+| 9 | [Notification Center](issue9-notification-center.md) | [#60 Notification Center](https://github.com/cobacobiy/program1/issues/60) | 🟡 HIGH | 3-4 hari | Independen |
+| 10 | [Return/Refund Management](issue10-return-refund-management.md) | [#61 Return & Refund Management](https://github.com/cobacobiy/program1/issues/61) | 🔴 CRITICAL | 4-5 hari | Order + Payment |
+
+### Urutan Pengerjaan Phase 2:
+
+1. **Parallel Batch A (Independen — bisa dikerjakan bersamaan)**:
+   - Issue 1 (Product Variant)
+   - Issue 2 (Wishlist)
+   - Issue 3 (Kupon Diskon)
+   - Issue 7 (Product Category)
+   - Issue 8 (Multi-Language)
+   - Issue 9 (Notification Center)
+
+2. **Sequential Batch B (Ada dependency)**:
+   - Issue 4 (Review) — butuh order delivered
+   - Issue 5 (Shipping) — butuh buyer address
+   - Issue 6 (Sales Report) — butuh analytics module
+   - Issue 10 (Return/Refund) — butuh order + payment
+
+---
+
 ## 💰 Estimasi Budget (AI Agent / Junior Dev)
+
+### Phase 1 (SELESAI ✅)
+
+| Batch | Issues | Estimasi Total | Status |
+|-------|--------|----------------|--------|
+| A | #34, #35, #37, #38, #40, #42 | 13-17 hari | ✅ DONE |
+| B | #36, #39, #41 | 6-8 hari | ✅ DONE |
+| **Total Phase 1** | **9 issues** | **~19-25 hari** | ✅ **SELESAI** |
+
+### Phase 2 (NEW 🆕)
 
 | Batch | Issues | Estimasi Total | Bisa Parallel |
 |-------|--------|----------------|---------------|
-| A | #13, #14, #16, #17, #19 | 13-17 hari | ✅ Ya (5 orang/agent) |
-| B | #15, #18, #20 | 6-8 hari | ⚠️ Sebagian |
-| **Total** | **8 issues** | **~19-25 hari** | — |
+| A | Issue 1, 2, 3, 7, 8, 9 | 16-21 hari | ✅ Ya (6 agent) |
+| B | Issue 4, 5, 6, 10 | 13-17 hari | ⚠️ Sebagian |
+| **Total Phase 2** | **10 issues** | **~29-38 hari** | — |
 
-> Jika dikerjakan oleh 3 junior developer / AI agents secara parallel:
-> **Estimasi selesai: ~2-3 minggu**
+> Jika dikerjakan oleh 3-5 junior developer / AI agents secara parallel:
+> **Estimasi selesai Phase 2: ~2-4 minggu**
+
