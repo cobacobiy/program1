@@ -35,3 +35,23 @@ jobs:
           else
             echo ".env does NOT exist in runner workspace."
           fi
+
+          echo "=== 8. SQLITE DATABASE INSPECTION ==="
+          docker run --rm -v program1_data:/app/data alpine sh -c '
+            if [ -f /app/data/program1.db ]; then
+              echo "DB file size: $(ls -l /app/data/program1.db)"
+            else
+              echo "DB file /app/data/program1.db does NOT exist!"
+            fi
+          ' || true
+          docker run --rm -v program1_data:/app/data debian:bookworm-slim sh -c '
+            apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1
+            if [ -f /app/data/program1.db ]; then
+              echo "--- _sqlx_migrations ---"
+              sqlite3 /app/data/program1.db "SELECT version, description, success, length(checksum) FROM _sqlx_migrations;" || true
+              echo "--- buyer_accounts schema ---"
+              sqlite3 /app/data/program1.db ".schema buyer_accounts" || true
+              echo "--- orders columns ---"
+              sqlite3 /app/data/program1.db "PRAGMA table_info(orders);" || true
+            fi
+          ' || true
