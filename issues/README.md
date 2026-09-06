@@ -30,34 +30,34 @@ program1/
 
 ### ✅ Phase 0 — Foundation (DONE)
 
-| # | Issue | Status |
-|---|-------|--------|
-| 1 | [Authentication & Password Hashing](./issue1_authentication.md) | `[x]` DONE — Argon2id di `core/src/auth.rs`, UserModule uses password_hash |
-| 2 | [JWT Middleware & Route Protection](./issue2_jwt_middleware.md) | `[x]` DONE — AuthModule + require_auth/require_buyer_auth/require_admin middleware |
-| 3 | [Database Persistence (SQLite)](./issue3_database_persistence.md) | `[x]` DONE — Semua module pakai `sqlx` + 9 migrations |
-| 4 | [Input Validation & Sanitization](./issue4_input_validation.md) | `[x]` DONE — `validator` crate + `ValidatedJson` extractor |
-| 5 | [CORS Hardening & Security Headers](./issue5_cors_security_headers.md) | `[x]` DONE — CorsLayer + security_headers middleware |
-| 6 | [Rate Limiting & Abuse Protection](./issue6_rate_limiting.md) | `[x]` DONE — Per-endpoint IP rate limiting |
-| 7 | [Audit Logging & Activity Trail](./issue7_audit_logging.md) | `[x]` DONE — AuditModule + SQLite persistence |
-| 8 | [Error Handling Standardization](./issue8_error_handling.md) | `[x]` DONE — ApiError + ErrorCode enum + structured JSON responses |
-| 9 | [Legacy Cleanup & Code Hygiene](./issue9_legacy_cleanup.md) | `[x]` DONE — Legacy product module removed |
-| 10 | [Environment Config & Secrets Management](./issue10_env_secrets.md) | `[x]` DONE — AppConfig with prod safety checks |
-| 11 | [API Versioning & Documentation (OpenAPI)](./issue11_api_docs.md) | `[x]` DONE — utoipa + Swagger UI at /swagger-ui |
-| 12 | [Health Check & Observability](./issue12_observability.md) | `[x]` DONE — /health + /health/ready + diagnostics workflow |
+| # | GitHub Issue | Status |
+|---|--------------|--------|
+| 1 | [#1 Authentication & Password Hashing](https://github.com/cobacobiy/program1/issues/1) | `[x]` DONE — Argon2id di `core/src/auth.rs`, UserModule uses password_hash |
+| 2 | [#2 JWT Middleware & Route Protection](https://github.com/cobacobiy/program1/issues/2) | `[x]` DONE — AuthModule + require_auth/require_buyer_auth/require_admin middleware |
+| 3 | [#3 Database Persistence (SQLite)](https://github.com/cobacobiy/program1/issues/3) | `[x]` DONE — Semua module pakai `sqlx` + 9 migrations |
+| 4 | [#4 Input Validation & Sanitization](https://github.com/cobacobiy/program1/issues/4) | `[x]` DONE — `validator` crate + `ValidatedJson` extractor |
+| 5 | [#5 CORS Hardening & Security Headers](https://github.com/cobacobiy/program1/issues/5) | `[x]` DONE — CorsLayer + security_headers middleware |
+| 6 | [#6 Rate Limiting & Abuse Protection](https://github.com/cobacobiy/program1/issues/6) | `[x]` DONE — Per-endpoint IP rate limiting |
+| 7 | [#7 Audit Logging & Activity Trail](https://github.com/cobacobiy/program1/issues/7) | `[x]` DONE — AuditModule + SQLite persistence |
+| 8 | [#8 Error Handling Standardization](https://github.com/cobacobiy/program1/issues/8) | `[x]` DONE — ApiError + ErrorCode enum + structured JSON responses |
+| 9 | [#9 Legacy Cleanup & Code Hygiene](https://github.com/cobacobiy/program1/issues/9) | `[x]` DONE — Legacy product module removed |
+| 10 | [#10 Environment Config & Secrets Management](https://github.com/cobacobiy/program1/issues/10) | `[x]` DONE — AppConfig with prod safety checks |
+| 11 | [#11 API Versioning & Documentation (OpenAPI)](https://github.com/cobacobiy/program1/issues/11) | `[x]` DONE — utoipa + Swagger UI at /swagger-ui |
+| 12 | [#12 Health Check & Observability](https://github.com/cobacobiy/program1/issues/12) | `[x]` DONE — /health + /health/ready + diagnostics workflow |
 
-### 🆕 Phase 1 — Core E-Commerce Features (NEW)
+### 🆕 Phase 1 — Core E-Commerce Features (GitHub Issues #34 – #42)
 
-| # | Issue | Prioritas | Estimasi | Status |
-|---|-------|-----------|----------|--------|
-| 13 | [Live Chat Module (Backend)](./issue13_live_chat_module.md) | 🟡 HIGH | 3-4 hari | `[ ]` TODO |
-| 14 | [Payment Gateway (Midtrans)](./issue14_payment_gateway.md) | 🔴 CRITICAL | 4-5 hari | `[ ]` TODO |
-| 15 | [Order Status Workflow & State Machine](./issue15_order_status_workflow.md) | 🟡 HIGH | 2-3 hari | `[ ]` TODO |
-| 16 | [Product Image Upload & File Storage](./issue16_image_upload.md) | 🟡 HIGH | 2-3 hari | `[ ]` TODO |
-| 17 | [Catalog Pagination, Search & Filtering](./issue17_pagination_search.md) | 🟡 HIGH | 2 hari | `[ ]` TODO |
-| 18 | [Email Notification System](./issue18_email_notifications.md) | 🟢 MEDIUM | 2-3 hari | `[ ]` TODO |
-| 19 | [Frontend Modularization (JS Refactor)](./issue19_frontend_modularization.md) | 🟢 MEDIUM | 2-3 hari | `[ ]` TODO |
-| 20 | [Buyer Order History & Profile Page](./issue20_buyer_order_history.md) | 🟡 HIGH | 2 hari | `[ ]` TODO |
-| 21 | [CI/CD Pipeline Optimization](./issue21_cicd_optimization.md) | 🟡 HIGH | 1-2 hari | `[ ]` TODO |
+| Local # | GitHub Issue | Prioritas | Estimasi | Status |
+|---------|--------------|-----------|----------|--------|
+| 13 | [#34 Live Chat Module (Backend)](https://github.com/cobacobiy/program1/issues/34) | 🟡 HIGH | 3-4 hari | `[ ]` Open |
+| 14 | [#35 Payment Gateway Integration (Midtrans)](https://github.com/cobacobiy/program1/issues/35) | 🔴 CRITICAL | 4-5 hari | `[ ]` Open |
+| 15 | [#36 Order Status Workflow & State Machine](https://github.com/cobacobiy/program1/issues/36) | 🟡 HIGH | 2-3 hari | `[ ]` Open |
+| 16 | [#37 Product Image Upload & File Storage](https://github.com/cobacobiy/program1/issues/37) | 🟡 HIGH | 2-3 hari | `[ ]` Open |
+| 17 | [#38 Catalog Pagination, Search & Filtering](https://github.com/cobacobiy/program1/issues/38) | 🟡 HIGH | 2 hari | `[ ]` Open |
+| 18 | [#39 Email Notification System](https://github.com/cobacobiy/program1/issues/39) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
+| 19 | [#40 Frontend Modularization (store.js Refactor)](https://github.com/cobacobiy/program1/issues/40) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
+| 20 | [#41 Buyer Order History & Profile Page](https://github.com/cobacobiy/program1/issues/41) | 🟡 HIGH | 2 hari | `[ ]` Open |
+| 21 | [#42 CI/CD Pipeline Optimization](https://github.com/cobacobiy/program1/issues/42) | 🟡 HIGH | 1-2 hari | `[ ]` Open |
 
 ---
 
@@ -65,15 +65,15 @@ program1/
 
 ```mermaid
 graph TD
-    I13["Issue 13: Live Chat Module"]
-    I14["Issue 14: Payment Gateway"]
-    I15["Issue 15: Order Status Workflow"]
-    I16["Issue 16: Image Upload"]
-    I17["Issue 17: Pagination & Search"]
-    I18["Issue 18: Email Notifications"]
-    I19["Issue 19: Frontend Modularization"]
-    I20["Issue 20: Buyer Order History"]
-    I21["Issue 21: CI/CD Optimization"]
+    I13["#34: Live Chat Module"]
+    I14["#35: Payment Gateway"]
+    I15["#36: Order Status Workflow"]
+    I16["#37: Image Upload"]
+    I17["#38: Pagination & Search"]
+    I18["#39: Email Notifications"]
+    I19["#40: Frontend Modularization"]
+    I20["#41: Buyer Order History"]
+    I21["#42: CI/CD Optimization"]
 
     I14 --> I15
     I14 --> I18
@@ -93,17 +93,17 @@ graph TD
 ### Urutan yang Disarankan:
 
 1. **Parallel Batch A (Tidak saling depend)**:
-   - Issue 13 (Live Chat) — bisa dikerjakan independen
-   - Issue 14 (Payment Gateway) — **CRITICAL**, kerjakan pertama
-   - Issue 16 (Image Upload) — bisa dikerjakan independen
-   - Issue 17 (Pagination) — bisa dikerjakan independen
-   - Issue 19 (Frontend Refactor) — bisa dikerjakan independen
-   - Issue 21 (CI/CD Optimization) — **KERJAKAN DULUAN** supaya semua issue berikutnya deploy lebih cepat
+   - Issue #34 (Live Chat) — bisa dikerjakan independen
+   - Issue #35 (Payment Gateway) — **CRITICAL**, kerjakan pertama
+   - Issue #37 (Image Upload) — bisa dikerjakan independen
+   - Issue #38 (Pagination) — bisa dikerjakan independen
+   - Issue #40 (Frontend Refactor) — bisa dikerjakan independen
+   - Issue #42 (CI/CD Optimization) — **KERJAKAN DULUAN** supaya semua issue berikutnya deploy lebih cepat
 
 2. **Sequential Batch B (Depend ke Batch A)**:
-   - Issue 15 (Order Status) — depend ke Issue 14
-   - Issue 18 (Email Notifications) — depend ke Issue 14
-   - Issue 20 (Buyer Order History) — depend ke Issue 15
+   - Issue #36 (Order Status) — depend ke Issue #35
+   - Issue #39 (Email Notifications) — depend ke Issue #35
+   - Issue #41 (Buyer Order History) — depend ke Issue #36
 
 ---
 

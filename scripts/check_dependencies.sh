@@ -41,6 +41,13 @@ else
     fi
 fi
 
+# 5. Check GitHub CLI (gh)
+if command -v gh &> /dev/null; then
+    echo "[OK] GitHub CLI found: $(gh --version | head -n 1)"
+else
+    echo "[WARN] GitHub CLI (gh) not found."
+fi
+
 echo "----------------------------------------------"
 echo " All dependency checks complete."
 echo "=============================================="
