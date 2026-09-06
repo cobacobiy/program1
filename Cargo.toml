@@ -12,6 +12,7 @@ members = [
     "crates/modules/analytics",
     "crates/modules/audit",
     "crates/modules/buyer",
+    "crates/modules/chat",
     "crates/web",
 ]
 

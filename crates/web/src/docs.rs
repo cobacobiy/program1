@@ -8,13 +8,14 @@ use crate::handlers;
 use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, BulkStockAdjustmentItem, BulkStockUpdateRequest,
     BulkStockUpdateResult, BuyerAccountDto, BuyerCheckoutRequest, BuyerLoginRequest,
-    CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelType, CreateCatalogItemRequest,
-    CreateUserAccountRequest, ErrorCode, InventoryStockDto, JwtClaims, LoginRequest,
-    LowStockAlertDto, MarketplaceOrderReq, OmniOrderDto, OrderItemDto, RegisterBuyerRequest,
-    RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto, StockAdjustmentLogDto,
-    StorefrontOrderItemRequest, StorefrontOrderRequest, UpdateBuyerStatusRequest,
-    UpdatePromotionStockRequest, UpdateSafetyStockRequest, UpdateSpareStockRequest,
-    UpdateUserPermissionsRequest, UpdateWarehouseStockRequest, UserAccountDto,
+    CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelType, ChatMessageDto,
+    ChatRoomDto, ChatSenderType, CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode,
+    InventoryStockDto, JwtClaims, LoginRequest, LowStockAlertDto, MarketplaceOrderReq,
+    OmniOrderDto, OrderItemDto, RegisterBuyerRequest, RegisterUserRequest, SafetyStockLogDto,
+    SalesAnalyticsDto, SendMessageRequest, StockAdjustmentLogDto, StorefrontOrderItemRequest,
+    StorefrontOrderRequest, UpdateBuyerStatusRequest, UpdatePromotionStockRequest,
+    UpdateSafetyStockRequest, UpdateSpareStockRequest, UpdateUserPermissionsRequest,
+    UpdateWarehouseStockRequest, UserAccountDto,
 };
 
 struct SecurityAddon;
@@ -76,6 +77,12 @@ impl Modify for SecurityAddon {
         handlers::admin_list_buyers_handler,
         handlers::admin_set_buyer_status_handler,
         handlers::admin_list_buyer_activity_handler,
+        handlers::buyer_get_or_create_room_handler,
+        handlers::buyer_get_messages_handler,
+        handlers::buyer_send_message_handler,
+        handlers::admin_list_chat_rooms_handler,
+        handlers::admin_get_messages_handler,
+        handlers::admin_send_message_handler,
     ),
     components(
         schemas(
@@ -117,6 +124,10 @@ impl Modify for SecurityAddon {
             RegisterBuyerRequest,
             BuyerLoginRequest,
             UpdateBuyerStatusRequest,
+            ChatMessageDto,
+            ChatRoomDto,
+            ChatSenderType,
+            SendMessageRequest,
         )
     ),
     tags(
@@ -131,6 +142,8 @@ impl Modify for SecurityAddon {
         (name = "Analytics", description = "Sales analytics and gross revenue metrics"),
         (name = "Users", description = "User accounts and RBAC permissions"),
         (name = "Audit", description = "System audit logs & compliance activity trail"),
+        (name = "Buyer Live Chat", description = "Buyer in-app chat messaging"),
+        (name = "Admin Live Chat", description = "Merchant live chat support inbox"),
     ),
     modifiers(&SecurityAddon),
     info(

@@ -104,6 +104,8 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
     .await
     .unwrap();
 
+    let chat_module = Arc::new(program1_module_chat::ChatModule::new(pool.clone()));
+
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
@@ -117,6 +119,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
         analytics_contract: analytics_module,
         audit_contract: audit_module,
         buyer_contract: buyer_module,
+        chat_contract: chat_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
