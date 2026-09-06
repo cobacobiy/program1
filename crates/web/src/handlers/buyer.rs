@@ -406,9 +406,6 @@ pub async fn admin_list_buyer_activity_handler(
             StatusCode::FORBIDDEN,
         ));
     }
-    let logs = state
-        .audit_contract
-        .get_logs(Some("buyer"), 100, 0)
-        .await?;
+    let logs = state.audit_contract.get_logs(Some("buyer"), 100, 0).await?;
     Ok(Json(logs))
 }

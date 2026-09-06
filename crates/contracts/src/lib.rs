@@ -737,11 +737,7 @@ pub struct RegisterBuyerRequest {
     pub full_name: String,
     #[validate(email(message = "Format email tidak valid"))]
     pub email: String,
-    #[validate(length(
-        min = 8,
-        max = 100,
-        message = "Kata sandi minimal 8 karakter"
-    ))]
+    #[validate(length(min = 8, max = 100, message = "Kata sandi minimal 8 karakter"))]
     pub password: String,
 }
 
@@ -854,18 +850,11 @@ pub struct UpdateBuyerAddressRequest {
 
 #[async_trait]
 pub trait BuyerContract: Send + Sync {
-    async fn register(
-        &self,
-        req: RegisterBuyerRequest,
-    ) -> Result<BuyerAuthResponse, ContractError>;
-    async fn login(
-        &self,
-        req: BuyerLoginRequest,
-    ) -> Result<BuyerAuthResponse, ContractError>;
-    async fn authenticate_google(
-        &self,
-        id_token: &str,
-    ) -> Result<BuyerAuthResponse, ContractError>;
+    async fn register(&self, req: RegisterBuyerRequest)
+        -> Result<BuyerAuthResponse, ContractError>;
+    async fn login(&self, req: BuyerLoginRequest) -> Result<BuyerAuthResponse, ContractError>;
+    async fn authenticate_google(&self, id_token: &str)
+        -> Result<BuyerAuthResponse, ContractError>;
     async fn request_phone_otp(
         &self,
         buyer_id: Uuid,
@@ -943,7 +932,11 @@ pub struct ChatRoomDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct SendMessageRequest {
-    #[validate(length(min = 1, max = 2000, message = "Pesan obrolan harus antara 1 sampai 2000 karakter"))]
+    #[validate(length(
+        min = 1,
+        max = 2000,
+        message = "Pesan obrolan harus antara 1 sampai 2000 karakter"
+    ))]
     pub content: String,
 }
 
@@ -972,4 +965,3 @@ pub trait ChatContract: Send + Sync {
 
     async fn list_active_rooms(&self) -> Result<Vec<ChatRoomDto>, ContractError>;
 }
-

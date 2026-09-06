@@ -100,7 +100,10 @@ async fn test_migration_008_supports_email_password_buyer_with_null_google_sub()
     )
     .execute(&pool)
     .await;
-    assert!(res.is_ok(), "Inserting buyer with NULL google_sub and password_hash must succeed");
+    assert!(
+        res.is_ok(),
+        "Inserting buyer with NULL google_sub and password_hash must succeed"
+    );
 
     // Multiple buyers with NULL google_sub should succeed (NULL is distinct in UNIQUE constraint)
     let res2 = sqlx::query(
@@ -109,5 +112,8 @@ async fn test_migration_008_supports_email_password_buyer_with_null_google_sub()
     )
     .execute(&pool)
     .await;
-    assert!(res2.is_ok(), "Multiple buyers with NULL google_sub must succeed without violating UNIQUE index");
+    assert!(
+        res2.is_ok(),
+        "Multiple buyers with NULL google_sub must succeed without violating UNIQUE index"
+    );
 }

@@ -564,10 +564,7 @@ impl BuyerContract for BuyerModule {
         })
     }
 
-    async fn login(
-        &self,
-        req: BuyerLoginRequest,
-    ) -> Result<BuyerAuthResponse, ContractError> {
+    async fn login(&self, req: BuyerLoginRequest) -> Result<BuyerAuthResponse, ContractError> {
         let email = req.email.trim().to_lowercase();
         if email.is_empty() {
             return Err(ContractError::ValidationError(
@@ -616,8 +613,8 @@ impl BuyerContract for BuyerModule {
             }
         };
 
-        let is_valid = program1_core::auth::verify_password(&req.password, &password_hash)
-            .unwrap_or(false);
+        let is_valid =
+            program1_core::auth::verify_password(&req.password, &password_hash).unwrap_or(false);
 
         if !is_valid {
             return Err(ContractError::ValidationError(
@@ -1291,15 +1288,14 @@ impl BuyerContract for BuyerModule {
         let now = Utc::now().to_rfc3339();
         let is_active_int = if is_active { 1 } else { 0 };
 
-        let result = sqlx::query(
-            "UPDATE buyer_accounts SET is_active = $1, updated_at = $2 WHERE id = $3",
-        )
-        .bind(is_active_int)
-        .bind(&now)
-        .bind(buyer_id.to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ContractError::Internal(e.to_string()))?;
+        let result =
+            sqlx::query("UPDATE buyer_accounts SET is_active = $1, updated_at = $2 WHERE id = $3")
+                .bind(is_active_int)
+                .bind(&now)
+                .bind(buyer_id.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(ContractError::NotFound(
@@ -1419,7 +1415,10 @@ mod tests {
             email: "ahmad@store.com".to_string(),
             password: "SecurePassword123!".to_string(),
         };
-        let reg_res = module.register(reg_req).await.expect("Registration should succeed");
+        let reg_res = module
+            .register(reg_req)
+            .await
+            .expect("Registration should succeed");
 
         assert_eq!(reg_res.buyer.email, "ahmad@store.com");
         assert_eq!(reg_res.buyer.full_name, "Ahmad Dahlan");
@@ -1506,26 +1505,38 @@ mod tests {
             .unwrap();
 
         assert_eq!(google_res.buyer.id, reg_res.buyer.id);
-        assert_eq!(google_res.buyer.google_sub, Some("google_sub_linked_999".to_string()));
+        assert_eq!(
+            google_res.buyer.google_sub,
+            Some("google_sub_linked_999".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_admin_list_all_buyers() {
         let (module, _) = setup_test_buyer_module().await;
 
-        let b1 = module.register(RegisterBuyerRequest {
-            full_name: "Buyer Alpha".to_string(),
-            email: "alpha@test.com".to_string(),
-            password: "Password123!".to_string(),
-        }).await.unwrap();
+        let b1 = module
+            .register(RegisterBuyerRequest {
+                full_name: "Buyer Alpha".to_string(),
+                email: "alpha@test.com".to_string(),
+                password: "Password123!".to_string(),
+            })
+            .await
+            .unwrap();
 
-        let b2 = module.register(RegisterBuyerRequest {
-            full_name: "Buyer Beta".to_string(),
-            email: "beta@test.com".to_string(),
-            password: "Password123!".to_string(),
-        }).await.unwrap();
+        let b2 = module
+            .register(RegisterBuyerRequest {
+                full_name: "Buyer Beta".to_string(),
+                email: "beta@test.com".to_string(),
+                password: "Password123!".to_string(),
+            })
+            .await
+            .unwrap();
 
-        let list = module.list_all_buyers().await.expect("List all buyers should succeed");
+        let list = module
+            .list_all_buyers()
+            .await
+            .expect("List all buyers should succeed");
         assert!(list.len() >= 2);
         assert_eq!(list[0].id, b2.buyer.id); // Most recent first
         assert_eq!(list[1].id, b1.buyer.id);
@@ -1535,20 +1546,29 @@ mod tests {
     async fn test_admin_toggle_buyer_active() {
         let (module, _) = setup_test_buyer_module().await;
 
-        let b = module.register(RegisterBuyerRequest {
-            full_name: "Deactivate Me".to_string(),
-            email: "deact@test.com".to_string(),
-            password: "Password123!".to_string(),
-        }).await.unwrap();
+        let b = module
+            .register(RegisterBuyerRequest {
+                full_name: "Deactivate Me".to_string(),
+                email: "deact@test.com".to_string(),
+                password: "Password123!".to_string(),
+            })
+            .await
+            .unwrap();
 
         assert!(b.buyer.is_active);
 
         // Deactivate
-        let updated = module.set_buyer_active_status(b.buyer.id, false).await.unwrap();
+        let updated = module
+            .set_buyer_active_status(b.buyer.id, false)
+            .await
+            .unwrap();
         assert!(!updated.is_active);
 
         // Reactivate
-        let reactivated = module.set_buyer_active_status(b.buyer.id, true).await.unwrap();
+        let reactivated = module
+            .set_buyer_active_status(b.buyer.id, true)
+            .await
+            .unwrap();
         assert!(reactivated.is_active);
     }
 

@@ -409,4 +409,3 @@ fn test_chat_contract_types_and_validation() {
     };
     assert!(too_long_req.validate().is_err());
 }
-

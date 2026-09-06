@@ -1187,7 +1187,9 @@ async fn test_buyer_register_and_login_api_endpoints() {
         .uri("/api/v1/buyer/auth/login")
         .method("POST")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_vec(&wrong_login_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_vec(&wrong_login_payload).unwrap(),
+        ))
         .unwrap();
 
     let res_wrong = app.clone().oneshot(req_wrong).await.unwrap();
@@ -1277,7 +1279,9 @@ async fn test_admin_buyers_management_and_activity() {
     let body = to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
     let buyers_data: Value = serde_json::from_slice(&body).unwrap();
     let buyers_array = buyers_data.as_array().unwrap();
-    assert!(buyers_array.iter().any(|b| b["email"] == "dewi@example.com"));
+    assert!(buyers_array
+        .iter()
+        .any(|b| b["email"] == "dewi@example.com"));
 
     // 6. Seller updates buyer active status to false -> 200 OK
     let update_status_payload = json!({
@@ -1288,7 +1292,9 @@ async fn test_admin_buyers_management_and_activity() {
         .method("PATCH")
         .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_vec(&update_status_payload).unwrap()))
+        .body(Body::from(
+            serde_json::to_vec(&update_status_payload).unwrap(),
+        ))
         .unwrap();
     let res_update = app.clone().oneshot(req_update_status).await.unwrap();
     assert_eq!(res_update.status(), StatusCode::OK);
@@ -1308,5 +1314,7 @@ async fn test_admin_buyers_management_and_activity() {
     let body = to_bytes(res_act.into_body(), usize::MAX).await.unwrap();
     let act_data: Value = serde_json::from_slice(&body).unwrap();
     let act_array = act_data.as_array().unwrap();
-    assert!(act_array.iter().any(|l| l["action"] == "BUYER_REGISTERED_EMAIL"));
+    assert!(act_array
+        .iter()
+        .any(|l| l["action"] == "BUYER_REGISTERED_EMAIL"));
 }
