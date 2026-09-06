@@ -3,6 +3,48 @@
    Target File: /home/cacyos/Downloads/github/program1/crates/web/static/store.js
    ========================================================================== */
 
+// --- MODERN IN-APP TOAST SYSTEM (ELIMINATES BROWSER POPUPS & IP EXPOSURE) ---
+function showToast(message, type = "info", duration = 4000) {
+  let container = document.getElementById("store-toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "store-toast-container";
+    container.className = "store-toast-container";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `store-toast ${type}`;
+
+  let icon = "ℹ️";
+  if (type === "success") icon = "✅";
+  if (type === "warning") icon = "⚠️";
+  if (type === "error") icon = "❌";
+
+  toast.innerHTML = `<span>${icon}</span><div style="flex:1">${message}</div>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(100%)";
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// Override default window.alert so browser dialogs displaying host IP addresses never appear
+window.alert = function(msg) {
+  let t = "info";
+  const str = String(msg);
+  if (str.includes("🎉") || str.includes("✅") || str.includes("berhasil") || str.includes("Berhasil")) {
+    t = "success";
+  } else if (str.includes("Gagal") || str.includes("Error") || str.includes("error") || str.includes("❌")) {
+    t = "error";
+  } else if (str.includes("Harap") || str.includes("Silakan") || str.includes("🔒") || str.includes("⚠️") || str.includes("kosong")) {
+    t = "warning";
+  }
+  showToast(str, t);
+};
+
 let cart = [];
 let catalog = [];
 let activeCategory = "ALL";
@@ -56,14 +98,10 @@ async function initStore() {
     const infoRes = await fetch('/api/v1/store/info');
     if (infoRes.ok) {
       storeInfo = await infoRes.json();
-      if (storeInfo.whatsapp_number && storeInfo.whatsapp_number !== "6281234567890") {
-        storeWhatsAppNumber = storeInfo.whatsapp_number;
-      } else {
-        storeWhatsAppNumber = "085810007735";
-      }
+      storeWhatsAppNumber = storeInfo.whatsapp_number || "085810007735";
       const nameEl = document.getElementById('header-store-name');
       if (nameEl) nameEl.innerText = storeInfo.store_name || "AURA Storefront";
-      
+
       const titleEl = document.getElementById('page-title');
       if (titleEl) titleEl.innerText = `${storeInfo.store_name || "AURA Storefront"} — Shopee Official Store`;
 
@@ -196,6 +234,8 @@ function openBuyerLoginModal() {
 function closeBuyerLoginModal() {
   const modal = document.getElementById("buyer-login-modal");
   if (modal) modal.style.display = "none";
+  const contextNotice = document.getElementById("buyer-login-context-notice");
+  if (contextNotice) contextNotice.style.display = "none";
 }
 
 async function fetchBuyerAuthConfig() {
@@ -601,11 +641,9 @@ async function handleRequestOtp() {
       // Setup WA Admin link
       const waLink = document.getElementById("otp-wa-admin-link");
       if (waLink) {
-        let rawWa = window.STORE_WHATSAPP || storeWhatsAppNumber || "085810007735";
-        let cleanWa = rawWa.replace(/[^0-9]/g, "");
-        if (cleanWa === "6281234567890" || cleanWa === "081234567890" || !cleanWa) {
-          cleanWa = "6285810007735";
-        } else if (cleanWa.startsWith("08")) {
+        const storeWa = window.STORE_WHATSAPP || storeWhatsAppNumber || "085810007735";
+        let cleanWa = storeWa.replace(/[^0-9]/g, "");
+        if (cleanWa.startsWith("08")) {
           cleanWa = "628" + cleanWa.substring(2);
         }
         if (!cleanWa) cleanWa = "6285810007735";
@@ -904,7 +942,7 @@ function renderCategoryPills() {
   if (!container) return;
 
   const categories = ["ALL", ...new Set(catalog.map(p => p.category))];
-  
+
   container.innerHTML = categories.map(cat => `
     <button class="category-pill ${cat === activeCategory ? 'active' : ''}" onclick="filterCategory('${cat}')">
       ${cat === 'ALL' ? '🔥 Semua Produk' : cat}
@@ -939,8 +977,8 @@ function renderCatalog() {
   }
 
   if (searchQuery) {
-    filtered = filtered.filter(p => 
-      p.name.toLowerCase().includes(searchQuery) || 
+    filtered = filtered.filter(p =>
+      p.name.toLowerCase().includes(searchQuery) ||
       p.description.toLowerCase().includes(searchQuery) ||
       p.sku.toLowerCase().includes(searchQuery)
     );
@@ -1183,7 +1221,7 @@ function closeCart() {
 function toggleChatPopup(forceState) {
   const card = document.getElementById("chat-popup-card");
   if (!card) return;
-  
+
   if (typeof forceState === "boolean") {
     card.style.display = forceState ? "block" : "none";
   } else {
@@ -1213,15 +1251,36 @@ function updateFloatingChatWidget() {
     if (memberStatus) memberStatus.innerHTML = `● Sapaan Member: <strong style="color:#fff">${activeBuyer.full_name}</strong>`;
     if (fabLabel) fabLabel.innerText = "💬 Chat Penjual";
     if (fabBtn) fabBtn.classList.add("fab-member-active");
+    const waBtnTitle = document.getElementById("wa-btn-title");
+    const waBtnSubtitle = document.getElementById("wa-btn-subtitle");
+    if (waBtnTitle) waBtnTitle.innerText = "Chat Langsung via WhatsApp";
+    if (waBtnSubtitle) waBtnSubtitle.innerText = "Member Aktif ⚡ Terhubung Langsung ke Penjual";
   } else {
     if (memberBadge) memberBadge.style.display = "none";
     if (memberStatus) memberStatus.innerText = "● CS Online & Siap Membantu";
     if (fabLabel) fabLabel.innerText = "Chat Penjual";
     if (fabBtn) fabBtn.classList.remove("fab-member-active");
+    const waBtnTitle = document.getElementById("wa-btn-title");
+    const waBtnSubtitle = document.getElementById("wa-btn-subtitle");
+    if (waBtnTitle) waBtnTitle.innerText = "Chat via WhatsApp (Khusus Member)";
+    if (waBtnSubtitle) waBtnSubtitle.innerText = "🔒 Masuk / daftar untuk chat langsung";
   }
 }
 
 function handleDirectWhatsAppChat() {
+  // WhatsApp is ONLY accessible after registered or logged in
+  if (!activeBuyer || !buyerToken) {
+    toggleChatPopup(false);
+    openBuyerLoginModal();
+    const contextNotice = document.getElementById("buyer-login-context-notice");
+    if (contextNotice) {
+      contextNotice.style.display = "block";
+      contextNotice.innerHTML = "🔒 <strong>Akses WhatsApp Khusus Member:</strong> Silakan masuk atau daftar akun terlebih dahulu untuk menghubungi Penjual via WhatsApp. Anda juga dapat menggunakan <em>Live Chat Toko</em> secara langsung tanpa login.";
+    }
+    showToast("Fitur WhatsApp khusus untuk pembeli yang sudah terdaftar. Silakan masuk atau buat akun.", "warning");
+    return;
+  }
+
   let rawNum = storeWhatsAppNumber || (storeInfo && storeInfo.whatsapp_number) || "085810007735";
   let cleanNum = rawNum.replace(/[^0-9]/g, "");
   if (cleanNum === "6281234567890" || cleanNum === "081234567890" || !cleanNum) {
@@ -1232,15 +1291,9 @@ function handleDirectWhatsAppChat() {
   if (!cleanNum) cleanNum = "6285810007735";
 
   const storeName = (storeInfo && storeInfo.store_name) || "AURA Storefront";
-  let message = "";
-
-  if (activeBuyer && buyerToken) {
-    const buyerIdSnippet = activeBuyer.id ? activeBuyer.id.substring(0, 8) : "-";
-    const phoneStr = activeBuyer.phone_number ? ` (HP: ${activeBuyer.phone_number})` : "";
-    message = `Halo Admin ${storeName}, saya ${activeBuyer.full_name}${phoneStr} (Member ID: ${buyerIdSnippet}).\n\nSaya adalah pembeli terdaftar dan ingin berkonsultasi mengenai produk / pesanan saya di toko.`;
-  } else {
-    message = `Halo Admin ${storeName}, saya pengunjung toko online Anda dan ingin bertanya seputar ketersediaan produk / informasi pemesanan.`;
-  }
+  const buyerIdSnippet = activeBuyer.id ? activeBuyer.id.substring(0, 8) : "-";
+  const phoneStr = activeBuyer.phone_number ? ` (HP: ${activeBuyer.phone_number})` : "";
+  const message = `Halo Admin ${storeName}, saya ${activeBuyer.full_name}${phoneStr} (Member ID: ${buyerIdSnippet}).\n\nSaya adalah pembeli terdaftar dan ingin berkonsultasi mengenai produk / pesanan saya di toko.`;
 
   toggleChatPopup(false);
 
@@ -1249,13 +1302,7 @@ function handleDirectWhatsAppChat() {
 }
 
 function openInAppChatWindow() {
-  if (!activeBuyer || !buyerToken) {
-    alert("ℹ️ Silakan masuk / daftar sebagai member terlebih dahulu untuk memulai sesi obrolan internal, atau gunakan tombol WhatsApp untuk respon instan.");
-    toggleChatPopup(false);
-    openBuyerLoginModal();
-    return;
-  }
-
+  // Free access for everyone (guests and logged-in members)!
   toggleChatPopup(false);
   const win = document.getElementById("inapp-chat-window");
   if (win) win.style.display = "flex";
@@ -1266,11 +1313,21 @@ function openInAppChatWindow() {
       text: "Sesi Live Chat dimulai. Terhubung ke Customer Service Toko.",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     });
-    inAppChatMessages.push({
-      sender: "seller",
-      text: `Halo ${activeBuyer.full_name}! 👋 Terima kasih telah menghubungi kami. Ada produk atau pesanan yang bisa kami bantu?`,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    });
+
+    const storeName = (storeInfo && storeInfo.store_name) || "CS Toko";
+    if (activeBuyer && buyerToken) {
+      inAppChatMessages.push({
+        sender: "seller",
+        text: `Halo ${activeBuyer.full_name}! 👋 Ada produk atau pesanan yang bisa kami bantu? Anda juga dapat menggunakan WhatsApp untuk respon instan.`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      });
+    } else {
+      inAppChatMessages.push({
+        sender: "seller",
+        text: `Halo Pengunjung! 👋 Selamat datang di ${storeName}. Silakan tanyakan seputar produk atau pesanan Anda di sini. Tim kami siap membantu.`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      });
+    }
   }
 
   renderInAppChatMessages();
@@ -1321,14 +1378,20 @@ function sendInAppChatMessage(e) {
 
   // Simulate seller response via Live Chat engine
   setTimeout(() => {
-    const buyerName = (activeBuyer && activeBuyer.full_name) || "Kak";
+    let replyText = "";
+    if (activeBuyer && buyerToken) {
+      const buyerName = activeBuyer.full_name || "Kak";
+      replyText = `Baik ${buyerName}, pesan Anda telah tercatat di antrean live chat kami. Karena Anda sudah login sebagai member, Anda juga dapat membuka chat WhatsApp Penjual jika membutuhkan respon kilat.`;
+    } else {
+      replyText = `Terima kasih atas pesan Anda! Tim kami telah menerima pertanyaan Anda. Catatan: Untuk menghubungi Penjual langsung via WhatsApp atau melacak riwayat pesanan, silakan masuk / buat akun terlebih dahulu.`;
+    }
     inAppChatMessages.push({
       sender: "seller",
-      text: `Baik ${buyerName}, pesan Anda telah tercatat di antrean live chat kami. Untuk bantuan darurat atau checkout cepat, Anda juga dapat menekan opsi WhatsApp.`,
+      text: replyText,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     });
     renderInAppChatMessages();
-  }, 1200);
+  }, 1000);
 }
 
 // Window Exports

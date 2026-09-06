@@ -139,6 +139,9 @@
 
       <!-- BUYER AUTHENTICATION (LOGIN / REGISTER) VIEW -->
       <div id="buyer-unauthenticated-view">
+        <!-- CONTEXTUAL BANNER (e.g. WHATSAPP ACCESS RESTRICTION) -->
+        <div id="buyer-login-context-notice" style="display:none; background:rgba(37,99,235,0.12); border:1px solid rgba(37,99,235,0.3); border-radius:8px; padding:0.6rem 0.8rem; margin-bottom:1rem; font-size:0.8rem; color:#93c5fd; line-height:1.45;"></div>
+
         <!-- TAB NAVIGATION -->
         <div class="auth-tab-nav">
           <button type="button" class="auth-tab-btn active" id="tab-btn-login" onclick="switchBuyerAuthTab('login')">Masuk</button>
@@ -424,28 +427,30 @@
           <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;" id="chat-member-name">Nama Member</div>
         </div>
 
-        <!-- OPTION 1: WHATSAPP DIRECT CONNECT (PRIMARY) -->
-        <button type="button" class="btn-chat-wa" onclick="handleDirectWhatsAppChat()">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.025 3.287l-.711 2.599 2.664-.698c.974.572 1.913.92 2.79.92 3.18 0 5.767-2.587 5.768-5.766 0-3.18-2.587-5.768-5.768-5.768zm0 10.37c-.851 0-1.688-.237-2.42-.686l-.173-.105-1.782.467.476-1.737-.113-.18c-.482-.767-.736-1.666-.735-2.563 0-2.617 2.13-4.746 4.747-4.746 1.267 0 2.458.494 3.354 1.391a4.717 4.717 0 0 1 1.39 3.355c0 2.618-2.129 4.746-4.747 4.746zm6.398-10.749C16.736 4.092 14.472 3 12.031 3 7.078 3 3.056 7.021 3.054 11.974c-.001 1.58.411 3.123 1.196 4.482L3 22l5.704-1.496c1.311.715 2.784 1.092 4.322 1.093h.005c4.953 0 8.975-4.021 8.977-8.974 0-2.399-.934-4.655-2.631-6.353z"/>
-          </svg>
-          <div style="text-align: left;">
-            <div style="font-weight: 700; font-size: 0.85rem;">Chat Langsung via WhatsApp</div>
-            <div style="font-size: 0.7rem; opacity: 0.9;">Respon Cepat ⚡ Terhubung ke Penjual</div>
-          </div>
-        </button>
-
-        <!-- OPTION 2: IN-APP LIVE CHAT (EXPANDABLE) -->
+        <!-- OPTION 1: IN-APP LIVE CHAT (PRIMARY / ACCESSIBLE TO ALL) -->
         <div class="chat-inapp-box">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-            <span style="font-size: 0.8rem; font-weight: 600; color: #e2e8f0;">💬 Live Chat Toko (In-App)</span>
-            <span class="badge-chat-standby">Standby</span>
+            <span style="font-size: 0.82rem; font-weight: 600; color: #e2e8f0;">💬 Live Chat Toko (In-App)</span>
+            <span class="badge-chat-standby" style="background:rgba(52,211,153,0.15); color:#34d399; border-color:rgba(52,211,153,0.3);">Online</span>
           </div>
           <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 0.6rem;">
-            Sistem obrolan internal terhubung ke antrean CS Toko.
+            Obrolan langsung dengan penjual tanpa perlu login.
           </div>
           <button type="button" class="btn-chat-inapp" onclick="openInAppChatWindow()">
-            <span>Mulai Obrolan In-App</span>
+            <span>💬 Mulai Obrolan Live Chat</span>
+          </button>
+        </div>
+
+        <!-- OPTION 2: WHATSAPP DIRECT CONNECT (KHUSUS MEMBER TERDAFTAR) -->
+        <div style="margin-top: 0.75rem;">
+          <button type="button" class="btn-chat-wa" id="btn-chat-wa" onclick="handleDirectWhatsAppChat()">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.025 3.287l-.711 2.599 2.664-.698c.974.572 1.913.92 2.79.92 3.18 0 5.767-2.587 5.768-5.766 0-3.18-2.587-5.768-5.768-5.768zm0 10.37c-.851 0-1.688-.237-2.42-.686l-.173-.105-1.782.467.476-1.737-.113-.18c-.482-.767-.736-1.666-.735-2.563 0-2.617 2.13-4.746 4.747-4.746 1.267 0 2.458.494 3.354 1.391a4.717 4.717 0 0 1 1.39 3.355c0 2.618-2.129 4.746-4.747 4.746zm6.398-10.749C16.736 4.092 14.472 3 12.031 3 7.078 3 3.056 7.021 3.054 11.974c-.001 1.58.411 3.123 1.196 4.482L3 22l5.704-1.496c1.311.715 2.784 1.092 4.322 1.093h.005c4.953 0 8.975-4.021 8.977-8.974 0-2.399-.934-4.655-2.631-6.353z"/>
+            </svg>
+            <div style="text-align: left;">
+              <div style="font-weight: 700; font-size: 0.85rem;" id="wa-btn-title">Chat via WhatsApp (Khusus Member)</div>
+              <div style="font-size: 0.7rem; opacity: 0.9;" id="wa-btn-subtitle">🔒 Masuk / daftar untuk chat langsung</div>
+            </div>
           </button>
         </div>
       </div>
