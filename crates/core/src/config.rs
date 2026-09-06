@@ -52,13 +52,18 @@ impl AppConfig {
         };
 
         let dev_support_password = if is_prod {
-            let pass = std::env::var("DEV_SUPPORT_PASSWORD").expect(
-                "CRITICAL: DEV_SUPPORT_PASSWORD must be explicitly configured in production!",
-            );
-            if pass == admin_default_password || pass == "admin123" || pass.len() < 16 {
-                panic!("CRITICAL: DEV_SUPPORT_PASSWORD must be independent from ADMIN_DEFAULT_PASSWORD and at least 16 characters in production!");
+            match std::env::var("DEV_SUPPORT_PASSWORD") {
+                Ok(pass) => {
+                    if pass == admin_default_password || pass == "admin123" || pass.len() < 16 {
+                        panic!("CRITICAL: DEV_SUPPORT_PASSWORD must be independent from ADMIN_DEFAULT_PASSWORD and at least 16 characters in production!");
+                    }
+                    Some(pass)
+                }
+                Err(_) => {
+                    tracing::warn!("SECURITY: DEV_SUPPORT_PASSWORD not explicitly set in production; UserModule will auto-generate a secure random high-entropy secret.");
+                    None
+                }
             }
-            Some(pass)
         } else {
             std::env::var("DEV_SUPPORT_PASSWORD").ok()
         };

@@ -41,7 +41,10 @@ async fn main() {
         .expect("Failed to initialize database and run migrations");
 
     // 2. Instantiate domain modules with database pool
-    let user_module = Arc::new(UserModule::new(db_pool.clone()));
+    let user_module = Arc::new(
+        UserModule::new(db_pool.clone())
+            .with_dev_support_password(config.dev_support_password.clone()),
+    );
     let auth_module = Arc::new(AuthModule::new(
         config.jwt_secret.clone(),
         config.jwt_expiry_hours,

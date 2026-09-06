@@ -98,4 +98,12 @@ jobs:
           fi
           docker pull ghcr.io/cobacobiy/program1:latest || true
           docker compose up -d --force-recreate --remove-orphans
+          echo "Verifying container state and health on Server 226..."
+          sleep 3
+          docker ps -a --filter "name=program1"
+          echo "=== CONTAINER LOGS ==="
+          docker logs --tail 100 program1-app || true
+          echo "=== CURL LOCAL 6090 HEALTH ==="
+          curl -ivs --max-time 5 http://localhost:6090/health || true
           echo "Production GHCR deployment complete on Linux Server 226!"
+
