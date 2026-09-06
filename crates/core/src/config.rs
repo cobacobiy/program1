@@ -22,6 +22,13 @@ pub struct AppConfig {
     pub midtrans_server_key: String,
     pub midtrans_client_key: String,
     pub midtrans_is_production: bool,
+    pub email_provider: String,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: Option<String>,
+    pub smtp_from_name: String,
+    pub smtp_from_email: String,
 }
 
 impl AppConfig {
@@ -125,6 +132,13 @@ impl AppConfig {
             midtrans_is_production: env_or("MIDTRANS_IS_PRODUCTION", "false")
                 .parse::<bool>()
                 .unwrap_or(false),
+            email_provider: env_or("EMAIL_PROVIDER", "console"),
+            smtp_host: env_or("SMTP_HOST", "smtp.gmail.com"),
+            smtp_port: env_or("SMTP_PORT", "587").parse().unwrap_or(587),
+            smtp_username: env_or("SMTP_USERNAME", "noreply@aura.co.id"),
+            smtp_password: std::env::var("SMTP_PASSWORD").ok(),
+            smtp_from_name: env_or("SMTP_FROM_NAME", "AURA Storefront"),
+            smtp_from_email: env_or("SMTP_FROM_EMAIL", "noreply@aura.co.id"),
         }
     }
 
