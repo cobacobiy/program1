@@ -296,7 +296,7 @@
   </div>
 
   <!-- BUYER ADD/EDIT ADDRESS MODAL -->
-  <div class="modal-overlay" id="buyer-address-modal">
+  <div class="modal-overlay" id="buyer-address-modal" style="z-index: 300 !important">
     <div class="modal-content" style="max-width:520px">
       <div class="modal-header">
         <h2 id="address-modal-title">📍 Tambah Alamat Pengiriman</h2>
@@ -540,5 +540,21 @@
       <span>Akun Saya</span>
     </div>
   </nav>
+
+  <!-- CUSTOM IN-APP CONFIRMATION MODAL (REPLACES BROWSER CONFIRM POPUP) -->
+  <div class="modal-overlay" id="store-confirm-modal" style="z-index: 400 !important">
+    <div class="modal-content" style="max-width: 380px; text-align: center; padding: 1.75rem;">
+      <div style="font-size: 2.2rem; margin-bottom: 0.5rem;" id="store-confirm-icon">⚠️</div>
+      <h3 id="store-confirm-title" style="margin: 0 0 0.5rem; font-size: 1.1rem; color: #fff; font-weight: 700;">Konfirmasi</h3>
+      <p id="store-confirm-message" style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.45;"></p>
+      <div style="display: flex; gap: 0.75rem; justify-content: center;">
+        <button type="button" class="btn-sm-action" style="padding: 0.65rem 1.25rem; min-width: 95px;" onclick="closeConfirmModal(false)">Batal</button>
+        <button type="button" class="btn-checkout" id="store-confirm-ok-btn" style="padding: 0.65rem 1.25rem; min-width: 95px; margin: 0; background: var(--shopee-orange);" onclick="closeConfirmModal(true)">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-APP TOAST NOTIFICATION CONTAINER -->
+  <div class="store-toast-container" id="store-toast-container"></div>
 </body>
 </html>

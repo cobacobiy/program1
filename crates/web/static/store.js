@@ -45,6 +45,45 @@ window.alert = function(msg) {
   showToast(str, t);
 };
 
+// --- CUSTOM IN-APP CONFIRMATION SYSTEM (REPLACES BROWSER CONFIRM POPUPS) ---
+let confirmModalResolver = null;
+
+function showConfirm(message, title = "Konfirmasi Tindakan", icon = "⚠️") {
+  return new Promise((resolve) => {
+    confirmModalResolver = resolve;
+    const modal = document.getElementById("store-confirm-modal");
+    const titleEl = document.getElementById("store-confirm-title");
+    const msgEl = document.getElementById("store-confirm-message");
+    const iconEl = document.getElementById("store-confirm-icon");
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (iconEl) iconEl.textContent = icon;
+    if (modal) {
+      modal.style.zIndex = "400";
+      modal.style.display = "flex";
+    }
+  });
+}
+
+function closeConfirmModal(result) {
+  const modal = document.getElementById("store-confirm-modal");
+  if (modal) modal.style.display = "none";
+  if (typeof confirmModalResolver === "function") {
+    confirmModalResolver(Boolean(result));
+    confirmModalResolver = null;
+  }
+}
+
+// Override native confirm & prompt as safety net to eliminate "192.168.6.xxx says:" browser popups
+window.confirm = function(msg) {
+  console.warn("Native window.confirm intercepted to prevent IP dialog:", msg);
+  return true;
+};
+window.prompt = function(msg, defaultText) {
+  console.warn("Native window.prompt intercepted to prevent IP dialog:", msg);
+  return defaultText || "";
+};
+
 let cart = [];
 let catalog = [];
 let activeCategory = "ALL";
@@ -329,7 +368,7 @@ async function handleBuyerLogin(e) {
     renderBuyerHeaderState();
     closeBuyerLoginModal();
 
-    alert(`🎉 Selamat datang kembali, ${activeBuyer.full_name}!`);
+    showToast(`🎉 Selamat datang kembali, ${activeBuyer.full_name}!`, "success");
 
     if (data.requires_phone_verification || !activeBuyer.phone_verified) {
       openOtpModal();
@@ -428,7 +467,7 @@ async function handleBuyerRegister(e) {
     renderBuyerHeaderState();
     closeBuyerLoginModal();
 
-    alert(`🎉 Pendaftaran berhasil! Selamat bergabung, ${activeBuyer.full_name}.`);
+    showToast(`🎉 Pendaftaran berhasil! Selamat bergabung, ${activeBuyer.full_name}.`, "success");
 
     if (data.requires_phone_verification || !activeBuyer.phone_verified) {
       openOtpModal();
@@ -473,14 +512,14 @@ async function devQuickBuyerLogin() {
       localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
       renderBuyerHeaderState();
       closeBuyerLoginModal();
-      alert(`⚡ Berhasil login instan demo sebagai: ${activeBuyer.full_name}`);
+      showToast(`⚡ Berhasil login instan demo sebagai: ${activeBuyer.full_name}`, "success");
       openOtpModal();
     } else {
       const err = await res.json();
-      alert(`Gagal login demo: ${err.message || err.error}`);
+      showToast(`Gagal login demo: ${err.message || err.error}`, "error");
     }
   } catch (e) {
-    alert(`Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   }
 }
 
@@ -561,7 +600,7 @@ async function verifyGoogleIdToken(idToken) {
       renderBuyerHeaderState();
       closeBuyerLoginModal();
 
-      alert(`🎉 Selamat datang, ${activeBuyer.full_name}! Login Google berhasil.`);
+      showToast(`🎉 Selamat datang, ${activeBuyer.full_name}! Login Google berhasil.`, "success");
 
       if (data.requires_phone_verification || !activeBuyer.phone_verified) {
         openOtpModal();
@@ -571,11 +610,11 @@ async function verifyGoogleIdToken(idToken) {
       }
     } else {
       const err = await res.json();
-      alert(`Gagal login dengan Google: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Gagal login dengan Google: ${err.message || err.error || JSON.stringify(err)}`, "error");
     }
   } catch (e) {
     console.error("Google Auth error:", e);
-    alert(`Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   }
 }
 
@@ -616,7 +655,7 @@ async function handleRequestOtp() {
   const phoneInput = document.getElementById("otp-input-phone");
   const phone = phoneInput ? phoneInput.value.trim() : "";
   if (!phone || phone.length < 8) {
-    alert("Harap masukkan nomor handphone / WhatsApp yang valid (minimal 8 digit).");
+    showToast("Harap masukkan nomor handphone / WhatsApp yang valid (minimal 8 digit).", "warning");
     return;
   }
 
@@ -667,15 +706,15 @@ async function handleRequestOtp() {
       } else {
         if (codeInput) codeInput.value = "";
         if (devNotice) devNotice.style.display = "none";
-        alert(`📲 Kode OTP telah dikirimkan ke WhatsApp/SMS nomor ${phone}.`);
+        showToast(`📲 Kode OTP telah dikirimkan ke WhatsApp/SMS nomor ${phone}.`, "info");
       }
     } else {
       const err = await res.json();
-      alert(`Gagal mengirim OTP: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Gagal mengirim OTP: ${err.message || err.error || JSON.stringify(err)}`, "error");
     }
   } catch (e) {
     console.error("Request OTP error:", e);
-    alert(`Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -710,7 +749,7 @@ async function handleVerifyOtp() {
   const codeInput = document.getElementById("otp-input-code");
   const code = codeInput ? codeInput.value.trim() : "";
   if (!code || code.length !== 6) {
-    alert("Harap masukkan 6 digit kode OTP.");
+    showToast("Harap masukkan 6 digit kode OTP.", "warning");
     return;
   }
 
@@ -734,16 +773,16 @@ async function handleVerifyOtp() {
       if (otpTimerInterval) clearInterval(otpTimerInterval);
       closeBuyerOtpModal();
       renderBuyerHeaderState();
-      alert("🎉 Nomor HP Anda berhasil diverifikasi! Alamat pengiriman sekarang dapat digunakan.");
+      showToast("🎉 Nomor HP Anda berhasil diverifikasi! Alamat pengiriman sekarang dapat digunakan.", "success");
       await fetchBuyerAddresses();
       updateCartUI();
     } else {
       const err = await res.json();
-      alert(`Verifikasi OTP Gagal: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Verifikasi OTP Gagal: ${err.message || err.error || JSON.stringify(err)}`, "error");
     }
   } catch (e) {
     console.error("Verify OTP error:", e);
-    alert(`Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -828,7 +867,10 @@ function openAddAddressModal() {
   }
   const defCheck = document.getElementById("addr-is-default");
   if (defCheck) defCheck.checked = buyerAddresses.length === 0;
-  if (modal) modal.style.display = "flex";
+  if (modal) {
+    modal.style.zIndex = "300";
+    modal.style.display = "flex";
+  }
 }
 
 function closeBuyerAddressModal() {
@@ -874,14 +916,14 @@ async function handleSaveBuyerAddress(e) {
       closeBuyerAddressModal();
       await fetchBuyerAddresses();
       updateCartUI();
-      alert("✅ Alamat pengiriman berhasil disimpan!");
+      showToast("Alamat pengiriman berhasil disimpan!", "success");
     } else {
       const err = await res.json();
-      alert(`Gagal menyimpan alamat: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Gagal menyimpan alamat: ${err.message || err.error || JSON.stringify(err)}`, "error");
     }
   } catch (e) {
     console.error("Save address error:", e);
-    alert(`Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   }
 }
 
@@ -892,9 +934,10 @@ async function handleSetDefaultAddress(id) {
       selectedAddressId = id;
       await fetchBuyerAddresses();
       updateCartUI();
+      showToast("Alamat utama berhasil diperbarui", "success");
     } else {
       const err = await res.json();
-      alert(`Gagal mengatur alamat default: ${err.message || err.error}`);
+      showToast(`Gagal mengatur alamat default: ${err.message || err.error}`, "error");
     }
   } catch (e) {
     console.error("Set default address error:", e);
@@ -902,18 +945,21 @@ async function handleSetDefaultAddress(id) {
 }
 
 async function handleDeleteAddress(id) {
-  if (!confirm("Hapus alamat ini dari buku alamat Anda?")) return;
+  const confirmed = await showConfirm("Hapus alamat ini dari buku alamat Anda?", "Hapus Alamat", "🗑️");
+  if (!confirmed) return;
   try {
     const res = await buyerAuthFetch(`/api/v1/buyer/addresses/${id}`, { method: "DELETE" });
     if (res.ok) {
+      showToast("Alamat berhasil dihapus", "success");
       await fetchBuyerAddresses();
       updateCartUI();
     } else {
       const err = await res.json();
-      alert(`Gagal menghapus alamat: ${err.message || err.error}`);
+      showToast(`Gagal menghapus alamat: ${err.message || err.error}`, "error");
     }
   } catch (e) {
     console.error("Delete address error:", e);
+    showToast(`Error: ${e.message}`, "error");
   }
 }
 
@@ -1147,7 +1193,7 @@ async function handleProcessCheckout(e) {
   if (e) e.preventDefault();
 
   if (cart.length === 0) {
-    alert("Keranjang belanja kosong.");
+    showToast("Keranjang belanja kosong.", "warning");
     return;
   }
 
@@ -1163,7 +1209,7 @@ async function handleProcessCheckout(e) {
 
   const selectedAddr = buyerAddresses.find(a => a.id === selectedAddressId);
   if (!selectedAddr) {
-    alert("Harap tambahkan alamat pengiriman terlebih dahulu.");
+    showToast("Harap tambahkan alamat pengiriman terlebih dahulu.", "warning");
     openAddAddressModal();
     return;
   }
@@ -1458,7 +1504,7 @@ function escapeHtml(str) {
 
 function openBuyerOrdersModal() {
   if (!buyerToken) {
-    alert("Silakan masuk terlebih dahulu untuk melihat riwayat pesanan Anda.");
+    showToast("Silakan masuk terlebih dahulu untuk melihat riwayat pesanan Anda.", "warning");
     openBuyerLoginModal();
     return;
   }
@@ -1515,7 +1561,7 @@ async function fetchBuyerOrders() {
       if (res.status === 401) {
         logoutBuyer();
         closeBuyerOrdersModal();
-        alert("Sesi masuk Anda telah berakhir. Silakan login kembali.");
+        showToast("Sesi masuk Anda telah berakhir. Silakan login kembali.", "warning");
         return;
       }
       const err = await res.json();
@@ -1602,11 +1648,10 @@ async function fetchBuyerOrders() {
 }
 
 async function handleBuyerCancelOrder(orderId) {
-  const confirmCancel = confirm("Apakah Anda yakin ingin membatalkan pesanan ini?");
+  const confirmCancel = await showConfirm("Apakah Anda yakin ingin membatalkan pesanan ini?", "Batalkan Pesanan", "⚠️");
   if (!confirmCancel) return;
 
-  const reason = prompt("Alasan pembatalan (opsional):", "Ingin mengubah rincian pesanan");
-  if (reason === null) return;
+  const reason = "Dibatalkan oleh pembeli";
 
   try {
     const res = await fetch(`/api/v1/orders/${orderId}/cancel`, {
@@ -1615,23 +1660,23 @@ async function handleBuyerCancelOrder(orderId) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${buyerToken}`
       },
-      body: JSON.stringify({ reason: reason || "Dibatalkan oleh pembeli" })
+      body: JSON.stringify({ reason })
     });
 
     if (res.ok) {
-      alert("✅ Pesanan berhasil dibatalkan.");
+      showToast("Pesanan berhasil dibatalkan.", "success");
       fetchBuyerOrders();
     } else {
       const err = await res.json();
-      alert(`❌ Gagal membatalkan pesanan: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Gagal membatalkan pesanan: ${err.message || err.error || JSON.stringify(err)}`, "error");
     }
   } catch (e) {
-    alert(`❌ Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   }
 }
 
 async function handleBuyerConfirmDelivery(orderId) {
-  const confirmReceived = confirm("Konfirmasi bahwa Anda telah menerima barang pesanan ini dalam kondisi baik?");
+  const confirmReceived = await showConfirm("Konfirmasi bahwa Anda telah menerima barang pesanan ini dalam kondisi baik?", "Konfirmasi Penerimaan", "📦");
   if (!confirmReceived) return;
 
   try {
@@ -1643,18 +1688,21 @@ async function handleBuyerConfirmDelivery(orderId) {
     });
 
     if (res.ok) {
-      alert("🎉 Terima kasih! Pesanan telah dikonfirmasi diterima.");
+      showToast("Terima kasih! Pesanan telah dikonfirmasi diterima.", "success");
       fetchBuyerOrders();
     } else {
       const err = await res.json();
-      alert(`❌ Gagal konfirmasi pesanan: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Gagal konfirmasi pesanan: ${err.message || err.error || JSON.stringify(err)}`, "error");
     }
   } catch (e) {
-    alert(`❌ Error: ${e.message}`);
+    showToast(`Error: ${e.message}`, "error");
   }
 }
 
 // Window Exports
+window.showToast = showToast;
+window.showConfirm = showConfirm;
+window.closeConfirmModal = closeConfirmModal;
 window.openBuyerLoginModal = openBuyerLoginModal;
 window.closeBuyerLoginModal = closeBuyerLoginModal;
 window.openBuyerOrdersModal = openBuyerOrdersModal;

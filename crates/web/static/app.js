@@ -8,6 +8,168 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// In-App Toast notification system for admin panel (eliminates browser native IP popups)
+function showAdminToast(message, type = "info", duration = 4000) {
+  let container = document.getElementById("admin-toast-container") || document.getElementById("store-toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "admin-toast-container";
+    container.className = "store-toast-container";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `store-toast ${type}`;
+
+  let icon = "ℹ️";
+  if (type === "success") icon = "✅";
+  if (type === "warning") icon = "⚠️";
+  if (type === "error") icon = "❌";
+
+  toast.innerHTML = `<span>${icon}</span><div style="flex:1">${message}</div>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(100%)";
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// Override alert for admin panel so IP address never appears in native browser dialogs
+window.alert = function(msg) {
+  let t = "info";
+  const str = String(msg);
+  if (str.includes("🎉") || str.includes("✅") || str.includes("berhasil") || str.includes("Berhasil")) {
+    t = "success";
+  } else if (str.includes("Gagal") || str.includes("Error") || str.includes("error") || str.includes("❌")) {
+    t = "error";
+  } else if (str.includes("Harap") || str.includes("Silakan") || str.includes("⚠️") || str.includes("Ditolak")) {
+    t = "warning";
+  }
+  showAdminToast(str, t);
+};
+
+// --- MODERN IN-APP ADMIN CONFIRM & PROMPT MODALS ---
+function ensureAdminDialogModal() {
+  let modal = document.getElementById("admin-dialog-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "admin-dialog-modal";
+    modal.className = "modal-overlay";
+    modal.style.zIndex = "9999";
+    modal.innerHTML = `
+      <div class="modal-card" style="max-width: 420px; text-align: center; padding: 1.75rem; border-radius: 12px; background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+        <div id="admin-dialog-icon" style="font-size: 2.2rem; margin-bottom: 0.5rem;">⚠️</div>
+        <h3 id="admin-dialog-title" style="margin: 0 0 0.5rem; font-size: 1.15rem; font-weight: 700; color: var(--text-heading, #f8fafc);">Konfirmasi</h3>
+        <p id="admin-dialog-message" style="font-size: 0.9rem; color: var(--text-muted, #94a3b8); margin-bottom: 1.25rem; line-height: 1.45;"></p>
+        <div id="admin-dialog-input-wrap" style="display: none; margin-bottom: 1.25rem;">
+          <input type="text" id="admin-dialog-input" class="form-control" style="width: 100%; box-sizing: border-box; padding: 0.65rem 0.85rem; border-radius: 6px; border: 1px solid var(--border-color, #475569); background: var(--bg-input, #0f172a); color: #fff; font-size: 0.9rem;">
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: center;">
+          <button type="button" id="admin-dialog-cancel" class="btn-action" style="padding: 0.6rem 1.25rem; min-width: 95px; border-radius: 6px; cursor: pointer;">Batal</button>
+          <button type="button" id="admin-dialog-confirm" class="btn-action btn-primary" style="padding: 0.6rem 1.25rem; min-width: 95px; border-radius: 6px; cursor: pointer;">Lanjutkan</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  return modal;
+}
+
+let adminDialogResolver = null;
+
+function showAdminConfirm(message, title = "Konfirmasi Tindakan", icon = "⚠️") {
+  return new Promise((resolve) => {
+    const modal = ensureAdminDialogModal();
+    adminDialogResolver = resolve;
+    document.getElementById("admin-dialog-icon").textContent = icon;
+    document.getElementById("admin-dialog-title").textContent = title;
+    document.getElementById("admin-dialog-message").textContent = message;
+    document.getElementById("admin-dialog-input-wrap").style.display = "none";
+
+    const cancelBtn = document.getElementById("admin-dialog-cancel");
+    const confirmBtn = document.getElementById("admin-dialog-confirm");
+
+    cancelBtn.onclick = () => {
+      modal.style.display = "none";
+      if (adminDialogResolver) {
+        adminDialogResolver(false);
+        adminDialogResolver = null;
+      }
+    };
+    confirmBtn.onclick = () => {
+      modal.style.display = "none";
+      if (adminDialogResolver) {
+        adminDialogResolver(true);
+        adminDialogResolver = null;
+      }
+    };
+    modal.style.display = "flex";
+  });
+}
+
+function showAdminPrompt(message, defaultValue = "", title = "Input Diperlukan", icon = "📝") {
+  return new Promise((resolve) => {
+    const modal = ensureAdminDialogModal();
+    adminDialogResolver = resolve;
+    document.getElementById("admin-dialog-icon").textContent = icon;
+    document.getElementById("admin-dialog-title").textContent = title;
+    document.getElementById("admin-dialog-message").textContent = message;
+
+    const inputWrap = document.getElementById("admin-dialog-input-wrap");
+    const inputEl = document.getElementById("admin-dialog-input");
+    inputWrap.style.display = "block";
+    inputEl.value = defaultValue;
+
+    const cancelBtn = document.getElementById("admin-dialog-cancel");
+    const confirmBtn = document.getElementById("admin-dialog-confirm");
+
+    const cleanup = () => {
+      inputEl.onkeydown = null;
+    };
+
+    cancelBtn.onclick = () => {
+      cleanup();
+      modal.style.display = "none";
+      if (adminDialogResolver) {
+        adminDialogResolver(null);
+        adminDialogResolver = null;
+      }
+    };
+    confirmBtn.onclick = () => {
+      cleanup();
+      modal.style.display = "none";
+      if (adminDialogResolver) {
+        adminDialogResolver(inputEl.value);
+        adminDialogResolver = null;
+      }
+    };
+    inputEl.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        confirmBtn.click();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelBtn.click();
+      }
+    };
+
+    modal.style.display = "flex";
+    setTimeout(() => inputEl.focus(), 50);
+  });
+}
+
+// Override native confirm & prompt as safety nets to eliminate "192.168.6.xxx says:" browser popups
+window.confirm = function(msg) {
+  console.warn("Native confirm blocked to prevent IP dialog:", msg);
+  return true;
+};
+window.prompt = function(msg, defaultText) {
+  console.warn("Native prompt blocked to prevent IP dialog:", msg);
+  return defaultText || "";
+};
+
 let currentOrders = [];
 let userAccounts = [];
 let activeAccount = null;
@@ -756,15 +918,15 @@ async function handleUpdateOrderStatus(orderId, nextStatus, trackingNumber = nul
   }
 }
 
-function handlePromptShipOrder(orderId) {
-  const trackingNumber = prompt("Masukkan Nomor Resi / Tracking AWB Pengiriman:", "");
+async function handlePromptShipOrder(orderId) {
+  const trackingNumber = await showAdminPrompt("Masukkan Nomor Resi / Tracking AWB Pengiriman:", "", "Kirim Pesanan", "🚚");
   if (trackingNumber !== null) {
     handleUpdateOrderStatus(orderId, "shipped", trackingNumber.trim() || null);
   }
 }
 
-function handlePromptCancelOrder(orderId) {
-  const reason = prompt("Masukkan alasan pembatalan pesanan:", "Dibatalkan oleh admin toko");
+async function handlePromptCancelOrder(orderId) {
+  const reason = await showAdminPrompt("Masukkan alasan pembatalan pesanan:", "Dibatalkan oleh admin toko", "Batalkan Pesanan", "❌");
   if (reason !== null) {
     handleUpdateOrderStatus(orderId, "cancelled", null, reason.trim() || "Dibatalkan oleh admin toko");
   }
@@ -1454,7 +1616,7 @@ async function handleActivateBreakGlass(e) {
 }
 
 async function handleDeactivateBreakGlass() {
-  if (!confirm("Apakah Anda yakin ingin segera menonaktifkan akses darurat developer? Akun dev_support akan dinonaktifkan seketika.")) {
+  if (!await showAdminConfirm("Apakah Anda yakin ingin segera menonaktifkan akses darurat developer? Akun dev_support akan dinonaktifkan seketika.", "Nonaktifkan Akses Darurat", "🔒")) {
     return;
   }
 
@@ -1612,7 +1774,7 @@ function renderCustomersTable(buyers) {
 
 async function toggleBuyerStatus(buyerId, newActiveStatus) {
   const actionText = newActiveStatus ? "mengaktifkan" : "menonaktifkan";
-  if (!confirm(`Apakah Anda yakin ingin ${actionText} akun pelanggan ini?`)) {
+  if (!await showAdminConfirm(`Apakah Anda yakin ingin ${actionText} akun pelanggan ini?`, "Konfirmasi Status Pelanggan", "👥")) {
     return;
   }
 
