@@ -574,6 +574,74 @@ pub struct ShippingAddressSnapshot {
     pub postal_code: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderStatus {
+    Pending,
+    Paid,
+    Processing,
+    Shipped,
+    Delivered,
+    Completed,
+    Cancelled,
+    ReturnRequested,
+    Returned,
+}
+
+impl OrderStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Paid => "paid",
+            Self::Processing => "processing",
+            Self::Shipped => "shipped",
+            Self::Delivered => "delivered",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::ReturnRequested => "return_requested",
+            Self::Returned => "returned",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "pending" => Some(Self::Pending),
+            "paid" => Some(Self::Paid),
+            "processing" => Some(Self::Processing),
+            "shipped" => Some(Self::Shipped),
+            "delivered" => Some(Self::Delivered),
+            "completed" => Some(Self::Completed),
+            "cancelled" => Some(Self::Cancelled),
+            "return_requested" => Some(Self::ReturnRequested),
+            "returned" => Some(Self::Returned),
+            _ => None,
+        }
+    }
+
+    /// Allowed transitions from the current order status
+    pub fn allowed_transitions(&self) -> Vec<OrderStatus> {
+        match self {
+            Self::Pending => vec![Self::Paid, Self::Cancelled],
+            Self::Paid => vec![Self::Processing, Self::Cancelled],
+            Self::Processing => vec![Self::Shipped],
+            Self::Shipped => vec![Self::Delivered],
+            Self::Delivered => vec![Self::Completed, Self::ReturnRequested],
+            Self::ReturnRequested => vec![Self::Returned, Self::Completed],
+            _ => vec![],
+        }
+    }
+
+    pub fn can_transition_to(&self, target: &OrderStatus) -> bool {
+        self.allowed_transitions().contains(target)
+    }
+}
+
+impl std::fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OmniOrderDto {
     pub id: Uuid,
@@ -589,6 +657,35 @@ pub struct OmniOrderDto {
     pub buyer_id: Option<Uuid>,
     #[serde(default)]
     pub shipping_snapshot: Option<ShippingAddressSnapshot>,
+    #[serde(default)]
+    pub tracking_number: Option<String>,
+    #[serde(default)]
+    pub shipped_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub delivered_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub cancelled_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub cancelled_by: Option<String>,
+    #[serde(default)]
+    pub cancel_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateOrderStatusRequest {
+    #[serde(alias = "status")]
+    pub new_status: OrderStatus,
+    #[validate(length(max = 100, message = "Nomor resi max 100 karakter"))]
+    pub tracking_number: Option<String>,
+    #[serde(alias = "cancel_reason")]
+    #[validate(length(max = 500, message = "Alasan max 500 karakter"))]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CancelOrderRequest {
+    #[validate(length(max = 500, message = "Alasan pembatalan max 500 karakter"))]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -653,6 +750,27 @@ pub trait OrderContract: Send + Sync {
     ) -> Result<OmniOrderDto, ContractError>;
     async fn list_orders(&self) -> Result<Vec<OmniOrderDto>, ContractError>;
     async fn get_order(&self, id: Uuid) -> Result<OmniOrderDto, ContractError>;
+
+    /// Update order status with transition validation
+    async fn update_order_status(
+        &self,
+        order_id: Uuid,
+        new_status: OrderStatus,
+        updated_by: &str,
+    ) -> Result<OmniOrderDto, ContractError>;
+
+    /// Update order status with additional metadata (tracking number, timestamps, reason)
+    async fn update_order_status_with_metadata(
+        &self,
+        order_id: Uuid,
+        new_status: OrderStatus,
+        updated_by: &str,
+        tracking_number: Option<String>,
+        reason: Option<String>,
+    ) -> Result<OmniOrderDto, ContractError>;
+
+    /// List orders placed by a specific buyer
+    async fn list_buyer_orders(&self, buyer_id: Uuid) -> Result<Vec<OmniOrderDto>, ContractError>;
 }
 
 // --- ANALYTICS CONTRACT ---
