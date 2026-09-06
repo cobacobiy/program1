@@ -1,4 +1,4 @@
-name: Server Diagnostics (Linux Server 226)
+name: Server Diagnostics
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   diagnose:
     runs-on: [self-hosted, 226node2]
     steps:
-      - name: Inspect Docker & App Status on Server 226
+      - name: Inspect Docker & App Status on Server
         shell: bash
         run: |
           echo "=== 1. DOCKER CONTAINERS (ALL) ==="

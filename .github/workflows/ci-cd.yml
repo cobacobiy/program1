@@ -79,7 +79,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ============================================
-  # Job 3: Deploy Production (Server 226 Linux Runner)
+  # Job 3: Deploy Production (Server Linux Runner)
   # ============================================
   deploy-production:
     needs: build-ghcr
@@ -89,21 +89,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy Container from GHCR (Linux Server 226)
+      - name: Deploy Container from GHCR (Server)
         shell: bash
         run: |
-          echo "Deploying Production Container from GHCR to Linux Server 226..."
+          echo "Deploying Production Container from GHCR to Server..."
           if [ ! -f ".env" ]; then
               cp .env.example .env
           fi
           docker pull ghcr.io/cobacobiy/program1:latest || true
           docker compose up -d --force-recreate --remove-orphans
-          echo "Verifying container state and health on Server 226..."
+          echo "Verifying container state and health on Server..."
           sleep 3
           docker ps -a --filter "name=program1"
           echo "=== CONTAINER LOGS ==="
           docker logs --tail 100 program1-app || true
           echo "=== CURL LOCAL 6090 HEALTH ==="
           curl -ivs --max-time 5 http://localhost:6090/health || true
-          echo "Production GHCR deployment complete on Linux Server 226!"
+          echo "Production GHCR deployment complete on Server!"
 
