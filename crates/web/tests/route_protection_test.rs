@@ -54,6 +54,12 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         audit_module.clone(),
     ));
     let chat_module = Arc::new(program1_module_chat::ChatModule::new(pool.clone()));
+    let payment_module = Arc::new(program1_module_payment::PaymentModule::new(
+        pool.clone(),
+        "test-server-key".to_string(),
+        "test-client-key".to_string(),
+        false,
+    ));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -73,6 +79,7 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         audit_contract: audit_module,
         buyer_contract: buyer_module,
         chat_contract: chat_module,
+        payment_contract: payment_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

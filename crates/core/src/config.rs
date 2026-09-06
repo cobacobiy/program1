@@ -19,6 +19,9 @@ pub struct AppConfig {
     pub otp_expiry_seconds: i64,
     pub otp_max_attempts: i64,
     pub otp_resend_cooldown_seconds: i64,
+    pub midtrans_server_key: String,
+    pub midtrans_client_key: String,
+    pub midtrans_is_production: bool,
 }
 
 impl AppConfig {
@@ -117,6 +120,11 @@ impl AppConfig {
             otp_expiry_seconds,
             otp_max_attempts,
             otp_resend_cooldown_seconds,
+            midtrans_server_key: env_or("MIDTRANS_SERVER_KEY", ""),
+            midtrans_client_key: env_or("MIDTRANS_CLIENT_KEY", ""),
+            midtrans_is_production: env_or("MIDTRANS_IS_PRODUCTION", "false")
+                .parse::<bool>()
+                .unwrap_or(false),
         }
     }
 

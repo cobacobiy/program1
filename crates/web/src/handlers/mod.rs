@@ -8,6 +8,7 @@ pub mod chat;
 pub mod health;
 pub mod inventory;
 pub mod order;
+pub mod payment;
 pub mod user;
 
 pub use analytics::*;
@@ -20,4 +21,5 @@ pub use chat::*;
 pub use health::*;
 pub use inventory::*;
 pub use order::*;
+pub use payment::*;
 pub use user::*;

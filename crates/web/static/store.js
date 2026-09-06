@@ -1186,22 +1186,69 @@ async function handleProcessCheckout(e) {
 
     if (res.ok) {
       const orderData = await res.json();
-      alert(`🎉 Pesanan Berhasil Dibuat!\nID Pesanan: ${orderData.id}\nPenerima: ${selectedAddr.recipient_name}\nSnapshot alamat pengiriman telah diamankan secara permanen.`);
       cart = [];
       updateCartUI();
       closeCart();
+      showToast(`🎉 Pesanan berhasil dibuat! Menyiapkan gerbang pembayaran...`, 'success', 4000);
+      await initiateMidtransPayment(orderData.id);
     } else {
       const err = await res.json();
-      alert(`Checkout Gagal: ${err.message || err.error || JSON.stringify(err)}`);
+      showToast(`Checkout Gagal: ${err.message || err.error || JSON.stringify(err)}`, 'error');
     }
   } catch (err) {
     console.error("Checkout order error:", err);
-    alert(`Error saat membuat order: ${err.message}`);
+    showToast(`Error saat membuat order: ${err.message}`, 'error');
   } finally {
     if (btnSubmit) {
       btnSubmit.disabled = false;
       btnSubmit.innerText = "🚀 Konfirmasi & Pesan Sekarang";
     }
+  }
+}
+
+async function initiateMidtransPayment(orderId) {
+  try {
+    const res = await buyerAuthFetch("/api/v1/payments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: orderId })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(`Gagal memuat pembayaran: ${err.message || err.error || 'Terjadi kesalahan'}`, 'error');
+      return;
+    }
+
+    const payment = await res.json();
+
+    if (window.snap && typeof window.snap.pay === "function" && payment.snap_token) {
+      window.snap.pay(payment.snap_token, {
+        onSuccess: function(result) {
+          showToast('🎉 Pembayaran Berhasil Dikonfirmasi!', 'success');
+          console.log('Payment success:', result);
+        },
+        onPending: function(result) {
+          showToast('⏳ Menunggu Pembayaran. Silakan selesaikan transaksi Anda.', 'warning');
+          console.log('Payment pending:', result);
+        },
+        onError: function(result) {
+          showToast('❌ Pembayaran Gagal.', 'error');
+          console.error('Payment error:', result);
+        },
+        onClose: function() {
+          showToast('Jendela pembayaran ditutup. Anda dapat membayar nanti.', 'info');
+        }
+      });
+    } else if (payment.snap_redirect_url) {
+      showToast('Membuka halaman pembayaran Midtrans Snap...', 'info');
+      window.open(payment.snap_redirect_url, '_blank');
+    } else {
+      showToast("Pesanan disimpan. Menunggu konfirmasi pembayaran.", "info");
+    }
+  } catch (err) {
+    console.error("Initiate payment error:", err);
+    showToast(`Error pembayaran: ${err.message}`, 'error');
   }
 }
 
@@ -1412,6 +1459,7 @@ window.handleSetDefaultAddress = handleSetDefaultAddress;
 window.handleDeleteAddress = handleDeleteAddress;
 window.switchCheckoutAddress = switchCheckoutAddress;
 window.handleProcessCheckout = handleProcessCheckout;
+window.initiateMidtransPayment = initiateMidtransPayment;
 window.openCart = openCart;
 window.closeCart = closeCart;
 window.toggleChatPopup = toggleChatPopup;

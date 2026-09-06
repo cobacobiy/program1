@@ -9,9 +9,10 @@ use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, BulkStockAdjustmentItem, BulkStockUpdateRequest,
     BulkStockUpdateResult, BuyerAccountDto, BuyerCheckoutRequest, BuyerLoginRequest,
     CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelType, ChatMessageDto,
-    ChatRoomDto, ChatSenderType, CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode,
-    InventoryStockDto, JwtClaims, LoginRequest, LowStockAlertDto, MarketplaceOrderReq,
-    OmniOrderDto, OrderItemDto, RegisterBuyerRequest, RegisterUserRequest, SafetyStockLogDto,
+    ChatRoomDto, ChatSenderType, CreateCatalogItemRequest, CreatePaymentRequest,
+    CreateUserAccountRequest, ErrorCode, InventoryStockDto, JwtClaims, LoginRequest,
+    LowStockAlertDto, MarketplaceOrderReq, OmniOrderDto, OrderItemDto, PaymentConfigDto,
+    PaymentTransactionDto, RegisterBuyerRequest, RegisterUserRequest, SafetyStockLogDto,
     SalesAnalyticsDto, SendMessageRequest, StockAdjustmentLogDto, StorefrontOrderItemRequest,
     StorefrontOrderRequest, UpdateBuyerStatusRequest, UpdatePromotionStockRequest,
     UpdateSafetyStockRequest, UpdateSpareStockRequest, UpdateUserPermissionsRequest,
@@ -83,6 +84,10 @@ impl Modify for SecurityAddon {
         handlers::admin_list_chat_rooms_handler,
         handlers::admin_get_messages_handler,
         handlers::admin_send_message_handler,
+        handlers::buyer_create_payment_handler,
+        handlers::payment_notification_handler,
+        handlers::get_payment_by_order_handler,
+        handlers::get_payment_config_handler,
     ),
     components(
         schemas(
@@ -128,6 +133,9 @@ impl Modify for SecurityAddon {
             ChatRoomDto,
             ChatSenderType,
             SendMessageRequest,
+            CreatePaymentRequest,
+            PaymentTransactionDto,
+            PaymentConfigDto,
         )
     ),
     tags(
@@ -139,6 +147,7 @@ impl Modify for SecurityAddon {
         (name = "Inventory", description = "Ginee OMS multi-warehouse & safety stock"),
         (name = "Channels", description = "Omnichannel marketplace sync"),
         (name = "Orders", description = "Storefront checkout & order management"),
+        (name = "Payments", description = "Midtrans payment processing & Snap checkout"),
         (name = "Analytics", description = "Sales analytics and gross revenue metrics"),
         (name = "Users", description = "User accounts and RBAC permissions"),
         (name = "Audit", description = "System audit logs & compliance activity trail"),

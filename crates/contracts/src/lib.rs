@@ -965,3 +965,59 @@ pub trait ChatContract: Send + Sync {
 
     async fn list_active_rooms(&self) -> Result<Vec<ChatRoomDto>, ContractError>;
 }
+
+// --- PAYMENT GATEWAY CONTRACT (MIDTRANS) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaymentTransactionDto {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub payment_method: String,
+    pub amount: f64,
+    pub currency: String,
+    pub status: String,
+    pub provider_ref: Option<String>,
+    pub snap_token: Option<String>,
+    pub snap_redirect_url: Option<String>,
+    pub paid_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreatePaymentRequest {
+    pub order_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaymentConfigDto {
+    pub client_key: String,
+    pub is_production: bool,
+    pub snap_url: String,
+}
+
+#[async_trait]
+pub trait PaymentContract: Send + Sync {
+    /// Create payment intent — calls Midtrans Snap API, returns snap_token
+    async fn create_payment(
+        &self,
+        order_id: Uuid,
+        amount: f64,
+        customer_name: &str,
+        customer_email: &str,
+    ) -> Result<PaymentTransactionDto, ContractError>;
+
+    /// Handle webhook notification from Midtrans
+    async fn handle_notification(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<PaymentTransactionDto, ContractError>;
+
+    /// Get payment status by order_id
+    async fn get_payment_by_order(
+        &self,
+        order_id: Uuid,
+    ) -> Result<Option<PaymentTransactionDto>, ContractError>;
+
+    /// Get client-facing Midtrans configuration
+    fn get_config(&self) -> PaymentConfigDto;
+}

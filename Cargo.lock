@@ -1652,6 +1652,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "program1-module-payment"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64",
+ "chrono",
+ "hex",
+ "program1-contracts",
+ "program1-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "program1-module-user"
 version = "0.1.0"
 dependencies = [
@@ -1686,6 +1706,7 @@ dependencies = [
  "program1-module-chat",
  "program1-module-inventory",
  "program1-module-order",
+ "program1-module-payment",
  "program1-module-user",
  "serde",
  "serde_json",

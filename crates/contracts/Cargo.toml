@@ -14,6 +14,6 @@ rand = { workspace = true }
 validator = { workspace = true }
 regex = { workspace = true }
 utoipa = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-serde_json.workspace = true

@@ -10,6 +10,7 @@ use program1_module_channel::ChannelSyncModule;
 use program1_module_chat::ChatModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
+use program1_module_payment::PaymentModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
 
@@ -89,6 +90,12 @@ async fn main() {
         buyer_config,
     ));
     let chat_module = Arc::new(ChatModule::new(db_pool.clone()));
+    let payment_module = Arc::new(PaymentModule::new(
+        db_pool.clone(),
+        config.midtrans_server_key.clone(),
+        config.midtrans_client_key.clone(),
+        config.midtrans_is_production,
+    ));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -109,6 +116,7 @@ async fn main() {
         audit_contract: audit_module,
         buyer_contract: buyer_module,
         chat_contract: chat_module,
+        payment_contract: payment_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

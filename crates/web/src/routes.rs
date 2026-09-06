@@ -134,11 +134,28 @@ pub fn create_app(state: AppState) -> Router {
         }
     });
 
+    let payment_limiter = limiter.clone();
+    let payment_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = payment_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(lim, "payments", 30, Duration::from_secs(60), req, next)
+                .await
+        }
+    });
+
     // 1. Public routes (no authentication required)
     let public_routes = Router::new()
         .route("/health", get(health_check))
         .route("/health/ready", get(readiness_check))
         .route("/api/v1/store/info", get(get_store_info))
+        .route(
+            "/api/v1/payments/config",
+            get(get_payment_config_handler),
+        )
+        .route(
+            "/api/v1/payments/notification",
+            post(payment_notification_handler).route_layer(payment_limit_layer.clone()),
+        )
         .route(
             "/api/v1/buyer/auth/config",
             get(get_buyer_auth_config_handler),
@@ -196,6 +213,14 @@ pub fn create_app(state: AppState) -> Router {
                 .post(buyer_send_message_handler)
                 .route_layer(chat_limit_layer.clone()),
         )
+        .route(
+            "/api/v1/payments",
+            post(buyer_create_payment_handler).route_layer(payment_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/payments/order/:order_id",
+            get(get_payment_by_order_handler),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_buyer_auth,
@@ -245,6 +270,10 @@ pub fn create_app(state: AppState) -> Router {
             get(admin_get_messages_handler)
                 .post(admin_send_message_handler)
                 .route_layer(chat_limit_layer),
+        )
+        .route(
+            "/api/v1/admin/payments/order/:order_id",
+            get(get_payment_by_order_handler),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),

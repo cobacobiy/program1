@@ -13,6 +13,7 @@ members = [
     "crates/modules/audit",
     "crates/modules/buyer",
     "crates/modules/chat",
+    "crates/modules/payment",
     "crates/web",
 ]
 
