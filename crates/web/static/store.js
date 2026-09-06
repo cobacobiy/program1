@@ -56,7 +56,11 @@ async function initStore() {
     const infoRes = await fetch('/api/v1/store/info');
     if (infoRes.ok) {
       storeInfo = await infoRes.json();
-      storeWhatsAppNumber = storeInfo.whatsapp_number || "085810007735";
+      if (storeInfo.whatsapp_number && storeInfo.whatsapp_number !== "6281234567890") {
+        storeWhatsAppNumber = storeInfo.whatsapp_number;
+      } else {
+        storeWhatsAppNumber = "085810007735";
+      }
       const nameEl = document.getElementById('header-store-name');
       if (nameEl) nameEl.innerText = storeInfo.store_name || "AURA Storefront";
       
@@ -597,9 +601,11 @@ async function handleRequestOtp() {
       // Setup WA Admin link
       const waLink = document.getElementById("otp-wa-admin-link");
       if (waLink) {
-        const storeWa = window.STORE_WHATSAPP || storeWhatsAppNumber || "085810007735";
-        let cleanWa = storeWa.replace(/[^0-9]/g, "");
-        if (cleanWa.startsWith("08")) {
+        let rawWa = window.STORE_WHATSAPP || storeWhatsAppNumber || "085810007735";
+        let cleanWa = rawWa.replace(/[^0-9]/g, "");
+        if (cleanWa === "6281234567890" || cleanWa === "081234567890" || !cleanWa) {
+          cleanWa = "6285810007735";
+        } else if (cleanWa.startsWith("08")) {
           cleanWa = "628" + cleanWa.substring(2);
         }
         if (!cleanWa) cleanWa = "6285810007735";
@@ -1216,9 +1222,11 @@ function updateFloatingChatWidget() {
 }
 
 function handleDirectWhatsAppChat() {
-  const rawNum = storeWhatsAppNumber || (storeInfo && storeInfo.whatsapp_number) || "085810007735";
+  let rawNum = storeWhatsAppNumber || (storeInfo && storeInfo.whatsapp_number) || "085810007735";
   let cleanNum = rawNum.replace(/[^0-9]/g, "");
-  if (cleanNum.startsWith("08")) {
+  if (cleanNum === "6281234567890" || cleanNum === "081234567890" || !cleanNum) {
+    cleanNum = "6285810007735";
+  } else if (cleanNum.startsWith("08")) {
     cleanNum = "628" + cleanNum.substring(2);
   }
   if (!cleanNum) cleanNum = "6285810007735";

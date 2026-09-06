@@ -96,6 +96,8 @@ jobs:
           if [ ! -f ".env" ]; then
               cp .env.example .env
           fi
+          # Ensure any legacy dummy placeholder in production .env is updated to the actual number
+          sed -i 's/6281234567890/085810007735/g' .env || true
           docker pull ghcr.io/cobacobiy/program1:latest || true
           docker compose up -d --force-recreate --remove-orphans
           echo "Verifying container state and health on Server..."

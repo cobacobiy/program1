@@ -79,12 +79,19 @@ impl AppConfig {
             .parse::<i64>()
             .unwrap_or(60);
 
+        let raw_wa = env_or("STORE_WHATSAPP_NUMBER", "085810007735");
+        let store_whatsapp_number = if raw_wa == "6281234567890" || raw_wa.trim().is_empty() {
+            "085810007735".to_string()
+        } else {
+            raw_wa
+        };
+
         Self {
             app_env,
             app_port: env_or("APP_PORT", "8080").parse().unwrap_or(8080),
             store_name: env_or("STORE_NAME", "AURA Storefront"),
             store_currency: env_or("STORE_CURRENCY", "IDR"),
-            store_whatsapp_number: env_or("STORE_WHATSAPP_NUMBER", "085810007735"),
+            store_whatsapp_number,
             database_url: env_or("DATABASE_URL", "sqlite://./data/program1.db?mode=rwc"),
             admin_default_password,
             dev_support_password,
