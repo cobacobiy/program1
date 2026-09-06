@@ -112,7 +112,12 @@ async fn test_inventory_list_and_detail_endpoints() {
     assert_eq!(res.status(), StatusCode::OK);
 
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let stocks: Vec<Value> = serde_json::from_slice(&body).unwrap();
+    let val: Value = serde_json::from_slice(&body).unwrap();
+    let stocks = if val.is_object() {
+        val["data"].as_array().unwrap().clone()
+    } else {
+        val.as_array().unwrap().clone()
+    };
     assert!(!stocks.is_empty());
 
     let product_id = stocks[0]["product_id"].as_str().unwrap();
@@ -140,7 +145,12 @@ async fn test_update_all_stock_types_and_audit_logs() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let stocks: Vec<Value> = serde_json::from_slice(&body).unwrap();
+    let val: Value = serde_json::from_slice(&body).unwrap();
+    let stocks = if val.is_object() {
+        val["data"].as_array().unwrap().clone()
+    } else {
+        val.as_array().unwrap().clone()
+    };
     let product_id = stocks[0]["product_id"].as_str().unwrap();
 
     // 1. POST /api/v1/inventory/:id/warehouse-stock
@@ -243,7 +253,12 @@ async fn test_bulk_update_and_low_stock_alerts() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let stocks: Vec<Value> = serde_json::from_slice(&body).unwrap();
+    let val: Value = serde_json::from_slice(&body).unwrap();
+    let stocks = if val.is_object() {
+        val["data"].as_array().unwrap().clone()
+    } else {
+        val.as_array().unwrap().clone()
+    };
     let p1 = stocks[0]["product_id"].as_str().unwrap();
     let p2 = stocks[1]["product_id"].as_str().unwrap();
 
@@ -311,7 +326,12 @@ async fn test_non_admin_cannot_mutate_stock_forbidden() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let stocks: Vec<Value> = serde_json::from_slice(&body).unwrap();
+    let val: Value = serde_json::from_slice(&body).unwrap();
+    let stocks = if val.is_object() {
+        val["data"].as_array().unwrap().clone()
+    } else {
+        val.as_array().unwrap().clone()
+    };
     let product_id = stocks[0]["product_id"].as_str().unwrap();
 
     // Staff tries to update warehouse stock -> 403 Forbidden

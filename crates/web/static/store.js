@@ -109,9 +109,10 @@ async function initStore() {
     }
 
     // 3. Fetch Catalog Products
-    const res = await fetch('/api/v1/catalog');
+    const res = await fetch('/api/v1/catalog?page=1&page_size=100');
     if (res.ok) {
-      catalog = await res.json();
+      const respData = await res.json();
+      catalog = respData.data || respData;
       renderCategoryPills();
       renderCatalog();
     }

@@ -586,8 +586,12 @@ async fn test_checkout_security_and_server_constructed_shipping_snapshot() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let catalog_items: Vec<Value> = serde_json::from_slice(&body).unwrap();
-    let product_id = catalog_items[0]["id"].as_str().unwrap().to_string();
+    let val: Value = serde_json::from_slice(&body).unwrap();
+    let product_id = if val.is_object() {
+        val["data"][0]["id"].as_str().unwrap().to_string()
+    } else {
+        val[0]["id"].as_str().unwrap().to_string()
+    };
 
     // 1. Unauthenticated checkout attempt -> 401 Unauthorized
     let unauth_payload = json!({
@@ -879,8 +883,12 @@ async fn test_checkout_negative_scenarios_comprehensive() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let catalog_items: Vec<Value> = serde_json::from_slice(&body).unwrap();
-    let product_id = catalog_items[0]["id"].as_str().unwrap().to_string();
+    let val: Value = serde_json::from_slice(&body).unwrap();
+    let product_id = if val.is_object() {
+        val["data"][0]["id"].as_str().unwrap().to_string()
+    } else {
+        val[0]["id"].as_str().unwrap().to_string()
+    };
 
     // 1. Seller staff token attempting checkout -> 403 Forbidden
     let seller_login = json!({
@@ -1287,7 +1295,11 @@ async fn test_admin_buyers_management_and_activity() {
     assert_eq!(res_list.status(), StatusCode::OK);
     let body = to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
     let buyers_data: Value = serde_json::from_slice(&body).unwrap();
-    let buyers_array = buyers_data.as_array().unwrap();
+    let buyers_array = if buyers_data.is_object() {
+        buyers_data["data"].as_array().unwrap()
+    } else {
+        buyers_data.as_array().unwrap()
+    };
     assert!(buyers_array
         .iter()
         .any(|b| b["email"] == "dewi@example.com"));

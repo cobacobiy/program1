@@ -17,7 +17,7 @@ use program1_contracts::{
     StorefrontOrderItemRequest, StorefrontOrderRequest, UpdateBuyerStatusRequest,
     UpdateOrderStatusRequest, UpdatePromotionStockRequest, UpdateSafetyStockRequest,
     UpdateSpareStockRequest, UpdateUserPermissionsRequest, UpdateWarehouseStockRequest,
-    UserAccountDto,
+    UserAccountDto, PaginationParams,
 };
 
 struct SecurityAddon;
@@ -146,6 +146,7 @@ impl Modify for SecurityAddon {
             PaymentTransactionDto,
             PaymentConfigDto,
             handlers::UploadResponse,
+            PaginationParams,
         )
     ),
     tags(

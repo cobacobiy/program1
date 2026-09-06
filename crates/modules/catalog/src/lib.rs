@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
-    CatalogContract, CatalogItemDto, ContractError, CreateCatalogItemRequest,
+    CatalogContract, CatalogItemDto, ContractError, CreateCatalogItemRequest, PaginatedResponse,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -127,6 +127,85 @@ impl CatalogContract for CatalogModule {
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         rows.iter().map(Self::row_to_dto).collect()
+    }
+
+    async fn list_items_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        search: Option<&str>,
+        category: Option<&str>,
+        sort_by: Option<&str>,
+        sort_order: Option<&str>,
+    ) -> Result<PaginatedResponse<CatalogItemDto>, ContractError> {
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 100);
+        let offset = (page - 1) * page_size;
+
+        let search_term = search.map(|s| s.trim()).filter(|s| !s.is_empty());
+        let category_term = category.map(|c| c.trim()).filter(|c| !c.is_empty());
+
+        let order_col = match sort_by.unwrap_or("created_at").to_lowercase().as_str() {
+            "name" => "name",
+            "price" => "price",
+            "stock" => "stock",
+            "sku" => "sku",
+            _ => "created_at",
+        };
+        let order_dir = match sort_order.unwrap_or("desc").to_lowercase().as_str() {
+            "asc" => "ASC",
+            _ => "DESC",
+        };
+
+        let count_row = sqlx::query(
+            "SELECT COUNT(*) as total FROM catalog_items
+             WHERE ($1 IS NULL OR name LIKE '%' || $1 || '%' OR sku LIKE '%' || $1 || '%')
+               AND ($2 IS NULL OR category = $2)",
+        )
+        .bind(search_term)
+        .bind(category_term)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let total: i64 = count_row.get("total");
+
+        let query_str = format!(
+            "SELECT id, name, sku, category, price, stock, image_url, description, created_at
+             FROM catalog_items
+             WHERE ($1 IS NULL OR name LIKE '%' || $1 || '%' OR sku LIKE '%' || $1 || '%')
+               AND ($2 IS NULL OR category = $2)
+             ORDER BY {} {}
+             LIMIT $3 OFFSET $4",
+            order_col, order_dir
+        );
+
+        let rows = sqlx::query(&query_str)
+            .bind(search_term)
+            .bind(category_term)
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let data: Result<Vec<CatalogItemDto>, ContractError> =
+            rows.iter().map(Self::row_to_dto).collect();
+        let data = data?;
+
+        let total_pages = if total == 0 {
+            0
+        } else {
+            (total + page_size - 1) / page_size
+        };
+
+        Ok(PaginatedResponse {
+            data,
+            total,
+            page,
+            page_size,
+            total_pages,
+        })
     }
 
     async fn get_item(&self, id: Uuid) -> Result<CatalogItemDto, ContractError> {

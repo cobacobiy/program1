@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
     CatalogContract, ChannelType, ContractError, InventoryContract, OmniOrderDto, OrderContract,
-    OrderItemDto, OrderStatus, ShippingAddressSnapshot, StorefrontOrderItemRequest,
-    StorefrontOrderRequest,
+    OrderItemDto, OrderStatus, PaginatedResponse, ShippingAddressSnapshot,
+    StorefrontOrderItemRequest, StorefrontOrderRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -398,6 +398,80 @@ impl OrderContract for OrderModule {
         }
 
         Ok(list)
+    }
+
+    async fn list_orders_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        status: Option<&str>,
+        sort_by: Option<&str>,
+        sort_order: Option<&str>,
+    ) -> Result<PaginatedResponse<OmniOrderDto>, ContractError> {
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 100);
+        let offset = (page - 1) * page_size;
+
+        let status_term = status.map(|s| s.trim()).filter(|s| !s.is_empty());
+
+        let order_col = match sort_by.unwrap_or("created_at").to_lowercase().as_str() {
+            "total_amount" => "total_amount",
+            "status" => "status",
+            _ => "created_at",
+        };
+        let order_dir = match sort_order.unwrap_or("desc").to_lowercase().as_str() {
+            "asc" => "ASC",
+            _ => "DESC",
+        };
+
+        let count_row = sqlx::query(
+            "SELECT COUNT(*) as total FROM orders
+             WHERE ($1 IS NULL OR status = $1)",
+        )
+        .bind(status_term)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let total: i64 = count_row.get("total");
+
+        let query_str = format!(
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
+             FROM orders
+             WHERE ($1 IS NULL OR status = $1)
+             ORDER BY {} {}
+             LIMIT $2 OFFSET $3",
+            order_col, order_dir
+        );
+
+        let rows = sqlx::query(&query_str)
+            .bind(status_term)
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut data = Vec::new();
+        for r in rows {
+            let id_str: String = r.get("id");
+            let items = self.fetch_items_for_order(&id_str).await?;
+            data.push(self.row_to_order_dto(&r, items)?);
+        }
+
+        let total_pages = if total == 0 {
+            0
+        } else {
+            (total + page_size - 1) / page_size
+        };
+
+        Ok(PaginatedResponse {
+            data,
+            total,
+            page,
+            page_size,
+            total_pages,
+        })
     }
 
     async fn update_order_status(

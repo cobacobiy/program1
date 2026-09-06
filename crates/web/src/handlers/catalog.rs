@@ -1,29 +1,61 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
 use chrono::Utc;
 use serde_json::json;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
-use program1_contracts::{AuditLogEntry, CatalogItemDto, CreateCatalogItemRequest};
+use program1_contracts::{
+    AuditLogEntry, CatalogItemDto, CreateCatalogItemRequest, ErrorCode, PaginatedResponse,
+    PaginationParams,
+};
 
-/// List all product catalog items
+/// List product catalog items with pagination, search, category filter, and sorting
 #[utoipa::path(
     get,
     path = "/api/v1/catalog",
+    params(
+        ("page" = Option<i64>, Query, description = "Page number (min: 1)"),
+        ("page_size" = Option<i64>, Query, description = "Page size (1-100, default: 20)"),
+        ("search" = Option<String>, Query, description = "Keyword search for product name or SKU"),
+        ("category" = Option<String>, Query, description = "Filter by exact category name"),
+        ("sort_by" = Option<String>, Query, description = "Field to sort by (name, price, stock, sku, created_at)"),
+        ("sort_order" = Option<String>, Query, description = "Sort direction (asc, desc)")
+    ),
     responses(
-        (status = 200, description = "List of catalog items", body = Vec<CatalogItemDto>)
+        (status = 200, description = "Paginated catalog items", body = PaginatedResponse<CatalogItemDto>),
+        (status = 400, description = "Validation error", body = ApiError)
     ),
     tag = "Catalog"
 )]
 pub async fn list_catalog(
+    Query(params): Query<PaginationParams>,
     State(state): State<AppState>,
-) -> Result<Json<Vec<CatalogItemDto>>, ApiError> {
-    let items = state.catalog_contract.list_items().await?;
+) -> Result<Json<PaginatedResponse<CatalogItemDto>>, ApiError> {
+    params.validate().map_err(|e| {
+        ApiError::new(
+            ErrorCode::ValidationFailed,
+            format!("Invalid pagination parameters: {}", e),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let items = state
+        .catalog_contract
+        .list_items_paginated(
+            params.page(),
+            params.page_size(),
+            params.search.as_deref(),
+            params.category.as_deref(),
+            params.sort_by.as_deref(),
+            params.sort_order.as_deref(),
+        )
+        .await?;
     Ok(Json(items))
 }
 

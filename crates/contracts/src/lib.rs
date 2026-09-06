@@ -316,6 +316,49 @@ pub trait AuthContract: Send + Sync {
     fn validate_token(&self, token: &str) -> Result<JwtClaims, ContractError>;
 }
 
+// --- PAGINATION COMMON MODELS ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaginatedResponse<T: Serialize> {
+    pub data: Vec<T>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+    pub total_pages: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
+pub struct PaginationParams {
+    #[validate(range(min = 1, max = 1000, message = "Page must be between 1 and 1000"))]
+    pub page: Option<i64>,
+    #[validate(range(min = 1, max = 100, message = "Page size must be between 1 and 100"))]
+    pub page_size: Option<i64>,
+    #[validate(length(max = 200, message = "Search query max 200 characters"))]
+    pub search: Option<String>,
+    #[validate(length(max = 100, message = "Category filter max 100 characters"))]
+    pub category: Option<String>,
+    #[validate(length(max = 50, message = "Status filter max 50 characters"))]
+    pub status: Option<String>,
+    #[validate(length(max = 50, message = "Sort by max 50 characters"))]
+    pub sort_by: Option<String>,
+    #[validate(length(max = 10, message = "Sort order max 10 characters"))]
+    pub sort_order: Option<String>,
+}
+
+impl PaginationParams {
+    pub fn page(&self) -> i64 {
+        self.page.unwrap_or(1).max(1)
+    }
+
+    pub fn page_size(&self) -> i64 {
+        self.page_size.unwrap_or(20).clamp(1, 100)
+    }
+
+    pub fn offset(&self) -> i64 {
+        (self.page() - 1) * self.page_size()
+    }
+}
+
 // --- CATALOG CONTRACT ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -356,6 +399,18 @@ pub struct CreateCatalogItemRequest {
 #[async_trait]
 pub trait CatalogContract: Send + Sync {
     async fn list_items(&self) -> Result<Vec<CatalogItemDto>, ContractError>;
+
+    /// Paginated listing with search, category filtering, and sorting
+    async fn list_items_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        search: Option<&str>,
+        category: Option<&str>,
+        sort_by: Option<&str>,
+        sort_order: Option<&str>,
+    ) -> Result<PaginatedResponse<CatalogItemDto>, ContractError>;
+
     async fn get_item(&self, id: Uuid) -> Result<CatalogItemDto, ContractError>;
     async fn create_item(
         &self,
@@ -492,6 +547,17 @@ pub struct BulkStockUpdateResult {
 #[async_trait]
 pub trait InventoryContract: Send + Sync {
     async fn get_all_stocks(&self) -> Result<Vec<InventoryStockDto>, ContractError>;
+
+    /// Paginated stock listing with search and sorting
+    async fn list_all_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        search: Option<&str>,
+        sort_by: Option<&str>,
+        sort_order: Option<&str>,
+    ) -> Result<PaginatedResponse<InventoryStockDto>, ContractError>;
+
     async fn get_stock(&self, product_id: Uuid) -> Result<InventoryStockDto, ContractError>;
     async fn reserve_stock(&self, product_id: Uuid, quantity: u32) -> Result<(), ContractError>;
     async fn update_safety_stock(
@@ -753,6 +819,17 @@ pub trait OrderContract: Send + Sync {
         items: Vec<StorefrontOrderItemRequest>,
     ) -> Result<OmniOrderDto, ContractError>;
     async fn list_orders(&self) -> Result<Vec<OmniOrderDto>, ContractError>;
+
+    /// Paginated orders listing with status filtering and sorting
+    async fn list_orders_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        status: Option<&str>,
+        sort_by: Option<&str>,
+        sort_order: Option<&str>,
+    ) -> Result<PaginatedResponse<OmniOrderDto>, ContractError>;
+
     async fn get_order(&self, id: Uuid) -> Result<OmniOrderDto, ContractError>;
 
     /// Update order status with transition validation
@@ -1013,6 +1090,15 @@ pub trait BuyerContract: Send + Sync {
         address_id: Uuid,
     ) -> Result<BuyerAddressDto, ContractError>;
     async fn list_all_buyers(&self) -> Result<Vec<BuyerAccountDto>, ContractError>;
+
+    /// Paginated buyer accounts listing with search query
+    async fn list_buyers_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        search: Option<&str>,
+    ) -> Result<PaginatedResponse<BuyerAccountDto>, ContractError>;
+
     async fn set_buyer_active_status(
         &self,
         buyer_id: Uuid,

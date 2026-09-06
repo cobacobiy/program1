@@ -203,17 +203,20 @@ async function loadData() {
     }
 
     if (ordersRes.ok) {
-      currentOrders = await ordersRes.json();
+      const ordersData = await ordersRes.json();
+      currentOrders = ordersData.data || ordersData;
       renderOrders(currentOrders);
     }
 
     if (stocksRes.ok) {
-      currentStocks = await stocksRes.json();
+      const stocksData = await stocksRes.json();
+      currentStocks = stocksData.data || stocksData;
       renderGineeStockList(currentStocks);
     }
 
     if (catalogRes.ok) {
-      const catalog = await catalogRes.json();
+      const catalogData = await catalogRes.json();
+      const catalog = catalogData.data || catalogData;
       renderMasterProducts(catalog);
     }
 
@@ -1495,7 +1498,8 @@ async function loadCustomersDirectory() {
       return;
     }
 
-    currentCustomers = await res.json();
+    const buyersData = await res.json();
+    currentCustomers = buyersData.data || buyersData;
 
     // Update stat cards
     const totalCount = currentCustomers.length;
