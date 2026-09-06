@@ -269,9 +269,12 @@
       <!-- VIEW 3: MASTER PRODUCTS -->
       <div id="view-master_products" class="spa-view">
         <div class="panel-card">
-          <div class="panel-header">
-            <h3 class="panel-title">🗃️ Master Products Catalog</h3>
-            <span style="font-size:0.8rem; color:var(--cyan)">Global MSKU Master Repository</span>
+          <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center">
+            <div>
+              <h3 class="panel-title">🗃️ Master Products Catalog</h3>
+              <span style="font-size:0.8rem; color:var(--cyan)">Global MSKU Master Repository</span>
+            </div>
+            <button class="btn-action btn-primary" onclick="openCreateProductModal()">➕ Tambah Produk</button>
           </div>
           <table>
             <thead>
@@ -910,6 +913,66 @@
         <div style="display:flex; justify-content:flex-end; gap:0.8rem; margin-top:1.5rem">
           <button type="button" class="btn-action" onclick="closeCreateUserModal()">Batal</button>
           <button type="submit" class="btn-action btn-primary">Buat User Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. CREATE PRODUCT MODAL -->
+  <div class="modal-overlay" id="create-product-modal">
+    <div class="modal-card" style="max-width:650px">
+      <div class="modal-header">
+        <h3 style="font-size:1.25rem; font-weight:700">➕ Tambah Master Produk Baru</h3>
+        <button class="modal-close" onclick="closeCreateProductModal()">&times;</button>
+      </div>
+      <form id="create-product-form" onsubmit="handleCreateProductSubmit(event)">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem">
+          <div class="form-group">
+            <label>Master SKU (MSKU) *</label>
+            <input type="text" id="create-prod-sku" class="form-control" placeholder="AURA-TSHIRT-001" required>
+          </div>
+          <div class="form-group">
+            <label>Kategori *</label>
+            <input type="text" id="create-prod-category" class="form-control" placeholder="Apparel" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Nama Produk *</label>
+          <input type="text" id="create-prod-name" class="form-control" placeholder="Contoh: AURA Oversized T-Shirt" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem">
+          <div class="form-group">
+            <label>Harga Jual (Rp) *</label>
+            <input type="number" id="create-prod-price" class="form-control" placeholder="199000" min="0" required>
+          </div>
+          <div class="form-group">
+            <label>Stok Awal (Warehouse) *</label>
+            <input type="number" id="create-prod-stock" class="form-control" placeholder="100" min="0" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Deskripsi Produk</label>
+          <textarea id="create-prod-desc" class="form-control" rows="3" placeholder="Deskripsi lengkap spesifikasi produk..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Foto Produk (JPEG, PNG, WebP — Maks 5 MB)</label>
+          <div style="display:flex; align-items:center; gap:1rem; margin-top:0.4rem">
+            <input type="file" id="product-image-file" accept="image/jpeg,image/png,image/webp" onchange="handleProductImageUpload(this)" style="display:none">
+            <button type="button" class="btn-action" onclick="document.getElementById('product-image-file').click()">📁 Pilih File Gambar</button>
+            <span id="upload-file-status" style="font-size:0.85rem; color:var(--text-muted)">Belum ada file dipilih</span>
+          </div>
+          <div id="product-image-preview-box" style="margin-top:0.8rem; display:none; align-items:center; gap:1rem; background:rgba(255,255,255,0.03); padding:0.8rem; border-radius:8px; border:1px solid var(--card-border)">
+            <img id="product-image-preview" src="" alt="Preview" style="width:70px; height:70px; object-fit:cover; border-radius:8px; border:1px solid var(--card-border)">
+            <div style="overflow:hidden; text-overflow:ellipsis; font-size:0.85rem">
+              <div id="upload-preview-name" style="font-weight:600; color:var(--text-main)"></div>
+              <div id="upload-preview-meta" style="color:var(--emerald); font-size:0.8rem"></div>
+            </div>
+          </div>
+          <input type="hidden" id="product-image-url" value="">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:0.8rem; margin-top:1.5rem">
+          <button type="button" class="btn-action" onclick="closeCreateProductModal()">Batal</button>
+          <button type="submit" id="create-prod-submit-btn" class="btn-action btn-primary">Simpan Produk</button>
         </div>
       </form>
     </div>

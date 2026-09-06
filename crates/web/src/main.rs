@@ -102,6 +102,9 @@ async fn main() {
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
 
+    // Ensure uploads directory exists
+    let _ = std::fs::create_dir_all("data/uploads");
+
     let state = AppState {
         store_name: config.store_name.clone(),
         store_currency: config.store_currency.clone(),

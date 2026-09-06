@@ -52,7 +52,7 @@ program1/
 | 13 | [#34 Live Chat Module (Backend)](https://github.com/cobacobiy/program1/issues/34) | 🟡 HIGH | 3-4 hari | `[x]` DONE (In PR) — Persistent Live Chat module & REST API (#34) |
 | 14 | [#35 Payment Gateway Integration (Midtrans)](https://github.com/cobacobiy/program1/issues/35) | 🔴 CRITICAL | 4-5 hari | `[x]` DONE (In PR) — Payment Gateway Integration (Midtrans) |
 | 15 | [#36 Order Status Workflow & State Machine](https://github.com/cobacobiy/program1/issues/36) | 🟡 HIGH | 2-3 hari | `[x]` DONE (In PR) — Order Status Workflow & State Machine (#36) |
-| 16 | [#37 Product Image Upload & File Storage](https://github.com/cobacobiy/program1/issues/37) | 🟡 HIGH | 2-3 hari | `[ ]` Open |
+| 16 | [#37 Product Image Upload & File Storage](https://github.com/cobacobiy/program1/issues/37) | 🟡 HIGH | 2-3 hari | `[x]` DONE (In PR) — Product Image Upload & File Storage (#37) |
 | 17 | [#38 Catalog Pagination, Search & Filtering](https://github.com/cobacobiy/program1/issues/38) | 🟡 HIGH | 2 hari | `[ ]` Open |
 | 18 | [#39 Email Notification System](https://github.com/cobacobiy/program1/issues/39) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
 | 19 | [#40 Frontend Modularization (store.js Refactor)](https://github.com/cobacobiy/program1/issues/40) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |

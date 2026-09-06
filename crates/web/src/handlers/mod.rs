@@ -9,6 +9,7 @@ pub mod health;
 pub mod inventory;
 pub mod order;
 pub mod payment;
+pub mod upload;
 pub mod user;
 
 pub use analytics::*;
@@ -22,4 +23,5 @@ pub use health::*;
 pub use inventory::*;
 pub use order::*;
 pub use payment::*;
+pub use upload::*;
 pub use user::*;
