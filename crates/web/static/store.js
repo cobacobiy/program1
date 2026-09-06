@@ -177,17 +177,20 @@ async function syncBuyerProfile() {
 function renderBuyerHeaderState() {
   const btnLogin = document.getElementById("btn-buyer-login");
   const badgeProfile = document.getElementById("buyer-profile-badge");
+  const btnOrders = document.getElementById("btn-buyer-orders");
   const avatarEl = document.getElementById("buyer-avatar");
   const nameLabelEl = document.getElementById("buyer-name-label");
 
   if (activeBuyer && buyerToken) {
     if (btnLogin) btnLogin.style.display = "none";
     if (badgeProfile) badgeProfile.style.display = "flex";
+    if (btnOrders) btnOrders.style.display = "inline-flex";
     if (avatarEl) avatarEl.innerText = (activeBuyer.full_name || "P").charAt(0).toUpperCase();
     if (nameLabelEl) nameLabelEl.innerText = activeBuyer.full_name || "Pembeli";
   } else {
     if (btnLogin) btnLogin.style.display = "block";
     if (badgeProfile) badgeProfile.style.display = "none";
+    if (btnOrders) btnOrders.style.display = "none";
   }
   updateFloatingChatWidget();
 }
@@ -1441,9 +1444,223 @@ function sendInAppChatMessage(e) {
   }, 1000);
 }
 
+// --- BUYER ORDERS HISTORY & WORKFLOW ---
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function openBuyerOrdersModal() {
+  if (!buyerToken) {
+    alert("Silakan masuk terlebih dahulu untuk melihat riwayat pesanan Anda.");
+    openBuyerLoginModal();
+    return;
+  }
+  const modal = document.getElementById("buyer-orders-modal");
+  if (modal) modal.style.display = "flex";
+  fetchBuyerOrders();
+}
+
+function closeBuyerOrdersModal() {
+  const modal = document.getElementById("buyer-orders-modal");
+  if (modal) modal.style.display = "none";
+}
+
+function getBuyerOrderStatusBadge(status) {
+  const s = (status || "").toLowerCase();
+  switch (s) {
+    case "pending":
+      return `<span class="buyer-order-status-badge buyer-status-pending">⏳ Menunggu Pembayaran</span>`;
+    case "paid":
+      return `<span class="buyer-order-status-badge buyer-status-paid">💳 Pembayaran Berhasil</span>`;
+    case "processing":
+      return `<span class="buyer-order-status-badge buyer-status-processing">⚙️ Sedang Dikemas</span>`;
+    case "shipped":
+      return `<span class="buyer-order-status-badge buyer-status-shipped">🚚 Sedang Dikirim</span>`;
+    case "delivered":
+      return `<span class="buyer-order-status-badge buyer-status-delivered">📬 Pesanan Sampai</span>`;
+    case "completed":
+      return `<span class="buyer-order-status-badge buyer-status-completed">✅ Transaksi Selesai</span>`;
+    case "cancelled":
+      return `<span class="buyer-order-status-badge buyer-status-cancelled">❌ Dibatalkan</span>`;
+    case "returned":
+    case "return_requested":
+      return `<span class="buyer-order-status-badge buyer-status-returned">↩️ Retur / Pengembalian</span>`;
+    default:
+      return `<span class="buyer-order-status-badge">${escapeHtml(status)}</span>`;
+  }
+}
+
+async function fetchBuyerOrders() {
+  const container = document.getElementById("buyer-orders-content");
+  if (!container) return;
+  if (!buyerToken) return;
+
+  container.innerHTML = `<p style="text-align:center; color:var(--text-muted); padding:1.5rem">Memuat data pesanan...</p>`;
+
+  try {
+    const res = await fetch("/api/v1/buyer/orders", {
+      headers: {
+        "Authorization": `Bearer ${buyerToken}`
+      }
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        logoutBuyer();
+        closeBuyerOrdersModal();
+        alert("Sesi masuk Anda telah berakhir. Silakan login kembali.");
+        return;
+      }
+      const err = await res.json();
+      container.innerHTML = `<p style="color:var(--rose); text-align:center; padding:1.5rem">Gagal memuat pesanan: ${escapeHtml(err.message || err.error || "Unknown error")}</p>`;
+      return;
+    }
+
+    const orders = await res.json();
+    if (!orders || orders.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted)">
+          <div style="font-size:2.5rem; margin-bottom:0.5rem">🛍️</div>
+          <p style="font-weight:600; color:var(--text-heading); margin-bottom:0.3rem">Belum Ada Pesanan</p>
+          <p style="font-size:0.85rem">Anda belum melakukan transaksi belanja apapun.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = orders.map(o => {
+      const s = (o.status || "").toLowerCase();
+      let actionsHtml = "";
+
+      if (s === "pending") {
+        actionsHtml = `
+          <div style="display:flex; gap:0.5rem; align-items:center">
+            <button class="btn-order-cancel" onclick="handleBuyerCancelOrder('${o.id}')">❌ Batalkan Pesanan</button>
+          </div>
+        `;
+      } else if (s === "shipped") {
+        actionsHtml = `
+          <div style="display:flex; gap:0.5rem; align-items:center">
+            <button class="btn-order-confirm" onclick="handleBuyerConfirmDelivery('${o.id}')">✅ Konfirmasi Barang Diterima</button>
+          </div>
+        `;
+      }
+
+      let trackingHtml = "";
+      if (o.tracking_number) {
+        trackingHtml = `<div class="buyer-order-tracking">🚚 No. Resi: <strong>${escapeHtml(o.tracking_number)}</strong></div>`;
+      }
+
+      let cancelInfoHtml = "";
+      if (s === "cancelled" && o.cancel_reason) {
+        cancelInfoHtml = `<div style="font-size:0.75rem; color:var(--rose); margin-top:0.2rem">Alasan: ${escapeHtml(o.cancel_reason)}</div>`;
+      }
+
+      const orderDate = new Date(o.created_at).toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      return `
+        <div class="buyer-order-card">
+          <div class="buyer-order-header">
+            <div>
+              <span class="buyer-order-id">Order ID: #${escapeHtml(o.id.substring(0,8))}</span>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px">${orderDate}</div>
+            </div>
+            <div>${getBuyerOrderStatusBadge(o.status)}</div>
+          </div>
+          <div class="buyer-order-body">
+            <div>
+              <div style="font-size:0.8rem; color:var(--text-muted)">Total Pembayaran:</div>
+              <div class="buyer-order-amount">Rp ${o.total_amount.toLocaleString("id-ID")}</div>
+              ${cancelInfoHtml}
+            </div>
+            <div>
+              ${trackingHtml}
+            </div>
+          </div>
+          ${actionsHtml ? `<div class="buyer-order-footer">${actionsHtml}</div>` : ""}
+        </div>
+      `;
+    }).join("");
+
+  } catch (e) {
+    console.error("fetchBuyerOrders error:", e);
+    container.innerHTML = `<p style="color:var(--rose); text-align:center; padding:1.5rem">Error: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function handleBuyerCancelOrder(orderId) {
+  const confirmCancel = confirm("Apakah Anda yakin ingin membatalkan pesanan ini?");
+  if (!confirmCancel) return;
+
+  const reason = prompt("Alasan pembatalan (opsional):", "Ingin mengubah rincian pesanan");
+  if (reason === null) return;
+
+  try {
+    const res = await fetch(`/api/v1/orders/${orderId}/cancel`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${buyerToken}`
+      },
+      body: JSON.stringify({ reason: reason || "Dibatalkan oleh pembeli" })
+    });
+
+    if (res.ok) {
+      alert("✅ Pesanan berhasil dibatalkan.");
+      fetchBuyerOrders();
+    } else {
+      const err = await res.json();
+      alert(`❌ Gagal membatalkan pesanan: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    alert(`❌ Error: ${e.message}`);
+  }
+}
+
+async function handleBuyerConfirmDelivery(orderId) {
+  const confirmReceived = confirm("Konfirmasi bahwa Anda telah menerima barang pesanan ini dalam kondisi baik?");
+  if (!confirmReceived) return;
+
+  try {
+    const res = await fetch(`/api/v1/orders/${orderId}/confirm-delivery`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${buyerToken}`
+      }
+    });
+
+    if (res.ok) {
+      alert("🎉 Terima kasih! Pesanan telah dikonfirmasi diterima.");
+      fetchBuyerOrders();
+    } else {
+      const err = await res.json();
+      alert(`❌ Gagal konfirmasi pesanan: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    alert(`❌ Error: ${e.message}`);
+  }
+}
+
 // Window Exports
 window.openBuyerLoginModal = openBuyerLoginModal;
 window.closeBuyerLoginModal = closeBuyerLoginModal;
+window.openBuyerOrdersModal = openBuyerOrdersModal;
+window.closeBuyerOrdersModal = closeBuyerOrdersModal;
+window.fetchBuyerOrders = fetchBuyerOrders;
+window.handleBuyerCancelOrder = handleBuyerCancelOrder;
+window.handleBuyerConfirmDelivery = handleBuyerConfirmDelivery;
 window.renderGoogleSignInButton = renderGoogleSignInButton;
 window.handleGoogleCredentialResponse = handleGoogleCredentialResponse;
 window.logoutBuyer = logoutBuyer;

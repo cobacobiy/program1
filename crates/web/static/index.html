@@ -238,9 +238,13 @@
           </div>
           <div class="tabs-bar">
             <button class="tab-btn active" onclick="filterOrderTab('all', this)">Semua Pesanan</button>
-            <button class="tab-btn" onclick="filterOrderTab('PAID', this)">Pending / Diproses</button>
-            <button class="tab-btn" onclick="filterOrderTab('SHIPPED', this)">Dalam Pengiriman</button>
-            <button class="tab-btn" onclick="filterOrderTab('COMPLETED', this)">Selesai</button>
+            <button class="tab-btn" onclick="filterOrderTab('pending', this)">⏳ Belum Bayar</button>
+            <button class="tab-btn" onclick="filterOrderTab('paid', this)">💳 Perlu Diproses</button>
+            <button class="tab-btn" onclick="filterOrderTab('processing', this)">⚙️ Sedang Dikemas</button>
+            <button class="tab-btn" onclick="filterOrderTab('shipped', this)">🚚 Pengiriman</button>
+            <button class="tab-btn" onclick="filterOrderTab('delivered', this)">📬 Diterima</button>
+            <button class="tab-btn" onclick="filterOrderTab('completed', this)">✅ Selesai</button>
+            <button class="tab-btn" onclick="filterOrderTab('cancelled', this)">❌ Dibatalkan</button>
           </div>
           <table>
             <thead>
@@ -248,14 +252,15 @@
                 <th>Order ID</th>
                 <th>Channel</th>
                 <th>Pelanggan</th>
-                <th>Email</th>
                 <th>Total Nilai</th>
                 <th>Status</th>
+                <th>No. Resi / Catatan</th>
                 <th>Waktu</th>
+                <th style="text-align:center">Aksi</th>
               </tr>
             </thead>
             <tbody id="orders-full-tbody">
-              <tr><td colspan="7">Loading full order ledger...</td></tr>
+              <tr><td colspan="8">Loading full order ledger...</td></tr>
             </tbody>
           </table>
         </div>

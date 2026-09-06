@@ -230,3 +230,268 @@ pub async fn create_marketplace_order(
 
     Ok((StatusCode::CREATED, Json(order)))
 }
+
+/// Seller update order status with transition validation (Protected - Seller)
+#[utoipa::path(
+    patch,
+    path = "/api/v1/orders/{id}/status",
+    params(
+        ("id" = Uuid, Path, description = "Order identifier")
+    ),
+    request_body = UpdateOrderStatusRequest,
+    responses(
+        (status = 200, description = "Order status updated", body = OmniOrderDto),
+        (status = 400, description = "Invalid status transition or validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Order not found", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Orders"
+)]
+pub async fn update_order_status_handler(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    ValidatedJson(payload): ValidatedJson<program1_contracts::UpdateOrderStatusRequest>,
+) -> Result<Json<OmniOrderDto>, ApiError> {
+    if claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses ditolak: pembaruan status pesanan hanya untuk staf / penjual",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let tracking_num = payload.tracking_number.clone();
+    let reason = payload.reason.clone();
+
+    let updated_order = state
+        .order_contract
+        .update_order_status_with_metadata(
+            id,
+            payload.new_status,
+            &claims.username,
+            tracking_num.clone(),
+            reason.clone(),
+        )
+        .await?;
+
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: claims.username.clone(),
+            action: "ORDER_STATUS_UPDATED".to_string(),
+            resource_type: "order".to_string(),
+            resource_id: Some(id),
+            details: json!({
+                "new_status": payload.new_status.as_str(),
+                "tracking_number": tracking_num,
+                "reason": reason,
+            })
+            .to_string(),
+            ip_address: None,
+        })
+        .await;
+
+    Ok(Json(updated_order))
+}
+
+/// Buyer cancel pending order (Protected - Buyer)
+#[utoipa::path(
+    post,
+    path = "/api/v1/orders/{id}/cancel",
+    params(
+        ("id" = Uuid, Path, description = "Order identifier")
+    ),
+    request_body = CancelOrderRequest,
+    responses(
+        (status = 200, description = "Order cancelled successfully", body = OmniOrderDto),
+        (status = 400, description = "Order is not in pending status", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Order does not belong to buyer", body = ApiError),
+        (status = 404, description = "Order not found", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Orders"
+)]
+pub async fn buyer_cancel_order_handler(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    ValidatedJson(payload): ValidatedJson<program1_contracts::CancelOrderRequest>,
+) -> Result<Json<OmniOrderDto>, ApiError> {
+    if !claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Pembatalan pesanan pembeli hanya untuk akun buyer",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let order = state.order_contract.get_order(id).await?;
+    if order.buyer_id != Some(claims.sub) {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses ditolak: pesanan ini bukan milik akun Anda",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    if order.status != "pending" {
+        return Err(ApiError::new(
+            ErrorCode::InvalidRequest,
+            format!(
+                "Hanya pesanan berstatus 'pending' yang dapat dibatalkan (status saat ini: '{}')",
+                order.status
+            ),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let updated_order = state
+        .order_contract
+        .update_order_status_with_metadata(
+            id,
+            program1_contracts::OrderStatus::Cancelled,
+            &format!("buyer:{}", claims.sub),
+            None,
+            payload.reason.clone(),
+        )
+        .await?;
+
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: format!("buyer:{}", claims.sub),
+            action: "ORDER_CANCELLED_BY_BUYER".to_string(),
+            resource_type: "order".to_string(),
+            resource_id: Some(id),
+            details: json!({
+                "reason": payload.reason,
+            })
+            .to_string(),
+            ip_address: None,
+        })
+        .await;
+
+    Ok(Json(updated_order))
+}
+
+/// Buyer confirm delivery received for shipped order (Protected - Buyer)
+#[utoipa::path(
+    post,
+    path = "/api/v1/orders/{id}/confirm-delivery",
+    params(
+        ("id" = Uuid, Path, description = "Order identifier")
+    ),
+    responses(
+        (status = 200, description = "Delivery confirmed successfully", body = OmniOrderDto),
+        (status = 400, description = "Order is not in shipped status", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Order does not belong to buyer", body = ApiError),
+        (status = 404, description = "Order not found", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Orders"
+)]
+pub async fn buyer_confirm_delivery_handler(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<OmniOrderDto>, ApiError> {
+    if !claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Konfirmasi penerimaan pesanan hanya untuk akun buyer",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let order = state.order_contract.get_order(id).await?;
+    if order.buyer_id != Some(claims.sub) {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses ditolak: pesanan ini bukan milik akun Anda",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    if order.status != "shipped" {
+        return Err(ApiError::new(
+            ErrorCode::InvalidRequest,
+            format!(
+                "Hanya pesanan berstatus 'shipped' yang dapat dikonfirmasi penerimaannya (status saat ini: '{}')",
+                order.status
+            ),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let updated_order = state
+        .order_contract
+        .update_order_status(id, program1_contracts::OrderStatus::Delivered, "buyer")
+        .await?;
+
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: format!("buyer:{}", claims.sub),
+            action: "ORDER_DELIVERY_CONFIRMED".to_string(),
+            resource_type: "order".to_string(),
+            resource_id: Some(id),
+            details: json!({
+                "previous_status": "shipped",
+                "new_status": "delivered",
+            })
+            .to_string(),
+            ip_address: None,
+        })
+        .await;
+
+    Ok(Json(updated_order))
+}
+
+/// List orders placed by current authenticated buyer (Protected - Buyer)
+#[utoipa::path(
+    get,
+    path = "/api/v1/buyer/orders",
+    responses(
+        (status = 200, description = "Buyer order history", body = Vec<OmniOrderDto>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Orders"
+)]
+pub async fn list_buyer_orders_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<Vec<OmniOrderDto>>, ApiError> {
+    if !claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses riwayat pesanan pembeli hanya untuk akun buyer",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let orders = state.order_contract.list_buyer_orders(claims.sub).await?;
+    Ok(Json(orders))
+}
+

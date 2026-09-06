@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
     CatalogContract, ChannelType, ContractError, InventoryContract, OmniOrderDto, OrderContract,
-    OrderItemDto, ShippingAddressSnapshot, StorefrontOrderItemRequest, StorefrontOrderRequest,
+    OrderItemDto, OrderStatus, ShippingAddressSnapshot, StorefrontOrderItemRequest,
+    StorefrontOrderRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -99,6 +100,25 @@ impl OrderModule {
         let shipping_snapshot: Option<ShippingAddressSnapshot> =
             snapshot_json_opt.and_then(|j| serde_json::from_str(&j).ok());
 
+        let tracking_number: Option<String> = row.try_get("tracking_number").ok().flatten();
+        let shipped_at = row
+            .try_get::<Option<String>, _>("shipped_at")
+            .ok()
+            .flatten()
+            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
+        let delivered_at = row
+            .try_get::<Option<String>, _>("delivered_at")
+            .ok()
+            .flatten()
+            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
+        let cancelled_at = row
+            .try_get::<Option<String>, _>("cancelled_at")
+            .ok()
+            .flatten()
+            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
+        let cancelled_by: Option<String> = row.try_get("cancelled_by").ok().flatten();
+        let cancel_reason: Option<String> = row.try_get("cancel_reason").ok().flatten();
+
         Ok(OmniOrderDto {
             id,
             channel: Self::channel_from_str(&ch_str),
@@ -111,6 +131,12 @@ impl OrderModule {
             created_at,
             buyer_id,
             shipping_snapshot,
+            tracking_number,
+            shipped_at,
+            delivered_at,
+            cancelled_at,
+            cancelled_by,
+            cancel_reason,
         })
     }
 }
@@ -119,7 +145,7 @@ impl OrderModule {
 impl OrderContract for OrderModule {
     async fn get_order(&self, id: Uuid) -> Result<OmniOrderDto, ContractError> {
         let row = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
              FROM orders WHERE id = $1",
         )
         .bind(id.to_string())
@@ -181,7 +207,7 @@ impl OrderContract for OrderModule {
         let order_id = Uuid::new_v4();
         let now = Utc::now();
         let channel_str = "NativeWeb";
-        let status_str = "PAID";
+        let status_str = "pending";
 
         let snapshot = match req.shipping_snapshot {
             Some(s) => s,
@@ -257,6 +283,12 @@ impl OrderContract for OrderModule {
             created_at: now,
             buyer_id: req.buyer_id,
             shipping_snapshot: Some(snapshot),
+            tracking_number: None,
+            shipped_at: None,
+            delivered_at: None,
+            cancelled_at: None,
+            cancelled_by: None,
+            cancel_reason: None,
         })
     }
 
@@ -290,7 +322,7 @@ impl OrderContract for OrderModule {
         let order_id = Uuid::new_v4();
         let now = Utc::now();
         let ch_str = channel.to_string();
-        let status_str = "PROCESSING";
+        let status_str = "processing";
 
         sqlx::query(
             "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json)
@@ -340,14 +372,111 @@ impl OrderContract for OrderModule {
             created_at: now,
             buyer_id: None,
             shipping_snapshot: None,
+            tracking_number: None,
+            shipped_at: None,
+            delivered_at: None,
+            cancelled_at: None,
+            cancelled_by: None,
+            cancel_reason: None,
         })
     }
 
     async fn list_orders(&self) -> Result<Vec<OmniOrderDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
              FROM orders ORDER BY created_at DESC",
         )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            let id_str: String = r.get("id");
+            let items = self.fetch_items_for_order(&id_str).await?;
+            list.push(self.row_to_order_dto(&r, items)?);
+        }
+
+        Ok(list)
+    }
+
+    async fn update_order_status(
+        &self,
+        order_id: Uuid,
+        new_status: OrderStatus,
+        updated_by: &str,
+    ) -> Result<OmniOrderDto, ContractError> {
+        self.update_order_status_with_metadata(order_id, new_status, updated_by, None, None)
+            .await
+    }
+
+    async fn update_order_status_with_metadata(
+        &self,
+        order_id: Uuid,
+        new_status: OrderStatus,
+        updated_by: &str,
+        tracking_number: Option<String>,
+        reason: Option<String>,
+    ) -> Result<OmniOrderDto, ContractError> {
+        let order = self.get_order(order_id).await?;
+        let current_status = OrderStatus::from_str(&order.status).unwrap_or(OrderStatus::Pending);
+
+        if !current_status.can_transition_to(&new_status) {
+            return Err(ContractError::ValidationError(format!(
+                "Transisi status pesanan tidak valid: tidak dapat mengubah dari '{}' ke '{}'",
+                current_status.as_str(),
+                new_status.as_str()
+            )));
+        }
+
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        let (shipped_at_update, delivered_at_update, cancelled_at_update, cancelled_by_update, cancel_reason_update) = match new_status {
+            OrderStatus::Shipped => (Some(now_str), None, None, None, None),
+            OrderStatus::Delivered => (None, Some(now_str), None, None, None),
+            OrderStatus::Cancelled => (
+                None,
+                None,
+                Some(now_str),
+                Some(updated_by.to_string()),
+                reason.clone(),
+            ),
+            _ => (None, None, None, None, None),
+        };
+
+        sqlx::query(
+            "UPDATE orders SET
+                status = $1,
+                tracking_number = COALESCE($2, tracking_number),
+                shipped_at = COALESCE($3, shipped_at),
+                delivered_at = COALESCE($4, delivered_at),
+                cancelled_at = COALESCE($5, cancelled_at),
+                cancelled_by = COALESCE($6, cancelled_by),
+                cancel_reason = COALESCE($7, cancel_reason)
+             WHERE id = $8",
+        )
+        .bind(new_status.as_str())
+        .bind(&tracking_number)
+        .bind(&shipped_at_update)
+        .bind(&delivered_at_update)
+        .bind(&cancelled_at_update)
+        .bind(&cancelled_by_update)
+        .bind(&cancel_reason_update)
+        .bind(order_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        self.get_order(order_id).await
+    }
+
+    async fn list_buyer_orders(&self, buyer_id: Uuid) -> Result<Vec<OmniOrderDto>, ContractError> {
+        let rows = sqlx::query(
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
+             FROM orders WHERE buyer_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(buyer_id.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
@@ -445,5 +574,169 @@ mod tests {
         assert_eq!(fetched.buyer_id, Some(buyer_id));
         let fetched_snap = fetched.shipping_snapshot.expect("Snapshot must persist");
         assert_eq!(fetched_snap.street_address, "Jl. Sudirman Kav 52-53");
+    }
+
+    #[tokio::test]
+    async fn test_order_status_transitions_lifecycle() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let catalog = Arc::new(CatalogModule::new(pool.clone()));
+        catalog.seed_default_catalog().await.unwrap();
+        let inventory = Arc::new(InventoryModule::new(pool.clone(), catalog.clone()));
+        let order_module = OrderModule::new(pool, catalog.clone(), inventory.clone());
+
+        let products = catalog.list_items().await.unwrap();
+        let req = StorefrontOrderRequest {
+            customer_name: "Customer Lifecycle".to_string(),
+            customer_email: "lifecycle@test.com".to_string(),
+            shipping_address: "Jl. Merdeka 1".to_string(),
+            items: vec![StorefrontOrderItemRequest {
+                product_id: products[0].id,
+                quantity: 1,
+            }],
+            buyer_id: None,
+            shipping_snapshot: None,
+        };
+
+        let order = order_module.create_storefront_order(req).await.unwrap();
+        assert_eq!(order.status, "pending");
+
+        // 1. pending -> paid
+        let paid_order = order_module
+            .update_order_status(order.id, OrderStatus::Paid, "system_midtrans")
+            .await
+            .unwrap();
+        assert_eq!(paid_order.status, "paid");
+
+        // 2. paid -> processing
+        let proc_order = order_module
+            .update_order_status(order.id, OrderStatus::Processing, "seller_admin")
+            .await
+            .unwrap();
+        assert_eq!(proc_order.status, "processing");
+
+        // 3. processing -> shipped with tracking
+        let shipped_order = order_module
+            .update_order_status_with_metadata(
+                order.id,
+                OrderStatus::Shipped,
+                "seller_admin",
+                Some("JNT123456789".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(shipped_order.status, "shipped");
+        assert_eq!(shipped_order.tracking_number, Some("JNT123456789".to_string()));
+        assert!(shipped_order.shipped_at.is_some());
+
+        // 4. shipped -> delivered
+        let deliv_order = order_module
+            .update_order_status(order.id, OrderStatus::Delivered, "buyer")
+            .await
+            .unwrap();
+        assert_eq!(deliv_order.status, "delivered");
+        assert!(deliv_order.delivered_at.is_some());
+
+        // 5. delivered -> completed
+        let comp_order = order_module
+            .update_order_status(order.id, OrderStatus::Completed, "system_auto")
+            .await
+            .unwrap();
+        assert_eq!(comp_order.status, "completed");
+    }
+
+    #[tokio::test]
+    async fn test_invalid_order_status_transitions() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let catalog = Arc::new(CatalogModule::new(pool.clone()));
+        catalog.seed_default_catalog().await.unwrap();
+        let inventory = Arc::new(InventoryModule::new(pool.clone(), catalog.clone()));
+        let order_module = OrderModule::new(pool, catalog.clone(), inventory.clone());
+
+        let products = catalog.list_items().await.unwrap();
+        let req = StorefrontOrderRequest {
+            customer_name: "Customer Invalid".to_string(),
+            customer_email: "invalid@test.com".to_string(),
+            shipping_address: "Jl. Merdeka 2".to_string(),
+            items: vec![StorefrontOrderItemRequest {
+                product_id: products[0].id,
+                quantity: 1,
+            }],
+            buyer_id: None,
+            shipping_snapshot: None,
+        };
+
+        let order = order_module.create_storefront_order(req).await.unwrap();
+        assert_eq!(order.status, "pending");
+
+        // Invalid: pending -> shipped directly
+        let err = order_module
+            .update_order_status(order.id, OrderStatus::Shipped, "seller")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ContractError::ValidationError(_)));
+
+        // Invalid: pending -> completed directly
+        let err2 = order_module
+            .update_order_status(order.id, OrderStatus::Completed, "seller")
+            .await
+            .unwrap_err();
+        assert!(matches!(err2, ContractError::ValidationError(_)));
+    }
+
+    #[tokio::test]
+    async fn test_buyer_order_cancellation_and_history() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let catalog = Arc::new(CatalogModule::new(pool.clone()));
+        catalog.seed_default_catalog().await.unwrap();
+        let inventory = Arc::new(InventoryModule::new(pool.clone(), catalog.clone()));
+        let order_module = OrderModule::new(pool, catalog.clone(), inventory.clone());
+
+        let products = catalog.list_items().await.unwrap();
+        let buyer_id = Uuid::new_v4();
+
+        let req = StorefrontOrderRequest {
+            customer_name: "Customer Cancel".to_string(),
+            customer_email: "cancel@test.com".to_string(),
+            shipping_address: "Jl. Merdeka 3".to_string(),
+            items: vec![StorefrontOrderItemRequest {
+                product_id: products[0].id,
+                quantity: 1,
+            }],
+            buyer_id: Some(buyer_id),
+            shipping_snapshot: None,
+        };
+
+        let order = order_module.create_storefront_order(req).await.unwrap();
+        assert_eq!(order.status, "pending");
+
+        // Buyer cancels pending order
+        let cancelled = order_module
+            .update_order_status_with_metadata(
+                order.id,
+                OrderStatus::Cancelled,
+                "buyer",
+                None,
+                Some("Salah pilih item".to_string()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(cancelled.status, "cancelled");
+        assert_eq!(cancelled.cancelled_by, Some("buyer".to_string()));
+        assert_eq!(cancelled.cancel_reason, Some("Salah pilih item".to_string()));
+        assert!(cancelled.cancelled_at.is_some());
+
+        // Cancelled order cannot transition to processing
+        let err = order_module
+            .update_order_status(order.id, OrderStatus::Processing, "seller")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ContractError::ValidationError(_)));
+
+        // List buyer orders returns the cancelled order
+        let buyer_orders = order_module.list_buyer_orders(buyer_id).await.unwrap();
+        assert_eq!(buyer_orders.len(), 1);
+        assert_eq!(buyer_orders[0].id, order.id);
+        assert_eq!(buyer_orders[0].status, "cancelled");
     }
 }

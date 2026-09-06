@@ -206,6 +206,18 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/orders",
             post(create_storefront_order).route_layer(order_limit_layer.clone()),
         )
+        .route(
+            "/api/v1/buyer/orders",
+            get(list_buyer_orders_handler),
+        )
+        .route(
+            "/api/v1/orders/:id/cancel",
+            post(buyer_cancel_order_handler).route_layer(order_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/orders/:id/confirm-delivery",
+            post(buyer_confirm_delivery_handler).route_layer(order_limit_layer.clone()),
+        )
         .route("/api/v1/chat/rooms", post(buyer_get_or_create_room_handler))
         .route(
             "/api/v1/chat/rooms/:room_id/messages",
@@ -250,6 +262,10 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/channels/sync/:channel", post(sync_channel))
         .route("/api/v1/orders", get(list_orders))
         .route("/api/v1/orders/:id", get(get_order))
+        .route(
+            "/api/v1/orders/:id/status",
+            patch(update_order_status_handler).route_layer(order_limit_layer.clone()),
+        )
         .route(
             "/api/v1/orders/marketplace",
             post(create_marketplace_order).route_layer(order_limit_layer),

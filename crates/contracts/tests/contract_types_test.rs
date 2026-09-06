@@ -448,3 +448,64 @@ fn test_payment_contract_types_and_validation() {
     assert_eq!(config.client_key, "SB-Mid-client-xxx");
     assert!(!config.is_production);
 }
+
+#[test]
+fn test_order_status_transitions_and_validation() {
+    use program1_contracts::{CancelOrderRequest, OrderStatus, UpdateOrderStatusRequest};
+    use validator::Validate;
+
+    // Test as_str and from_str
+    assert_eq!(OrderStatus::Pending.as_str(), "pending");
+    assert_eq!(OrderStatus::Paid.as_str(), "paid");
+    assert_eq!(OrderStatus::Processing.as_str(), "processing");
+    assert_eq!(OrderStatus::Shipped.as_str(), "shipped");
+    assert_eq!(OrderStatus::Delivered.as_str(), "delivered");
+    assert_eq!(OrderStatus::Completed.as_str(), "completed");
+    assert_eq!(OrderStatus::Cancelled.as_str(), "cancelled");
+    assert_eq!(OrderStatus::ReturnRequested.as_str(), "return_requested");
+    assert_eq!(OrderStatus::Returned.as_str(), "returned");
+
+    assert_eq!(OrderStatus::from_str("pending"), Some(OrderStatus::Pending));
+    assert_eq!(OrderStatus::from_str("PAID"), Some(OrderStatus::Paid));
+    assert_eq!(OrderStatus::from_str("shipped"), Some(OrderStatus::Shipped));
+    assert_eq!(OrderStatus::from_str("invalid"), None);
+
+    // Test valid transitions: pending -> paid -> processing -> shipped -> delivered -> completed
+    assert!(OrderStatus::Pending.can_transition_to(&OrderStatus::Paid));
+    assert!(OrderStatus::Pending.can_transition_to(&OrderStatus::Cancelled));
+    assert!(OrderStatus::Paid.can_transition_to(&OrderStatus::Processing));
+    assert!(OrderStatus::Paid.can_transition_to(&OrderStatus::Cancelled));
+    assert!(OrderStatus::Processing.can_transition_to(&OrderStatus::Shipped));
+    assert!(OrderStatus::Shipped.can_transition_to(&OrderStatus::Delivered));
+    assert!(OrderStatus::Delivered.can_transition_to(&OrderStatus::Completed));
+    assert!(OrderStatus::Delivered.can_transition_to(&OrderStatus::ReturnRequested));
+    assert!(OrderStatus::ReturnRequested.can_transition_to(&OrderStatus::Returned));
+    assert!(OrderStatus::ReturnRequested.can_transition_to(&OrderStatus::Completed));
+
+    // Test invalid transitions
+    assert!(!OrderStatus::Pending.can_transition_to(&OrderStatus::Shipped));
+    assert!(!OrderStatus::Pending.can_transition_to(&OrderStatus::Completed));
+    assert!(!OrderStatus::Cancelled.can_transition_to(&OrderStatus::Processing));
+    assert!(!OrderStatus::Completed.can_transition_to(&OrderStatus::Shipped));
+
+    // Test request validation
+    let valid_update = UpdateOrderStatusRequest {
+        new_status: OrderStatus::Shipped,
+        tracking_number: Some("JNT123456789".to_string()),
+        reason: None,
+    };
+    assert!(valid_update.validate().is_ok());
+
+    let long_tracking = UpdateOrderStatusRequest {
+        new_status: OrderStatus::Shipped,
+        tracking_number: Some("a".repeat(101)),
+        reason: None,
+    };
+    assert!(long_tracking.validate().is_err());
+
+    let cancel_req = CancelOrderRequest {
+        reason: Some("Salah ukuran".to_string()),
+    };
+    assert!(cancel_req.validate().is_ok());
+}
+
