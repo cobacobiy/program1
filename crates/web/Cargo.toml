@@ -23,6 +23,7 @@ program1-module-auth = { path = "../modules/auth" }
 program1-module-analytics = { path = "../modules/analytics" }
 program1-module-audit = { path = "../modules/audit" }
 program1-module-buyer = { path = "../modules/buyer" }
+program1-module-chat = { path = "../modules/chat" }
 
 
 async-trait.workspace = true

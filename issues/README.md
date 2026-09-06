@@ -49,7 +49,7 @@ program1/
 
 | Local # | GitHub Issue | Prioritas | Estimasi | Status |
 |---------|--------------|-----------|----------|--------|
-| 13 | [#34 Live Chat Module (Backend)](https://github.com/cobacobiy/program1/issues/34) | 🟡 HIGH | 3-4 hari | `[ ]` Open |
+| 13 | [#34 Live Chat Module (Backend)](https://github.com/cobacobiy/program1/issues/34) | 🟡 HIGH | 3-4 hari | `[x]` DONE (In PR) — Persistent Live Chat module & REST API (#34) |
 | 14 | [#35 Payment Gateway Integration (Midtrans)](https://github.com/cobacobiy/program1/issues/35) | 🔴 CRITICAL | 4-5 hari | `[ ]` Open |
 | 15 | [#36 Order Status Workflow & State Machine](https://github.com/cobacobiy/program1/issues/36) | 🟡 HIGH | 2-3 hari | `[ ]` Open |
 | 16 | [#37 Product Image Upload & File Storage](https://github.com/cobacobiy/program1/issues/37) | 🟡 HIGH | 2-3 hari | `[ ]` Open |
@@ -57,7 +57,7 @@ program1/
 | 18 | [#39 Email Notification System](https://github.com/cobacobiy/program1/issues/39) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
 | 19 | [#40 Frontend Modularization (store.js Refactor)](https://github.com/cobacobiy/program1/issues/40) | 🟢 MEDIUM | 2-3 hari | `[ ]` Open |
 | 20 | [#41 Buyer Order History & Profile Page](https://github.com/cobacobiy/program1/issues/41) | 🟡 HIGH | 2 hari | `[ ]` Open |
-| 21 | [#42 CI/CD Pipeline Optimization](https://github.com/cobacobiy/program1/issues/42) | 🟡 HIGH | 1-2 hari | `[ ]` Open |
+| 21 | [#42 CI/CD Pipeline Optimization](https://github.com/cobacobiy/program1/issues/42) | 🟡 HIGH | 1-2 hari | `[x]` DONE — Parallel validate + build-ghcr with cargo caching (#43) |
 
 ---
 

@@ -7,6 +7,7 @@ use program1_module_audit::AuditModule;
 use program1_module_auth::AuthModule;
 use program1_module_catalog::CatalogModule;
 use program1_module_channel::ChannelSyncModule;
+use program1_module_chat::ChatModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_user::UserModule;
@@ -87,6 +88,7 @@ async fn main() {
         audit_module.clone(),
         buyer_config,
     ));
+    let chat_module = Arc::new(ChatModule::new(db_pool.clone()));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -106,6 +108,7 @@ async fn main() {
         analytics_contract: analytics_module,
         audit_contract: audit_module,
         buyer_contract: buyer_module,
+        chat_contract: chat_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

@@ -125,6 +125,15 @@ pub fn create_app(state: AppState) -> Router {
         }
     });
 
+    let chat_limiter = limiter.clone();
+    let chat_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = chat_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(lim, "chat_messages", 30, Duration::from_secs(60), req, next)
+                .await
+        }
+    });
+
     // 1. Public routes (no authentication required)
     let public_routes = Router::new()
         .route("/health", get(health_check))
@@ -180,6 +189,13 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/orders",
             post(create_storefront_order).route_layer(order_limit_layer.clone()),
         )
+        .route("/api/v1/chat/rooms", post(buyer_get_or_create_room_handler))
+        .route(
+            "/api/v1/chat/rooms/:room_id/messages",
+            get(buyer_get_messages_handler)
+                .post(buyer_send_message_handler)
+                .route_layer(chat_limit_layer.clone()),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_buyer_auth,
@@ -222,6 +238,13 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/admin/buyers/activity",
             get(admin_list_buyer_activity_handler),
+        )
+        .route("/api/v1/admin/chat/rooms", get(admin_list_chat_rooms_handler))
+        .route(
+            "/api/v1/admin/chat/rooms/:room_id/messages",
+            get(admin_get_messages_handler)
+                .post(admin_send_message_handler)
+                .route_layer(chat_limit_layer),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
