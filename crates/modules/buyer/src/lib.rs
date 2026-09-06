@@ -3,7 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use program1_contracts::{
     AuditContract, AuditLogEntry, AuthContract, BuyerAccountDto, BuyerAddressDto,
     BuyerAuthResponse, BuyerContract, BuyerLoginRequest, ContractError, CreateBuyerAddressRequest,
-    RegisterBuyerRequest, UpdateBuyerAddressRequest,
+    PaginatedResponse, RegisterBuyerRequest, UpdateBuyerAddressRequest,
 };
 use program1_core::database::DbPool;
 use rand::Rng;
@@ -1350,6 +1350,63 @@ impl BuyerContract for BuyerModule {
             buyers.push(Self::row_to_buyer_dto(&row)?);
         }
         Ok(buyers)
+    }
+
+    async fn list_buyers_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        search: Option<&str>,
+    ) -> Result<PaginatedResponse<BuyerAccountDto>, ContractError> {
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 100);
+        let offset = (page - 1) * page_size;
+
+        let search_term = search.map(|s| s.trim()).filter(|s| !s.is_empty());
+
+        let count_row = sqlx::query(
+            "SELECT COUNT(*) as total FROM buyer_accounts
+             WHERE ($1 IS NULL OR email LIKE '%' || $1 || '%' OR full_name LIKE '%' || $1 || '%' OR phone_number LIKE '%' || $1 || '%')",
+        )
+        .bind(search_term)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let total: i64 = count_row.get("total");
+
+        let rows = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts
+             WHERE ($1 IS NULL OR email LIKE '%' || $1 || '%' OR full_name LIKE '%' || $1 || '%' OR phone_number LIKE '%' || $1 || '%')
+             ORDER BY created_at DESC
+             LIMIT $2 OFFSET $3",
+        )
+        .bind(search_term)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut data = Vec::with_capacity(rows.len());
+        for row in rows {
+            data.push(Self::row_to_buyer_dto(&row)?);
+        }
+
+        let total_pages = if total == 0 {
+            0
+        } else {
+            (total + page_size - 1) / page_size
+        };
+
+        Ok(PaginatedResponse {
+            data,
+            total,
+            page,
+            page_size,
+            total_pages,
+        })
     }
 
     async fn set_buyer_active_status(

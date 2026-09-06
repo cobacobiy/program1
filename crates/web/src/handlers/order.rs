@@ -1,25 +1,34 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Extension, Json,
 };
 use chrono::Utc;
 use serde_json::json;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, BuyerCheckoutRequest, ChannelType, ErrorCode, JwtClaims, MarketplaceOrderReq,
-    OmniOrderDto, ShippingAddressSnapshot, StorefrontOrderRequest,
+    OmniOrderDto, PaginatedResponse, PaginationParams, ShippingAddressSnapshot, StorefrontOrderRequest,
 };
 
 /// List all omnichannel orders in history (Protected)
 #[utoipa::path(
     get,
     path = "/api/v1/orders",
+    params(
+        ("page" = Option<i64>, Query, description = "Page number (min: 1)"),
+        ("page_size" = Option<i64>, Query, description = "Page size (1-100, default: 20)"),
+        ("status" = Option<String>, Query, description = "Filter by order status"),
+        ("sort_by" = Option<String>, Query, description = "Field to sort by (created_at, total_amount, status)"),
+        ("sort_order" = Option<String>, Query, description = "Sort direction (asc, desc)")
+    ),
     responses(
-        (status = 200, description = "List of orders", body = Vec<OmniOrderDto>),
+        (status = 200, description = "List of orders", body = PaginatedResponse<OmniOrderDto>),
+        (status = 400, description = "Validation error", body = ApiError),
         (status = 401, description = "Unauthorized")
     ),
     security(
@@ -28,9 +37,27 @@ use program1_contracts::{
     tag = "Orders"
 )]
 pub async fn list_orders(
+    Query(params): Query<PaginationParams>,
     State(state): State<AppState>,
-) -> Result<Json<Vec<OmniOrderDto>>, ApiError> {
-    let orders = state.order_contract.list_orders().await?;
+) -> Result<Json<PaginatedResponse<OmniOrderDto>>, ApiError> {
+    params.validate().map_err(|e| {
+        ApiError::new(
+            ErrorCode::ValidationFailed,
+            format!("Invalid pagination parameters: {}", e),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let orders = state
+        .order_contract
+        .list_orders_paginated(
+            params.page(),
+            params.page_size(),
+            params.status.as_deref(),
+            params.sort_by.as_deref(),
+            params.sort_order.as_deref(),
+        )
+        .await?;
     Ok(Json(orders))
 }
 

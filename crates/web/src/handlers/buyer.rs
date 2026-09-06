@@ -1,15 +1,17 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Extension, Json,
 };
 use program1_contracts::{
     AuditLogEntry, BuyerAccountDto, BuyerAddressDto, BuyerAuthResponse, BuyerLoginRequest,
     CreateBuyerAddressRequest, ErrorCode, GoogleAuthRequest, JwtClaims, OtpRequest,
-    OtpVerifyRequest, RegisterBuyerRequest, UpdateBuyerAddressRequest, UpdateBuyerStatusRequest,
+    OtpVerifyRequest, PaginatedResponse, PaginationParams, RegisterBuyerRequest,
+    UpdateBuyerAddressRequest, UpdateBuyerStatusRequest,
 };
 use serde_json::json;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
@@ -321,12 +323,18 @@ pub async fn get_buyer_auth_config_handler(
     )
 }
 
-/// List all registered buyers (Admin only)
+/// List all registered buyers with pagination and search (Admin only)
 #[utoipa::path(
     get,
     path = "/api/v1/admin/buyers",
+    params(
+        ("page" = Option<i64>, Query, description = "Page number (min: 1)"),
+        ("page_size" = Option<i64>, Query, description = "Page size (1-100, default: 20)"),
+        ("search" = Option<String>, Query, description = "Search by email, name, or phone")
+    ),
     responses(
-        (status = 200, description = "List of all buyers", body = Vec<BuyerAccountDto>),
+        (status = 200, description = "Paginated list of all buyers", body = PaginatedResponse<BuyerAccountDto>),
+        (status = 400, description = "Validation error", body = ApiError),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden")
     ),
@@ -336,9 +344,10 @@ pub async fn get_buyer_auth_config_handler(
     tag = "Admin Buyers"
 )]
 pub async fn admin_list_buyers_handler(
+    Query(params): Query<PaginationParams>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
-) -> Result<Json<Vec<BuyerAccountDto>>, ApiError> {
+) -> Result<Json<PaginatedResponse<BuyerAccountDto>>, ApiError> {
     if !claims.is_seller_staff() {
         return Err(ApiError::new(
             ErrorCode::InsufficientPermissions,
@@ -346,7 +355,22 @@ pub async fn admin_list_buyers_handler(
             StatusCode::FORBIDDEN,
         ));
     }
-    let buyers = state.buyer_contract.list_all_buyers().await?;
+    params.validate().map_err(|e| {
+        ApiError::new(
+            ErrorCode::ValidationFailed,
+            format!("Invalid pagination parameters: {}", e),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let buyers = state
+        .buyer_contract
+        .list_buyers_paginated(
+            params.page(),
+            params.page_size(),
+            params.search.as_deref(),
+        )
+        .await?;
     Ok(Json(buyers))
 }
 

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
     BulkStockUpdateRequest, BulkStockUpdateResult, CatalogContract, ContractError,
-    InventoryContract, InventoryStockDto, LowStockAlertDto, SafetyStockLogDto,
+    InventoryContract, InventoryStockDto, LowStockAlertDto, PaginatedResponse, SafetyStockLogDto,
     StockAdjustmentLogDto,
 };
 use program1_core::database::DbPool;
@@ -192,6 +192,66 @@ impl InventoryContract for InventoryModule {
             result.push(stock);
         }
         Ok(result)
+    }
+
+    async fn list_all_paginated(
+        &self,
+        page: i64,
+        page_size: i64,
+        search: Option<&str>,
+        sort_by: Option<&str>,
+        sort_order: Option<&str>,
+    ) -> Result<PaginatedResponse<InventoryStockDto>, ContractError> {
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 100);
+
+        let mut all_stocks = self.get_all_stocks().await?;
+
+        if let Some(search_term) = search.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+            all_stocks.retain(|s| {
+                s.product_name.to_lowercase().contains(&search_term)
+                    || s.sku.to_lowercase().contains(&search_term)
+            });
+        }
+
+        let sort_col = sort_by.unwrap_or("product_name").to_lowercase();
+        let is_desc = sort_order.map(|s| s.eq_ignore_ascii_case("desc")).unwrap_or(false);
+
+        all_stocks.sort_by(|a, b| {
+            let ordering = match sort_col.as_str() {
+                "warehouse_stock" => a.warehouse_stock.cmp(&b.warehouse_stock),
+                "available_stock" => a.available_stock.cmp(&b.available_stock),
+                "sku" => a.sku.cmp(&b.sku),
+                _ => a.product_name.cmp(&b.product_name),
+            };
+            if is_desc {
+                ordering.reverse()
+            } else {
+                ordering
+            }
+        });
+
+        let total = all_stocks.len() as i64;
+        let total_pages = if total == 0 {
+            0
+        } else {
+            (total + page_size - 1) / page_size
+        };
+
+        let offset = ((page - 1) * page_size) as usize;
+        let data = if offset < all_stocks.len() {
+            all_stocks.into_iter().skip(offset).take(page_size as usize).collect()
+        } else {
+            Vec::new()
+        };
+
+        Ok(PaginatedResponse {
+            data,
+            total,
+            page,
+            page_size,
+            total_pages,
+        })
     }
 
     async fn get_stock(&self, product_id: Uuid) -> Result<InventoryStockDto, ContractError> {

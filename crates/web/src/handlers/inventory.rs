@@ -1,5 +1,6 @@
 use axum::{
     extract::{Extension, Path, Query, State},
+    http::StatusCode,
     Json,
 };
 use chrono::Utc;
@@ -10,10 +11,12 @@ use uuid::Uuid;
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
-    AuditLogEntry, BulkStockUpdateRequest, BulkStockUpdateResult, InventoryStockDto, JwtClaims,
-    LowStockAlertDto, SafetyStockLogDto, StockAdjustmentLogDto, UpdatePromotionStockRequest,
-    UpdateSafetyStockRequest, UpdateSpareStockRequest, UpdateWarehouseStockRequest,
+    AuditLogEntry, BulkStockUpdateRequest, BulkStockUpdateResult, ErrorCode, InventoryStockDto,
+    JwtClaims, LowStockAlertDto, PaginatedResponse, PaginationParams, SafetyStockLogDto,
+    StockAdjustmentLogDto, UpdatePromotionStockRequest, UpdateSafetyStockRequest,
+    UpdateSpareStockRequest, UpdateWarehouseStockRequest,
 };
+use validator::Validate;
 
 #[derive(Debug, Deserialize)]
 pub struct AdjustmentLogQuery {
@@ -24,8 +27,16 @@ pub struct AdjustmentLogQuery {
 #[utoipa::path(
     get,
     path = "/api/v1/inventory",
+    params(
+        ("page" = Option<i64>, Query, description = "Page number (min: 1)"),
+        ("page_size" = Option<i64>, Query, description = "Page size (1-100, default: 20)"),
+        ("search" = Option<String>, Query, description = "Filter by SKU or product name"),
+        ("sort_by" = Option<String>, Query, description = "Field to sort by (warehouse_stock, available_stock, sku, product_name)"),
+        ("sort_order" = Option<String>, Query, description = "Sort direction (asc, desc)")
+    ),
     responses(
-        (status = 200, description = "List of inventory stocks", body = Vec<InventoryStockDto>),
+        (status = 200, description = "Paginated list of inventory stocks", body = PaginatedResponse<InventoryStockDto>),
+        (status = 400, description = "Validation error", body = ApiError),
         (status = 401, description = "Unauthorized")
     ),
     security(
@@ -34,9 +45,27 @@ pub struct AdjustmentLogQuery {
     tag = "Inventory"
 )]
 pub async fn list_all_inventory(
+    Query(params): Query<PaginationParams>,
     State(state): State<AppState>,
-) -> Result<Json<Vec<InventoryStockDto>>, ApiError> {
-    let stocks = state.inventory_contract.get_all_stocks().await?;
+) -> Result<Json<PaginatedResponse<InventoryStockDto>>, ApiError> {
+    params.validate().map_err(|e| {
+        ApiError::new(
+            ErrorCode::ValidationFailed,
+            format!("Invalid pagination parameters: {}", e),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let stocks = state
+        .inventory_contract
+        .list_all_paginated(
+            params.page(),
+            params.page_size(),
+            params.search.as_deref(),
+            params.sort_by.as_deref(),
+            params.sort_order.as_deref(),
+        )
+        .await?;
     Ok(Json(stocks))
 }
 
