@@ -1,11 +1,10 @@
 -- Migration: 008_buyer_auth_and_seller_breakglass.sql
 
--- 1. Buyer accounts table (Email/Password registration and/or Google OAuth + verified phone)
+-- 1. Buyer accounts table (Google OAuth/OIDC + verified phone)
 CREATE TABLE IF NOT EXISTS buyer_accounts (
     id TEXT PRIMARY KEY,
-    google_sub TEXT UNIQUE,
+    google_sub TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
-    password_hash TEXT,
     full_name TEXT NOT NULL,
     avatar_url TEXT,
     phone_number TEXT,
