@@ -42,6 +42,9 @@ pub enum ErrorCode {
     InsufficientStock,
     DuplicateResource,
 
+    // 413
+    PayloadTooLarge,
+
     // 429
     RateLimitExceeded,
 
@@ -64,6 +67,7 @@ impl ErrorCode {
             ErrorCode::ResourceNotFound => "RESOURCE_NOT_FOUND",
             ErrorCode::InsufficientStock => "INSUFFICIENT_STOCK",
             ErrorCode::DuplicateResource => "DUPLICATE_RESOURCE",
+            ErrorCode::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             ErrorCode::RateLimitExceeded => "RATE_LIMIT_EXCEEDED",
             ErrorCode::InternalError => "INTERNAL_ERROR",
             ErrorCode::ChannelSyncFailed => "CHANNEL_SYNC_FAILED",

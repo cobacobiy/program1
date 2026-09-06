@@ -13,6 +13,7 @@ services:
       - DATABASE_URL=sqlite:///app/data/program1.db?mode=rwc
     volumes:
       - program1_data:/app/data
+      - program1_uploads:/app/data/uploads
     ports:
       - "6090:8080"
     healthcheck:
@@ -27,6 +28,8 @@ services:
 volumes:
   program1_data:
     name: program1_data
+  program1_uploads:
+    name: program1_uploads
 
 networks:
   default:

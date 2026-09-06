@@ -44,6 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy compiled binary from builder
 COPY --from=builder /usr/src/program1/target/release/program1 /app/program1
 
+# Create persistent storage directories
+RUN mkdir -p /app/data/uploads
+
 # Copy static Web UI assets
 COPY crates/web/static /app/crates/web/static
 

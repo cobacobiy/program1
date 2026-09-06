@@ -143,6 +143,15 @@ pub fn create_app(state: AppState) -> Router {
         }
     });
 
+    let upload_limiter = limiter.clone();
+    let upload_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = upload_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(lim, "uploads", 10, Duration::from_secs(60), req, next)
+                .await
+        }
+    });
+
     // 1. Public routes (no authentication required)
     let public_routes = Router::new()
         .route("/health", get(health_check))
@@ -240,6 +249,12 @@ pub fn create_app(state: AppState) -> Router {
 
     // 3. Seller Protected routes (valid Seller/Staff JWT authentication required)
     let protected_routes = Router::new()
+        .route(
+            "/api/v1/uploads/images",
+            post(upload_image_handler)
+                .route_layer(upload_limit_layer)
+                .route_layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
         .route(
             "/api/v1/catalog",
             post(create_catalog_item).route_layer(catalog_limit_layer),
@@ -365,7 +380,8 @@ pub fn create_app(state: AppState) -> Router {
         .route("/admin", get(move || async move { Html(admin_page) }))
         .route("/store", get(move || async move { Html(store_page_alt) }))
         .route("/", get(move || async move { Html(store_page) }))
-        .nest_service("/assets", ServeDir::new("crates/web/static"));
+        .nest_service("/assets", ServeDir::new("crates/web/static"))
+        .nest_service("/uploads", ServeDir::new("data/uploads"));
 
     // Swagger UI & OpenAPI Specification routes
     let doc_routes = SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi());

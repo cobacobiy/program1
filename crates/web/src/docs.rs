@@ -93,6 +93,7 @@ impl Modify for SecurityAddon {
         handlers::payment_notification_handler,
         handlers::get_payment_by_order_handler,
         handlers::get_payment_config_handler,
+        handlers::upload_image_handler,
     ),
     components(
         schemas(
@@ -144,6 +145,7 @@ impl Modify for SecurityAddon {
             CreatePaymentRequest,
             PaymentTransactionDto,
             PaymentConfigDto,
+            handlers::UploadResponse,
         )
     ),
     tags(
@@ -152,6 +154,7 @@ impl Modify for SecurityAddon {
         (name = "Buyer Auth", description = "Buyer storefront authentication & profile"),
         (name = "Admin Buyers", description = "Admin customer directory & CRM"),
         (name = "Catalog", description = "Product catalog management"),
+        (name = "Uploads", description = "Product image upload & file storage"),
         (name = "Inventory", description = "Ginee OMS multi-warehouse & safety stock"),
         (name = "Channels", description = "Omnichannel marketplace sync"),
         (name = "Orders", description = "Storefront checkout & order management"),
