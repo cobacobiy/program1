@@ -5,6 +5,8 @@ on:
     branches: [ main ]
     paths-ignore:
       - '**.md'
+      - 'issues/**'
+      - 'scripts/**'
       - '.dockerignore'
       - '.gitignore'
       - 'docs/**'
@@ -13,10 +15,16 @@ on:
     types: [opened, synchronize, reopened, closed]
     paths-ignore:
       - '**.md'
+      - 'issues/**'
+      - 'scripts/**'
       - '.dockerignore'
       - '.gitignore'
       - 'docs/**'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # ============================================
@@ -35,17 +43,14 @@ jobs:
       - name: Cache Cargo Dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Run Cargo Check
-        run: cargo check --workspace
-
       - name: Run Workspace Unit Tests
         run: cargo test --workspace
 
   # ============================================
   # Job 2: Build & Push Image to GHCR (ghcr.io)
+  # (Runs in parallel with validate on push to main)
   # ============================================
   build-ghcr:
-    needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -80,9 +85,10 @@ jobs:
 
   # ============================================
   # Job 3: Deploy Production (Server Linux Runner)
+  # (Waits for BOTH validate and build-ghcr to pass)
   # ============================================
   deploy-production:
-    needs: build-ghcr
+    needs: [validate, build-ghcr]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, 226node2]
     steps:
