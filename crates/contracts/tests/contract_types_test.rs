@@ -315,44 +315,44 @@ fn test_buyer_login_request_validation() {
 
 #[test]
 fn test_static_frontend_store_js_contract_parity() {
-    let store_js_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let static_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .join("web")
-        .join("static")
-        .join("store.js");
+        .join("static");
 
-    assert!(
-        store_js_path.exists(),
-        "store.js must exist at {:?}",
-        store_js_path
-    );
-    let content = std::fs::read_to_string(&store_js_path).expect("Failed to read store.js");
+    let auth_content = std::fs::read_to_string(static_dir.join("store").join("store-auth.js"))
+        .or_else(|_| std::fs::read_to_string(static_dir.join("store.js")))
+        .expect("Failed to read store-auth.js or store.js");
+
+    let checkout_content = std::fs::read_to_string(static_dir.join("store").join("store-checkout.js"))
+        .or_else(|_| std::fs::read_to_string(static_dir.join("store.js")))
+        .expect("Failed to read store-checkout.js or store.js");
 
     // 1. OTP verify must send field 'code' not 'otp_code'
     assert!(
-        content.contains("code: code"),
-        "store.js OTP verify must send 'code' field to match OtpVerifyRequest"
+        auth_content.contains("code: code"),
+        "store-auth.js OTP verify must send 'code' field to match OtpVerifyRequest"
     );
     assert!(
-        !content.contains("otp_code:"),
-        "store.js must NOT send 'otp_code' field"
+        !auth_content.contains("otp_code:"),
+        "store-auth.js must NOT send 'otp_code' field"
     );
 
     // 2. Address create/update must send 'set_as_default' not 'is_default' in mutation payload
     assert!(
-        content.contains("set_as_default:"),
-        "store.js address save payload must send 'set_as_default' field"
+        checkout_content.contains("set_as_default:"),
+        "store-checkout.js address save payload must send 'set_as_default' field"
     );
 
     // 3. OTP verify response handler must handle BuyerAccountDto directly
     assert!(
-        content.contains("activeBuyer = result.id ? result : (result.buyer || result)")
-            || content.contains(
+        auth_content.contains("activeBuyer = result.id ? result : (result.buyer || result)")
+            || auth_content.contains(
                 "activeBuyer = (result && result.id) ? result : (result.buyer || result)"
             )
-            || content.contains("activeBuyer = result;"),
-        "store.js OTP verify must handle BuyerAccountDto directly rather than solely result.buyer"
+            || auth_content.contains("activeBuyer = result;"),
+        "store-auth.js OTP verify must handle BuyerAccountDto directly rather than solely result.buyer"
     );
 }
 

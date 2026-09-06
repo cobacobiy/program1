@@ -1,0 +1,114 @@
+/* ==========================================================================
+   STOREFRONT MAIN & SHARED STATE ENGINE
+   File: /crates/web/static/store/store-main.js
+   ========================================================================== */
+
+const StoreState = {
+  cart: [],
+  catalog: [],
+  activeCategory: "ALL",
+  searchQuery: "",
+  buyerToken: localStorage.getItem("program1_buyer_token") || null,
+  activeBuyer: null,
+  buyerAddresses: [],
+  selectedAddressId: null,
+  storeWhatsAppNumber: "085810007735",
+  googleClientId: null,
+  gisRenderAttempts: 0,
+  storeInfo: null,
+  otpTimerInterval: null,
+  otpSecondsRemaining: 300,
+  currentOtpPhone: "",
+  inAppChatMessages: []
+};
+
+window.StoreState = StoreState;
+
+// Provide backward-compatible top-level property bindings
+["cart", "catalog", "activeCategory", "searchQuery", "buyerToken", "activeBuyer",
+ "buyerAddresses", "selectedAddressId", "storeWhatsAppNumber", "googleClientId",
+ "gisRenderAttempts", "storeInfo", "otpTimerInterval", "otpSecondsRemaining",
+ "currentOtpPhone", "inAppChatMessages"].forEach(prop => {
+  Object.defineProperty(window, prop, {
+    get() { return StoreState[prop]; },
+    set(val) { StoreState[prop] = val; },
+    configurable: true
+  });
+});
+
+// --- THEME ENGINE (DARK / LIGHT) ---
+function initStoreTheme() {
+  const savedTheme = localStorage.getItem("shopee_store_theme") || "dark";
+  applyStoreTheme(savedTheme);
+}
+
+function applyStoreTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("shopee_store_theme", theme);
+  const icon = document.getElementById("store-theme-icon");
+  if (icon) {
+    icon.innerText = theme === "light" ? "🌙" : "☀️";
+  }
+}
+
+function toggleStoreTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+  const newTheme = currentTheme === "light" ? "dark" : "light";
+  applyStoreTheme(newTheme);
+}
+
+// --- INITIALIZE STOREFRONT ---
+async function initStore() {
+  try {
+    initStoreTheme();
+    // 1. Check Storefront Buyer Session
+    if (typeof checkBuyerSession === "function") {
+      checkBuyerSession();
+    }
+    if (typeof fetchBuyerAuthConfig === "function") {
+      await fetchBuyerAuthConfig();
+    }
+
+    // 2. Fetch Store Information
+    const infoRes = await fetch('/api/v1/store/info');
+    if (infoRes.ok) {
+      StoreState.storeInfo = await infoRes.json();
+      StoreState.storeWhatsAppNumber = StoreState.storeInfo.whatsapp_number || "085810007735";
+      const nameEl = document.getElementById('header-store-name');
+      if (nameEl) nameEl.innerText = StoreState.storeInfo.store_name || "AURA Storefront";
+
+      const titleEl = document.getElementById('page-title');
+      if (titleEl) titleEl.innerText = `${StoreState.storeInfo.store_name || "AURA Storefront"} — Shopee Official Store`;
+
+      if (typeof updateFloatingChatWidget === "function") {
+        updateFloatingChatWidget();
+      }
+    }
+
+    // 3. Fetch Catalog Products
+    const res = await fetch('/api/v1/catalog?page=1&page_size=100');
+    if (res.ok) {
+      const respData = await res.json();
+      StoreState.catalog = respData.data || respData;
+      if (typeof renderCategoryPills === "function") renderCategoryPills();
+      if (typeof renderCatalog === "function") renderCatalog();
+    }
+
+    // 4. Start Flash Sale Countdown Timer
+    if (typeof startFlashSaleTimer === "function") startFlashSaleTimer();
+
+    // 5. Setup Search Event Listeners
+    if (typeof setupSearchListener === "function") setupSearchListener();
+  } catch (e) {
+    console.error("Failed to initialize storefront data:", e);
+  }
+}
+
+window.initStore = initStore;
+window.initStoreTheme = initStoreTheme;
+window.applyStoreTheme = applyStoreTheme;
+window.toggleStoreTheme = toggleStoreTheme;
+
+document.addEventListener("DOMContentLoaded", () => {
+  initStore();
+});
