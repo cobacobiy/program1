@@ -57,6 +57,7 @@ program1/
 | 18 | [Email Notification System](./issue18_email_notifications.md) | 🟢 MEDIUM | 2-3 hari | `[ ]` TODO |
 | 19 | [Frontend Modularization (JS Refactor)](./issue19_frontend_modularization.md) | 🟢 MEDIUM | 2-3 hari | `[ ]` TODO |
 | 20 | [Buyer Order History & Profile Page](./issue20_buyer_order_history.md) | 🟡 HIGH | 2 hari | `[ ]` TODO |
+| 21 | [CI/CD Pipeline Optimization](./issue21_cicd_optimization.md) | 🟡 HIGH | 1-2 hari | `[ ]` TODO |
 
 ---
 
@@ -72,6 +73,7 @@ graph TD
     I18["Issue 18: Email Notifications"]
     I19["Issue 19: Frontend Modularization"]
     I20["Issue 20: Buyer Order History"]
+    I21["Issue 21: CI/CD Optimization"]
 
     I14 --> I15
     I14 --> I18
@@ -83,6 +85,7 @@ graph TD
     style I16 fill:#ffaa00,color:#000
     style I17 fill:#ffaa00,color:#000
     style I20 fill:#ffaa00,color:#000
+    style I21 fill:#ffaa00,color:#000
     style I18 fill:#44bb44,color:#fff
     style I19 fill:#44bb44,color:#fff
 ```
@@ -95,6 +98,7 @@ graph TD
    - Issue 16 (Image Upload) — bisa dikerjakan independen
    - Issue 17 (Pagination) — bisa dikerjakan independen
    - Issue 19 (Frontend Refactor) — bisa dikerjakan independen
+   - Issue 21 (CI/CD Optimization) — **KERJAKAN DULUAN** supaya semua issue berikutnya deploy lebih cepat
 
 2. **Sequential Batch B (Depend ke Batch A)**:
    - Issue 15 (Order Status) — depend ke Issue 14
