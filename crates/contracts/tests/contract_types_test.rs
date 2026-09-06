@@ -409,3 +409,42 @@ fn test_chat_contract_types_and_validation() {
     };
     assert!(too_long_req.validate().is_err());
 }
+
+#[test]
+fn test_payment_contract_types_and_validation() {
+    use program1_contracts::{CreatePaymentRequest, PaymentConfigDto, PaymentTransactionDto};
+    use validator::Validate;
+
+    let payment_id = Uuid::new_v4();
+    let order_id = Uuid::new_v4();
+    let now = Utc::now();
+
+    let tx = PaymentTransactionDto {
+        id: payment_id,
+        order_id,
+        payment_method: "qris".to_string(),
+        amount: 150000.0,
+        currency: "IDR".to_string(),
+        status: "pending".to_string(),
+        provider_ref: Some("mid-trans-123".to_string()),
+        snap_token: Some("snap-token-abc".to_string()),
+        snap_redirect_url: Some("https://app.sandbox.midtrans.com/snap/v2/vtweb/abc".to_string()),
+        paid_at: None,
+        created_at: now,
+    };
+
+    assert_eq!(tx.id, payment_id);
+    assert_eq!(tx.amount, 150000.0);
+    assert_eq!(tx.status, "pending");
+
+    let req = CreatePaymentRequest { order_id };
+    assert!(req.validate().is_ok());
+
+    let config = PaymentConfigDto {
+        client_key: "SB-Mid-client-xxx".to_string(),
+        is_production: false,
+        snap_url: "https://app.sandbox.midtrans.com/snap/snap.js".to_string(),
+    };
+    assert_eq!(config.client_key, "SB-Mid-client-xxx");
+    assert!(!config.is_production);
+}

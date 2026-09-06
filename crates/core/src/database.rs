@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 pub type DbPool = Pool<Sqlite>;
 
-/// Initialize the database pool and run embedded SQLite migrations (001-010)
+/// Initialize the database pool and run embedded SQLite migrations (001-011)
 pub async fn init_database(database_url: &str) -> Result<DbPool, sqlx::Error> {
     if database_url.starts_with("sqlite:") {
         // Parse sqlite path to ensure directory exists if file-based
