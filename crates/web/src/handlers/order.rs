@@ -522,3 +522,46 @@ pub async fn list_buyer_orders_handler(
     Ok(Json(orders))
 }
 
+/// Get detailed order placed by current authenticated buyer (Protected - Buyer)
+#[utoipa::path(
+    get,
+    path = "/api/v1/buyer/orders/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Order ID")
+    ),
+    responses(
+        (status = 200, description = "Buyer order detail", body = OmniOrderDto),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Order not found", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Orders"
+)]
+pub async fn get_buyer_order_handler(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<OmniOrderDto>, ApiError> {
+    if !claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses rincian pesanan pembeli hanya untuk akun buyer",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let order = state.order_contract.get_order(id).await?;
+    if order.buyer_id != Some(claims.sub) {
+        return Err(ApiError::new(
+            ErrorCode::ResourceNotFound,
+            "Pesanan tidak ditemukan atau bukan milik Anda",
+            StatusCode::NOT_FOUND,
+        ));
+    }
+
+    Ok(Json(order))
+}
+

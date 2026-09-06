@@ -954,6 +954,18 @@ pub struct UpdateBuyerStatusRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateBuyerProfileRequest {
+    #[validate(length(
+        min = 2,
+        max = 100,
+        message = "Nama lengkap minimal 2 karakter (maks 100)"
+    ))]
+    pub full_name: Option<String>,
+    #[validate(url(message = "Format URL avatar tidak valid"))]
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct GoogleAuthRequest {
     #[validate(length(min = 1, message = "Google ID token is required"))]
     pub id_token: String,
@@ -1103,6 +1115,13 @@ pub trait BuyerContract: Send + Sync {
         &self,
         buyer_id: Uuid,
         is_active: bool,
+    ) -> Result<BuyerAccountDto, ContractError>;
+
+    async fn update_buyer_profile(
+        &self,
+        buyer_id: Uuid,
+        full_name: Option<String>,
+        avatar_url: Option<String>,
     ) -> Result<BuyerAccountDto, ContractError>;
 }
 

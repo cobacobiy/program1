@@ -7,7 +7,7 @@ use program1_contracts::{
     AuditLogEntry, BuyerAccountDto, BuyerAddressDto, BuyerAuthResponse, BuyerLoginRequest,
     CreateBuyerAddressRequest, ErrorCode, GoogleAuthRequest, JwtClaims, OtpRequest,
     OtpVerifyRequest, PaginatedResponse, PaginationParams, RegisterBuyerRequest,
-    UpdateBuyerAddressRequest, UpdateBuyerStatusRequest,
+    UpdateBuyerAddressRequest, UpdateBuyerProfileRequest, UpdateBuyerStatusRequest,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -167,6 +167,42 @@ pub async fn get_buyer_profile_handler(
 ) -> Result<Json<BuyerAccountDto>, ApiError> {
     let buyer = state.buyer_contract.get_buyer_profile(claims.sub).await?;
     Ok(Json(buyer))
+}
+
+/// Update authenticated buyer profile
+#[utoipa::path(
+    put,
+    path = "/api/v1/buyer/profile",
+    request_body = UpdateBuyerProfileRequest,
+    responses(
+        (status = 200, description = "Buyer profile updated", body = BuyerAccountDto),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Buyer not found", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Buyer Profile"
+)]
+pub async fn update_buyer_profile_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    ValidatedJson(payload): ValidatedJson<UpdateBuyerProfileRequest>,
+) -> Result<Json<BuyerAccountDto>, ApiError> {
+    if !claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses perbarui profil pembeli hanya untuk akun buyer",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let updated = state
+        .buyer_contract
+        .update_buyer_profile(claims.sub, payload.full_name, payload.avatar_url)
+        .await?;
+    Ok(Json(updated))
 }
 
 /// List all shipping addresses for authenticated buyer

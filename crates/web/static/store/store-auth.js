@@ -709,6 +709,126 @@ function handleResendOtp() {
   if (devNotice) devNotice.style.display = "none";
 }
 
+// --- BUYER PROFILE DASHBOARD ENGINE ---
+async function renderBuyerProfileDashboard() {
+  const buyer = window.StoreState ? window.StoreState.activeBuyer : window.activeBuyer;
+  const token = window.StoreState ? window.StoreState.buyerToken : window.buyerToken;
+  if (!buyer || !token) return;
+
+  const avatarEl = document.getElementById("profile-avatar-large");
+  const nameEl = document.getElementById("profile-display-name");
+  const emailEl = document.getElementById("profile-display-email");
+  const phoneBadge = document.getElementById("profile-phone-badge");
+  const inputName = document.getElementById("profile-input-name");
+  const inputAvatar = document.getElementById("profile-input-avatar");
+  const inputEmail = document.getElementById("profile-input-email");
+
+  if (avatarEl) {
+    if (buyer.avatar_url) {
+      avatarEl.style.backgroundImage = `url('${escapeHtml(buyer.avatar_url)}')`;
+      avatarEl.innerText = "";
+    } else {
+      avatarEl.style.backgroundImage = "none";
+      avatarEl.innerText = (buyer.full_name || "P").charAt(0).toUpperCase();
+    }
+  }
+
+  if (nameEl) nameEl.innerText = buyer.full_name || "Pembeli";
+  if (emailEl) emailEl.innerText = buyer.email || "-";
+  if (inputName) inputName.value = buyer.full_name || "";
+  if (inputAvatar) inputAvatar.value = buyer.avatar_url || "";
+  if (inputEmail) inputEmail.value = buyer.email || "";
+
+  if (phoneBadge) {
+    if (buyer.phone_verified && buyer.phone_number) {
+      phoneBadge.innerHTML = `<span style="font-size:0.82rem; color:var(--emerald); font-weight:600">🟢 No. HP Terverifikasi: ${escapeHtml(buyer.phone_number)}</span>`;
+    } else {
+      phoneBadge.innerHTML = `
+        <div style="display:inline-flex; align-items:center; gap:0.5rem">
+          <span style="font-size:0.82rem; color:var(--rose); font-weight:600">🔴 Belum Verifikasi No. HP</span>
+          <button type="button" class="btn-sm-action" onclick="openOtpModal()">Verifikasi</button>
+        </div>
+      `;
+    }
+  }
+
+  // Fetch quick order statistics
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/orders");
+    if (res.ok) {
+      const orders = await res.json();
+      const totalOrdersEl = document.getElementById("stat-total-orders");
+      const completedOrdersEl = document.getElementById("stat-completed-orders");
+      if (totalOrdersEl) totalOrdersEl.innerText = orders.length;
+      if (completedOrdersEl) {
+        const completed = orders.filter(o => {
+          const s = (o.status || "").toLowerCase();
+          return s === "completed" || s === "delivered";
+        }).length;
+        completedOrdersEl.innerText = completed;
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to load profile order stats:", e);
+  }
+}
+
+async function handleUpdateBuyerProfile(event) {
+  event.preventDefault();
+  const inputName = document.getElementById("profile-input-name");
+  const inputAvatar = document.getElementById("profile-input-avatar");
+  const btnSave = document.getElementById("btn-save-profile");
+
+  const full_name = inputName ? inputName.value.trim() : "";
+  const avatar_url = inputAvatar && inputAvatar.value.trim() ? inputAvatar.value.trim() : null;
+
+  if (full_name.length < 2) {
+    showToast("Nama lengkap minimal 2 karakter.", "warning");
+    return;
+  }
+
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.innerText = "Menyimpan...";
+  }
+
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/profile", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        full_name,
+        avatar_url
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(`Gagal memperbarui profil: ${err.message || err.error || "Validasi gagal"}`, "error");
+      return;
+    }
+
+    const updated = await res.json();
+    if (window.StoreState) window.StoreState.activeBuyer = updated;
+    window.activeBuyer = updated;
+    localStorage.setItem("program1_buyer_user", JSON.stringify(updated));
+
+    showToast("Profil Anda berhasil diperbarui!", "success");
+    renderBuyerHeaderState();
+    renderBuyerProfileDashboard();
+  } catch (e) {
+    console.error("handleUpdateBuyerProfile error:", e);
+    showToast(`Terjadi kesalahan: ${e.message}`, "error");
+  } finally {
+    if (btnSave) {
+      btnSave.disabled = false;
+      btnSave.innerText = "💾 Simpan Perubahan Profil";
+    }
+  }
+}
+
 // Window Exports
 window.buyerAuthFetch = buyerAuthFetch;
 window.checkBuyerSession = checkBuyerSession;
@@ -731,3 +851,6 @@ window.handleRequestOtp = handleRequestOtp;
 window.startOtpCountdown = startOtpCountdown;
 window.handleVerifyOtp = handleVerifyOtp;
 window.handleResendOtp = handleResendOtp;
+window.renderBuyerProfileDashboard = renderBuyerProfileDashboard;
+window.handleUpdateBuyerProfile = handleUpdateBuyerProfile;
+

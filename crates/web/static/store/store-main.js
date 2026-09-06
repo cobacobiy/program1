@@ -104,11 +104,71 @@ async function initStore() {
   }
 }
 
+// --- STORE NAVIGATION TABS ENGINE ---
+function switchStoreTab(tabId) {
+  const validTabs = ['home', 'orders', 'addresses', 'profile'];
+  if (!validTabs.includes(tabId)) tabId = 'home';
+  StoreState.activeTab = tabId;
+
+  // Check auth for protected buyer views
+  if ((tabId === 'orders' || tabId === 'addresses' || tabId === 'profile') && !StoreState.buyerToken) {
+    if (typeof showToast === "function") {
+      showToast("Silakan masuk terlebih dahulu untuk mengakses menu ini.", "warning");
+    }
+    if (typeof openBuyerLoginModal === "function") {
+      openBuyerLoginModal();
+    }
+    return;
+  }
+
+  // Update top tabs
+  validTabs.forEach(t => {
+    const btn = document.getElementById(`tab-btn-${t}`);
+    const view = document.getElementById(`view-store-${t}`);
+    if (btn) {
+      if (t === tabId) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+    if (view) {
+      if (t === tabId) {
+        view.classList.add('active');
+        view.style.display = 'block';
+      } else {
+        view.classList.remove('active');
+        view.style.display = 'none';
+      }
+    }
+  });
+
+  // Update mobile bottom nav
+  const mobMap = { home: 'mob-nav-home', orders: 'mob-nav-orders', profile: 'mob-nav-profile' };
+  Object.keys(mobMap).forEach(key => {
+    const el = document.getElementById(mobMap[key]);
+    if (el) {
+      if (key === tabId) el.classList.add('active');
+      else el.classList.remove('active');
+    }
+  });
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Trigger tab-specific loaders
+  if (tabId === 'orders' && typeof fetchBuyerOrdersDashboard === "function") {
+    fetchBuyerOrdersDashboard();
+  } else if (tabId === 'addresses' && typeof fetchBuyerAddressesDashboard === "function") {
+    fetchBuyerAddressesDashboard();
+  } else if (tabId === 'profile' && typeof renderBuyerProfileDashboard === "function") {
+    renderBuyerProfileDashboard();
+  }
+}
+
 window.initStore = initStore;
 window.initStoreTheme = initStoreTheme;
 window.applyStoreTheme = applyStoreTheme;
 window.toggleStoreTheme = toggleStoreTheme;
+window.switchStoreTab = switchStoreTab;
 
 document.addEventListener("DOMContentLoaded", () => {
   initStore();
 });
+

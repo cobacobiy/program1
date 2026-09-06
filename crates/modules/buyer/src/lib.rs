@@ -1487,6 +1487,89 @@ impl BuyerContract for BuyerModule {
 
         Self::row_to_buyer_dto(&updated_row)
     }
+
+    async fn update_buyer_profile(
+        &self,
+        buyer_id: Uuid,
+        full_name: Option<String>,
+        avatar_url: Option<String>,
+    ) -> Result<BuyerAccountDto, ContractError> {
+        if let Some(ref name) = full_name {
+            let trimmed = name.trim();
+            if trimmed.len() < 2 || trimmed.len() > 100 {
+                return Err(ContractError::ValidationError(
+                    "Nama lengkap minimal 2 karakter (maks 100)".to_string(),
+                ));
+            }
+        }
+
+        let current_row = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts WHERE id = $1",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let current = match current_row {
+            Some(row) => Self::row_to_buyer_dto(&row)?,
+            None => {
+                return Err(ContractError::NotFound(
+                    "Akun pembeli tidak ditemukan".to_string(),
+                ));
+            }
+        };
+
+        let new_name = full_name
+            .map(|n| n.trim().to_string())
+            .unwrap_or(current.full_name);
+        let new_avatar = avatar_url.or(current.avatar_url);
+        let now = Utc::now().to_rfc3339();
+
+        let result = sqlx::query(
+            "UPDATE buyer_accounts SET full_name = $1, avatar_url = $2, updated_at = $3 WHERE id = $4",
+        )
+        .bind(&new_name)
+        .bind(&new_avatar)
+        .bind(&now)
+        .bind(buyer_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(ContractError::NotFound(
+                "Akun pembeli tidak ditemukan".to_string(),
+            ));
+        }
+
+        let _ = self
+            .audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                actor_id: Some(buyer_id),
+                actor_username: current.email.clone(),
+                action: "BUYER_PROFILE_UPDATED".to_string(),
+                resource_type: "buyer".to_string(),
+                resource_id: Some(buyer_id),
+                details: format!("Buyer {} updated profile", buyer_id),
+                ip_address: None,
+            })
+            .await;
+
+        let updated_row = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts WHERE id = $1",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Self::row_to_buyer_dto(&updated_row)
+    }
 }
 
 #[cfg(test)]
@@ -2207,5 +2290,40 @@ mod tests {
         module.delete_address(buyer_id, addr2.id).await.unwrap();
         let addr1_promoted = module.get_address(buyer_id, addr1.id).await.unwrap();
         assert!(addr1_promoted.is_default);
+    }
+
+    #[tokio::test]
+    async fn test_update_buyer_profile() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let reg = module
+            .register(RegisterBuyerRequest {
+                full_name: "Original Name".to_string(),
+                email: "update_profile@store.com".to_string(),
+                password: "Password123!".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let updated = module
+            .update_buyer_profile(
+                reg.buyer.id,
+                Some("Updated Name".to_string()),
+                Some("https://example.com/new-avatar.png".to_string()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(updated.full_name, "Updated Name");
+        assert_eq!(
+            updated.avatar_url,
+            Some("https://example.com/new-avatar.png".to_string())
+        );
+
+        // Validation test: name too short
+        let invalid = module
+            .update_buyer_profile(reg.buyer.id, Some("A".to_string()), None)
+            .await;
+        assert!(invalid.is_err());
     }
 }

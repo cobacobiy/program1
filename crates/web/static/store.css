@@ -1610,4 +1610,277 @@ main {
   background: rgba(16, 185, 129, 0.3);
 }
 
+/* ==========================================================================
+   STORE NAVIGATION TABS & DASHBOARD SECTIONS
+   ========================================================================== */
+.store-nav-tabs {
+  background: var(--header-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--card-border);
+  position: sticky;
+  top: 61px;
+  z-index: 90;
+  transition: all 0.25s ease;
+}
+.nav-tabs-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-tabs-container::-webkit-scrollbar {
+  display: none;
+}
+.nav-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.nav-tab-btn:hover {
+  color: var(--text-heading);
+  background: rgba(255, 255, 255, 0.05);
+}
+:root[data-theme="light"] .nav-tab-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.nav-tab-btn.active {
+  color: #ffffff !important;
+  background: var(--shopee-orange) !important;
+  border-color: var(--shopee-orange) !important;
+  box-shadow: 0 2px 8px rgba(238, 77, 45, 0.35);
+}
+
+.store-view-section {
+  display: none;
+  width: 100%;
+  animation: fadeInStoreView 0.2s ease;
+}
+.store-view-section.active {
+  display: block;
+}
+@keyframes fadeInStoreView {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dashboard-container {
+  max-width: 1280px;
+  margin: 1.5rem auto;
+  padding: 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.dashboard-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+}
+:root[data-theme="light"] .dashboard-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--card-border);
+}
+:root[data-theme="light"] .dashboard-header {
+  border-bottom-color: #f3f4f6;
+}
+
+/* --- ORDER DASHBOARD FILTER BAR --- */
+.order-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scrollbar-width: none;
+}
+.order-filter-bar::-webkit-scrollbar {
+  display: none;
+}
+.order-filter-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+:root[data-theme="light"] .order-filter-btn {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+.order-filter-btn:hover {
+  color: var(--text-heading);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.order-filter-btn.active {
+  background: rgba(238, 77, 45, 0.15);
+  color: var(--shopee-orange);
+  border-color: var(--shopee-orange);
+  font-weight: 600;
+}
+
+/* --- BUYER PROFILE DASHBOARD LAYOUT --- */
+.profile-dashboard-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .profile-dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profile-sidebar-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+:root[data-theme="light"] .profile-sidebar-card {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+
+.profile-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--shopee-orange-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(238, 77, 45, 0.35);
+  background-size: cover;
+  background-position: center;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 1.25rem 0;
+}
+.stat-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+}
+:root[data-theme="light"] .stat-box {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+.stat-number {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--shopee-orange);
+}
+.stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.btn-logout-buyer {
+  width: 100%;
+  background: rgba(244, 63, 94, 0.12);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  padding: 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-logout-buyer:hover {
+  background: rgba(244, 63, 94, 0.25);
+}
+
+.profile-main-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+}
+:root[data-theme="light"] .profile-main-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+
+/* --- ADDRESS CARD DASHBOARD --- */
+.dashboard-address-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  position: relative;
+  transition: all 0.2s;
+}
+:root[data-theme="light"] .dashboard-address-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+.dashboard-address-card.is-default {
+  border-color: rgba(238, 77, 45, 0.5);
+  box-shadow: 0 0 12px rgba(238, 77, 45, 0.1);
+}
+.address-default-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(238, 77, 45, 0.15);
+  color: var(--shopee-orange);
+  border: 1px solid rgba(238, 77, 45, 0.3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+
 
