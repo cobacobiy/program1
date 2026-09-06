@@ -22,8 +22,10 @@ program1-module-user = { path = "../modules/user" }
 program1-module-auth = { path = "../modules/auth" }
 program1-module-analytics = { path = "../modules/analytics" }
 program1-module-audit = { path = "../modules/audit" }
+program1-module-buyer = { path = "../modules/buyer" }
 
 
+async-trait.workspace = true
 tokio.workspace = true
 axum.workspace = true
 tower.workspace = true
@@ -37,5 +39,8 @@ jsonwebtoken.workspace = true
 validator = { workspace = true }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+
+[dev-dependencies]
+sqlx = { workspace = true }
 
 

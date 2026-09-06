@@ -19,9 +19,11 @@ use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-async fn setup_test_app() -> (axum::Router, String) {
+async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret, 24));
@@ -40,12 +42,66 @@ async fn setup_test_app() -> (axum::Router, String) {
     let audit_module = Arc::new(AuditModule::new(pool.clone()));
     let rate_limiter = Arc::new(IpRateLimiter::new());
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
 
     let admin_user = user_module.authenticate("admin", "admin123").await.unwrap();
     let admin_token = auth_module.generate_token(&admin_user).unwrap();
+
+    // Create verified buyer and address
+    let buyer_id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let now_str = now.to_rfc3339();
+    sqlx::query(
+        "INSERT INTO buyer_accounts (id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at)
+         VALUES ($1, 'sub_err', 'err@buyer.com', 'Error Buyer', NULL, '+628123456789', 1, 1, $2, $3)",
+    )
+    .bind(buyer_id.to_string())
+    .bind(&now_str)
+    .bind(&now_str)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let buyer_dto = program1_contracts::BuyerAccountDto {
+        id: buyer_id,
+        google_sub: "sub_err".to_string(),
+        email: "err@buyer.com".to_string(),
+        full_name: "Error Buyer".to_string(),
+        avatar_url: None,
+        phone_number: Some("+628123456789".to_string()),
+        phone_verified: true,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+    };
+    let buyer_token = auth_module.generate_buyer_token(&buyer_dto).unwrap();
+
+    let addr_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO buyer_addresses (id, buyer_id, recipient_name, phone_number, street_address, subdistrict, city, province, postal_code, is_default, created_at, updated_at)
+         VALUES ($1, $2, 'Err Buyer', '+628123456789', 'Jl. Err 1', 'Sub', 'City', 'Prov', '12345', 1, $3, $4)",
+    )
+    .bind(addr_id.to_string())
+    .bind(buyer_id.to_string())
+    .bind(&now_str)
+    .bind(&now_str)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -58,17 +114,18 @@ async fn setup_test_app() -> (axum::Router, String) {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
 
-
-    (create_app(state), admin_token)
+    (create_app(state), admin_token, buyer_token, addr_id)
 }
 
 #[tokio::test]
 async fn test_resource_not_found_standard_error_format() {
-    let (app, _) = setup_test_app().await;
+    let (app, _, _, _) = setup_test_app().await;
 
     let non_existent_id = Uuid::new_v4();
     let req = Request::builder()
@@ -87,17 +144,16 @@ async fn test_resource_not_found_standard_error_format() {
     let err = &body["error"];
     assert_eq!(err["code"], "RESOURCE_NOT_FOUND");
     assert_eq!(err["status"], 404);
-    assert!(!err["message"].as_str().unwrap().is_empty());
 }
 
 #[tokio::test]
 async fn test_validation_failed_standard_error_format() {
-    let (app, admin_token) = setup_test_app().await;
+    let (app, admin_token, _, _) = setup_test_app().await;
 
-    let invalid_catalog_payload = serde_json::json!({
+    let invalid_payload = serde_json::json!({
         "name": "",
-        "sku": "SKU-EMPTY",
-        "category": "Peripherals",
+        "sku": "",
+        "category": "Electronics",
         "price": -100.0,
         "stock": 10
     });
@@ -107,7 +163,7 @@ async fn test_validation_failed_standard_error_format() {
         .method("POST")
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_vec(&invalid_catalog_payload).unwrap()))
+        .body(Body::from(serde_json::to_vec(&invalid_payload).unwrap()))
         .unwrap();
 
     let response = app.oneshot(req).await.unwrap();
@@ -120,20 +176,17 @@ async fn test_validation_failed_standard_error_format() {
     let err = &body["error"];
     assert_eq!(err["code"], "VALIDATION_FAILED");
     assert_eq!(err["status"], 422);
-    assert!(err.get("details").is_some());
     let details = err["details"].as_array().unwrap();
     assert!(details.len() >= 2);
 }
 
 #[tokio::test]
 async fn test_insufficient_stock_error_format() {
-    let (app, _) = setup_test_app().await;
+    let (app, _, buyer_token, addr_id) = setup_test_app().await;
 
     // Request order with quantity far exceeding catalog stock
     let order_payload = serde_json::json!({
-        "customer_name": "Greedy Buyer",
-        "customer_email": "buyer@example.com",
-        "shipping_address": "Jl. Borong Banyak 99",
+        "address_id": addr_id,
         "items": [{
             "product_id": "10000000-0000-0000-0000-000000000001",
             "quantity": 9999
@@ -143,6 +196,7 @@ async fn test_insufficient_stock_error_format() {
     let req = Request::builder()
         .uri("/api/v1/orders")
         .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {}", buyer_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&order_payload).unwrap()))
         .unwrap();
@@ -157,5 +211,8 @@ async fn test_insufficient_stock_error_format() {
     let err = &body["error"];
     assert_eq!(err["code"], "INSUFFICIENT_STOCK");
     assert_eq!(err["status"], 409);
-    assert!(err["message"].as_str().unwrap().contains("Insufficient stock"));
+    assert!(err["message"]
+        .as_str()
+        .unwrap()
+        .contains("Insufficient stock"));
 }

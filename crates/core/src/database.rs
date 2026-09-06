@@ -49,9 +49,7 @@ pub async fn init_database(database_url: &str) -> Result<DbPool, sqlx::Error> {
             .await?;
 
         info!("Running database migrations for SQLite...");
-        sqlx::migrate!("../../migrations/sqlite")
-            .run(&pool)
-            .await?;
+        sqlx::migrate!("../../migrations/sqlite").run(&pool).await?;
 
         info!("Database migrations executed successfully.");
         Ok(pool)
@@ -61,17 +59,15 @@ pub async fn init_database(database_url: &str) -> Result<DbPool, sqlx::Error> {
             "Unrecognized DATABASE_URL format. Falling back to in-memory SQLite (data will not persist)."
         );
 
-        let connect_options = SqliteConnectOptions::from_str("sqlite::memory:")?
-            .create_if_missing(true);
+        let connect_options =
+            SqliteConnectOptions::from_str("sqlite::memory:")?.create_if_missing(true);
 
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(connect_options)
             .await?;
 
-        sqlx::migrate!("../../migrations/sqlite")
-            .run(&pool)
-            .await?;
+        sqlx::migrate!("../../migrations/sqlite").run(&pool).await?;
 
         Ok(pool)
     }

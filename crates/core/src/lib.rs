@@ -7,9 +7,6 @@ pub use config::AppConfig;
 pub use database::{init_database, DbPool};
 pub use sanitize::{sanitize_text, strip_html};
 
-
-
-
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 pub fn init_tracing() {

@@ -19,9 +19,11 @@ use serde_json::Value;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-async fn setup_test_app() -> (axum::Router, String) {
+async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret, 24));
@@ -40,6 +42,18 @@ async fn setup_test_app() -> (axum::Router, String) {
     let audit_module = Arc::new(AuditModule::new(pool.clone()));
     let rate_limiter = Arc::new(IpRateLimiter::new());
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
@@ -47,6 +61,48 @@ async fn setup_test_app() -> (axum::Router, String) {
     // Generate admin token for protected routes
     let admin_user = user_module.authenticate("admin", "admin123").await.unwrap();
     let admin_token = auth_module.generate_token(&admin_user).unwrap();
+
+    // Create verified buyer and address
+    let buyer_id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let now_str = now.to_rfc3339();
+    sqlx::query(
+        "INSERT INTO buyer_accounts (id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at)
+         VALUES ($1, 'sub_val', 'val@buyer.com', 'Validation Buyer', NULL, '+628123456789', 1, 1, $2, $3)",
+    )
+    .bind(buyer_id.to_string())
+    .bind(&now_str)
+    .bind(&now_str)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let buyer_dto = program1_contracts::BuyerAccountDto {
+        id: buyer_id,
+        google_sub: "sub_val".to_string(),
+        email: "val@buyer.com".to_string(),
+        full_name: "Validation Buyer".to_string(),
+        avatar_url: None,
+        phone_number: Some("+628123456789".to_string()),
+        phone_verified: true,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+    };
+    let buyer_token = auth_module.generate_buyer_token(&buyer_dto).unwrap();
+
+    let addr_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO buyer_addresses (id, buyer_id, recipient_name, phone_number, street_address, subdistrict, city, province, postal_code, is_default, created_at, updated_at)
+         VALUES ($1, $2, 'Val Buyer', '+628123456789', 'Jl. Val 1', 'Sub', 'City', 'Prov', '12345', 1, $3, $4)",
+    )
+    .bind(addr_id.to_string())
+    .bind(buyer_id.to_string())
+    .bind(&now_str)
+    .bind(&now_str)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -59,32 +115,29 @@ async fn setup_test_app() -> (axum::Router, String) {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
 
-
     let router = create_app(state);
-    (router, admin_token)
+    (router, admin_token, buyer_token, addr_id)
 }
 
 #[tokio::test]
-async fn test_invalid_email_format_returns_422() {
-    let (app, _) = setup_test_app().await;
+async fn test_empty_order_items_returns_422() {
+    let (app, _, buyer_token, addr_id) = setup_test_app().await;
 
     let payload = serde_json::json!({
-        "customer_name": "John Doe",
-        "customer_email": "invalid-email-format-without-at",
-        "shipping_address": "Jl. Merdeka No. 123",
-        "items": [{
-            "product_id": Uuid::new_v4().to_string(),
-            "quantity": 1
-        }]
+        "address_id": addr_id,
+        "items": []
     });
 
     let req = Request::builder()
         .uri("/api/v1/orders")
         .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {}", buyer_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&payload).unwrap()))
         .unwrap();
@@ -97,12 +150,14 @@ async fn test_invalid_email_format_returns_422() {
     let err = &body["error"];
     assert_eq!(err["code"], "VALIDATION_FAILED");
     let details = err["details"].as_array().unwrap();
-    assert!(details.iter().any(|d| d.as_str().unwrap().contains("customer_email")));
+    assert!(details
+        .iter()
+        .any(|d| d.as_str().unwrap().contains("items")));
 }
 
 #[tokio::test]
 async fn test_empty_catalog_name_returns_422() {
-    let (app, admin_token) = setup_test_app().await;
+    let (app, admin_token, _, _) = setup_test_app().await;
 
     let payload = serde_json::json!({
         "name": "",
@@ -133,7 +188,7 @@ async fn test_empty_catalog_name_returns_422() {
 
 #[tokio::test]
 async fn test_negative_price_returns_422() {
-    let (app, admin_token) = setup_test_app().await;
+    let (app, admin_token, _, _) = setup_test_app().await;
 
     let payload = serde_json::json!({
         "name": "Negative Price Item",
@@ -162,7 +217,7 @@ async fn test_negative_price_returns_422() {
 
 #[tokio::test]
 async fn test_invalid_username_characters_returns_422() {
-    let (app, admin_token) = setup_test_app().await;
+    let (app, admin_token, _, _) = setup_test_app().await;
 
     let payload = serde_json::json!({
         "username": "user!@#invalid$",
@@ -187,17 +242,17 @@ async fn test_invalid_username_characters_returns_422() {
     let err = &body["error"];
     assert_eq!(err["code"], "VALIDATION_FAILED");
     let details = err["details"].as_array().unwrap();
-    assert!(details.iter().any(|d| d.as_str().unwrap().contains("username")));
+    assert!(details
+        .iter()
+        .any(|d| d.as_str().unwrap().contains("username")));
 }
 
 #[tokio::test]
 async fn test_zero_quantity_order_returns_422() {
-    let (app, _) = setup_test_app().await;
+    let (app, _, buyer_token, addr_id) = setup_test_app().await;
 
     let payload = serde_json::json!({
-        "customer_name": "Jane Doe",
-        "customer_email": "jane@example.com",
-        "shipping_address": "Jl. Sudirman No. 45",
+        "address_id": addr_id,
         "items": [{
             "product_id": Uuid::new_v4().to_string(),
             "quantity": 0
@@ -207,6 +262,7 @@ async fn test_zero_quantity_order_returns_422() {
     let req = Request::builder()
         .uri("/api/v1/orders")
         .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {}", buyer_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&payload).unwrap()))
         .unwrap();

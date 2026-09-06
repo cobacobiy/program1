@@ -10,7 +10,6 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ApiError {
-
     pub code: ErrorCode,
     pub message: String,
     pub status: u16,

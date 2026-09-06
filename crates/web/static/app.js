@@ -141,13 +141,7 @@ function handleSellerLogin(event) {
   loginAdmin(username, password);
 }
 
-function quickLoginSubAccount(username) {
-  const uInput = document.getElementById("login-username");
-  const pInput = document.getElementById("login-password");
-  if (uInput) uInput.value = username;
-  if (pInput) pInput.value = "admin123";
-  loginAdmin(username, "admin123");
-}
+
 
 function logoutAdmin() {
   authToken = null;
@@ -177,7 +171,6 @@ window.showSellerLoginScreen = showSellerLoginScreen;
 window.showAdminMainApp = showAdminMainApp;
 window.loginAdmin = loginAdmin;
 window.handleSellerLogin = handleSellerLogin;
-window.quickLoginSubAccount = quickLoginSubAccount;
 window.logoutAdmin = logoutAdmin;
 
 let currentStocks = [];
@@ -429,7 +422,12 @@ function renderUserAccountsTable() {
           ${u.accessible_menus.join(", ")}
         </div>
       </td>
-      <td><span style="color:var(--emerald); font-weight:600">● Active</span></td>
+      <td>
+        ${u.is_active
+          ? '<span style="color:var(--emerald); font-weight:600">● Active</span>'
+          : '<span style="color:var(--rose); font-weight:600">○ Nonaktif (Break-Glass)</span>'
+        }
+      </td>
       <td>
         <button class="btn-sm btn-action" onclick="openEditPermissionsModal('${u.id}')">⚙️ Edit Hak Akses</button>
       </td>
@@ -576,6 +574,11 @@ function switchView(viewName, navEl) {
   if (titleMap[viewName]) {
     document.getElementById("view-title").innerText = titleMap[viewName].title;
     document.getElementById("view-subtitle").innerText = titleMap[viewName].sub;
+  }
+
+  if (viewName === "settings") {
+    loadBreakGlassStatus();
+    fetchUserAccounts();
   }
 }
 
@@ -1138,6 +1141,101 @@ async function syncAllChannels() {
   alert("⚡ Semua Channel (TikTok, Shopee, Tokopedia, Native Web) Berhasil Di-sync!");
   loadData();
 }
+
+// --- BREAK-GLASS DEVELOPER SUPPORT ENGINE ---
+async function loadBreakGlassStatus() {
+  const statusBadge = document.getElementById("break-glass-status-badge");
+  const activeBanner = document.getElementById("break-glass-active-banner");
+  const infoText = document.getElementById("break-glass-info-text");
+  const inactiveBox = document.getElementById("break-glass-inactive-form-box");
+  if (!statusBadge) return;
+
+  try {
+    const res = await authFetch("/api/v1/admin/break-glass/status");
+    if (res.ok) {
+      const status = await res.json();
+      if (status.is_active) {
+        statusBadge.innerHTML = `<span class="badge-role" style="background:rgba(239,68,68,0.25); color:#fca5a5; font-size:0.8rem">🔴 AKTIF HINGGA ${new Date(status.expires_at).toLocaleTimeString('id-ID')}</span>`;
+        if (activeBanner) activeBanner.style.display = "block";
+        if (inactiveBox) inactiveBox.style.display = "none";
+        if (infoText) {
+          const exp = status.expires_at ? new Date(status.expires_at).toLocaleString('id-ID') : "-";
+          infoText.innerHTML = `<strong>Alasan:</strong> ${status.reason || "-"} &nbsp;|&nbsp; <strong>Kedaluwarsa:</strong> ${exp} (${status.time_remaining_minutes} menit tersisa) &nbsp;|&nbsp; <strong>Diaktifkan Oleh:</strong> ${status.activated_by || "Admin"}`;
+        }
+      } else {
+        statusBadge.innerHTML = `<span class="badge-role" style="background:rgba(16,185,129,0.15); color:#6ee7b7; font-size:0.8rem">🟢 NONAKTIF (AMAN)</span>`;
+        if (activeBanner) activeBanner.style.display = "none";
+        if (inactiveBox) inactiveBox.style.display = "block";
+      }
+    }
+  } catch (e) {
+    console.error("Error fetching break-glass status:", e);
+  }
+}
+
+async function handleActivateBreakGlass(e) {
+  if (e) e.preventDefault();
+  const reasonInput = document.getElementById("bg-reason");
+  const durationInput = document.getElementById("bg-duration");
+  const reason = reasonInput ? reasonInput.value.trim() : "";
+  const duration_hours = durationInput ? parseInt(durationInput.value, 10) : 2;
+
+  if (!reason) {
+    alert("Harap masukkan alasan aktivasi mode darurat.");
+    return;
+  }
+
+  try {
+    const res = await authFetch("/api/v1/admin/break-glass/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason, duration_hours })
+    });
+
+    if (res.ok) {
+      alert(`🚨 Akses Darurat Break-Glass BERHASIL DIAKTIFKAN!\nAkun dev_support aktif untuk ${duration_hours} jam.`);
+      if (reasonInput) reasonInput.value = "";
+      await loadBreakGlassStatus();
+      await fetchUserAccounts();
+    } else {
+      const err = await res.json();
+      alert(`Gagal mengaktifkan break-glass: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    console.error("Activate break-glass error:", e);
+    alert(`Error: ${e.message}`);
+  }
+}
+
+async function handleDeactivateBreakGlass() {
+  if (!confirm("Apakah Anda yakin ingin segera menonaktifkan akses darurat developer? Akun dev_support akan dinonaktifkan seketika.")) {
+    return;
+  }
+
+  try {
+    const res = await authFetch("/api/v1/admin/break-glass/deactivate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "Manual deactivation by seller owner via dashboard" })
+    });
+
+    if (res.ok) {
+      alert("✅ Akses Darurat Developer telah dinonaktifkan. Akun dev_support kembali dikunci.");
+      await loadBreakGlassStatus();
+      await fetchUserAccounts();
+    } else {
+      const err = await res.json();
+      alert(`Gagal menonaktifkan break-glass: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    console.error("Deactivate break-glass error:", e);
+    alert(`Error: ${e.message}`);
+  }
+}
+
+window.loadBreakGlassStatus = loadBreakGlassStatus;
+window.handleActivateBreakGlass = handleActivateBreakGlass;
+window.handleDeactivateBreakGlass = handleDeactivateBreakGlass;
 
 document.addEventListener("DOMContentLoaded", () => {
   const editPermForm = document.getElementById("edit-permissions-form");

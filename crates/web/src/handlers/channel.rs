@@ -8,9 +8,7 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::state::AppState;
-use program1_contracts::{
-    AuditLogEntry, ChannelStatusDto, ChannelType,
-};
+use program1_contracts::{AuditLogEntry, ChannelStatusDto, ChannelType};
 
 /// List all integrated marketplace channels and sync status (Protected)
 #[utoipa::path(
@@ -60,19 +58,26 @@ pub async fn sync_channel(
         _ => ChannelType::NativeWeb,
     };
 
-    let count = state.channel_contract.sync_channel_stock(channel.clone()).await?;
+    let count = state
+        .channel_contract
+        .sync_channel_stock(channel.clone())
+        .await?;
 
-    let _ = state.audit_contract.log_action(AuditLogEntry {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
-        actor_id: None,
-        actor_username: "system".to_string(),
-        action: "CHANNEL_SYNCED".to_string(),
-        resource_type: "channel".to_string(),
-        resource_id: None,
-        details: json!({ "channel": channel.to_string(), "synced_products": count }).to_string(),
-        ip_address: None,
-    }).await;
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: None,
+            actor_username: "system".to_string(),
+            action: "CHANNEL_SYNCED".to_string(),
+            resource_type: "channel".to_string(),
+            resource_id: None,
+            details: json!({ "channel": channel.to_string(), "synced_products": count })
+                .to_string(),
+            ip_address: None,
+        })
+        .await;
 
     Ok(Json(json!({ "synced_products": count })))
 }

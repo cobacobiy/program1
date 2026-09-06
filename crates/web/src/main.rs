@@ -19,14 +19,13 @@ async fn main() {
     let config = AppConfig::from_env();
 
     // Production safety checks
-    if config.is_production() {
-        if config.jwt_secret.contains("super-secret") || config.jwt_secret.contains("CHANGE_ME") {
-            tracing::error!("CRITICAL: In production environment, JWT_SECRET must be set to a secure, unique 32+ character key!");
-            std::process::exit(1);
-        }
-        if config.admin_default_password == "admin123" {
-            tracing::warn!("SECURITY ALERT: Default admin password 'admin123' is active. Please update ADMIN_DEFAULT_PASSWORD!");
-        }
+    if config.is_production()
+        && (config.jwt_secret.contains("super-secret") || config.jwt_secret.contains("CHANGE_ME"))
+    {
+        tracing::error!(
+            "CRITICAL: In production environment, JWT_SECRET must be set to a secure, unique 32+ character key!"
+        );
+        std::process::exit(1);
     }
 
     tracing::info!(
@@ -43,9 +42,15 @@ async fn main() {
 
     // 2. Instantiate domain modules with database pool
     let user_module = Arc::new(UserModule::new(db_pool.clone()));
-    let auth_module = Arc::new(AuthModule::new(config.jwt_secret.clone(), config.jwt_expiry_hours));
+    let auth_module = Arc::new(AuthModule::new(
+        config.jwt_secret.clone(),
+        config.jwt_expiry_hours,
+    ));
     let catalog_module = Arc::new(CatalogModule::new(db_pool.clone()));
-    let inventory_module = Arc::new(InventoryModule::new(db_pool.clone(), catalog_module.clone()));
+    let inventory_module = Arc::new(InventoryModule::new(
+        db_pool.clone(),
+        catalog_module.clone(),
+    ));
     let channel_module = Arc::new(ChannelSyncModule::new(db_pool.clone()));
     let order_module = Arc::new(OrderModule::new(
         db_pool.clone(),
@@ -57,6 +62,28 @@ async fn main() {
         order_module.clone(),
     ));
     let audit_module = Arc::new(AuditModule::new(db_pool.clone()));
+
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: config.google_client_id.clone(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::new(
+        config.app_env.clone(),
+        config.sms_provider.clone(),
+        config.sms_provider_api_key.clone(),
+    ));
+    let buyer_config = program1_module_buyer::BuyerModuleConfig {
+        otp_expiry_seconds: config.otp_expiry_seconds as u64,
+        otp_max_attempts: config.otp_max_attempts as u32,
+        otp_resend_cooldown_seconds: config.otp_resend_cooldown_seconds as u64,
+    };
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new_with_config(
+        db_pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+        buyer_config,
+    ));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -74,10 +101,11 @@ async fn main() {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
+        google_client_id: config.google_client_id.clone(),
     };
-
 
     let app = create_app(state);
 

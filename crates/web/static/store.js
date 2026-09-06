@@ -7,7 +7,15 @@ let cart = [];
 let catalog = [];
 let activeCategory = "ALL";
 let searchQuery = "";
+let buyerToken = localStorage.getItem("program1_buyer_token") || null;
 let activeBuyer = null;
+let buyerAddresses = [];
+let selectedAddressId = null;
+let otpTimerInterval = null;
+let otpSecondsRemaining = 300;
+let currentOtpPhone = "";
+let googleClientId = null;
+let gisRenderAttempts = 0;
 
 // --- THEME ENGINE (DARK / LIGHT) ---
 function initStoreTheme() {
@@ -39,6 +47,7 @@ async function initStore() {
     initStoreTheme();
     // 1. Check Storefront Buyer Session
     checkBuyerSession();
+    await fetchBuyerAuthConfig();
 
     // 2. Fetch Store Information
     const infoRes = await fetch('/api/v1/store/info');
@@ -64,24 +73,56 @@ async function initStore() {
 
     // 5. Setup Event Listeners
     setupSearchListener();
-    setupBuyerLoginForm();
   } catch (e) {
     console.error("Failed to initialize storefront data:", e);
   }
 }
 
-// --- BUYER LOGIN & SESSION MANAGEMENT ---
-function checkBuyerSession() {
-  const saved = localStorage.getItem("shopee_buyer_session");
-  if (saved) {
+// --- BUYER AUTHENTICATION, GOOGLE OAUTH, OTP & ADDRESS ENGINE ---
+
+async function buyerAuthFetch(url, options = {}) {
+  if (!buyerToken) {
+    throw new Error("Authentication required. Please log in.");
+  }
+  options.headers = options.headers || {};
+  options.headers["Authorization"] = `Bearer ${buyerToken}`;
+  const res = await fetch(url, options);
+  if (res.status === 401 || res.status === 403) {
+    console.warn("Buyer token invalid or expired. Logging out...");
+    logoutBuyer();
+  }
+  return res;
+}
+
+async function checkBuyerSession() {
+  buyerToken = localStorage.getItem("program1_buyer_token") || null;
+  const saved = localStorage.getItem("program1_buyer_user");
+  if (buyerToken && saved) {
     try {
       activeBuyer = JSON.parse(saved);
       renderBuyerHeaderState();
+      // Sync latest buyer profile & addresses from server
+      await syncBuyerProfile();
     } catch (e) {
-      localStorage.removeItem("shopee_buyer_session");
+      logoutBuyer();
     }
   } else {
     renderBuyerHeaderState();
+  }
+}
+
+async function syncBuyerProfile() {
+  if (!buyerToken) return;
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/profile");
+    if (res.ok) {
+      activeBuyer = await res.json();
+      localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
+      renderBuyerHeaderState();
+      await fetchBuyerAddresses();
+    }
+  } catch (e) {
+    console.error("Error syncing buyer profile:", e);
   }
 }
 
@@ -91,17 +132,11 @@ function renderBuyerHeaderState() {
   const avatarEl = document.getElementById("buyer-avatar");
   const nameLabelEl = document.getElementById("buyer-name-label");
 
-  if (activeBuyer) {
+  if (activeBuyer && buyerToken) {
     if (btnLogin) btnLogin.style.display = "none";
     if (badgeProfile) badgeProfile.style.display = "flex";
-    if (avatarEl) avatarEl.innerText = activeBuyer.name.charAt(0).toUpperCase();
-    if (nameLabelEl) nameLabelEl.innerText = activeBuyer.name;
-
-    // Auto-fill Checkout Form
-    const custNameInput = document.getElementById("cust-name");
-    const custEmailInput = document.getElementById("cust-email");
-    if (custNameInput && !custNameInput.value) custNameInput.value = activeBuyer.name;
-    if (custEmailInput && !custEmailInput.value) custEmailInput.value = activeBuyer.email;
+    if (avatarEl) avatarEl.innerText = (activeBuyer.full_name || "P").charAt(0).toUpperCase();
+    if (nameLabelEl) nameLabelEl.innerText = activeBuyer.full_name || "Pembeli";
   } else {
     if (btnLogin) btnLogin.style.display = "block";
     if (badgeProfile) badgeProfile.style.display = "none";
@@ -111,17 +146,37 @@ function renderBuyerHeaderState() {
 function openBuyerLoginModal() {
   const modal = document.getElementById("buyer-login-modal");
   const loggedView = document.getElementById("buyer-logged-in-view");
-  const loginForm = document.getElementById("buyer-login-form");
+  const unauthView = document.getElementById("buyer-unauthenticated-view");
 
-  if (activeBuyer) {
+  if (activeBuyer && buyerToken) {
     if (loggedView) loggedView.style.display = "block";
-    if (loginForm) loginForm.style.display = "none";
-    document.getElementById("modal-buyer-avatar").innerText = activeBuyer.name.charAt(0).toUpperCase();
-    document.getElementById("modal-buyer-name").innerText = activeBuyer.name;
-    document.getElementById("modal-buyer-email").innerText = activeBuyer.email;
+    if (unauthView) unauthView.style.display = "none";
+    const avatarEl = document.getElementById("modal-buyer-avatar");
+    const nameEl = document.getElementById("modal-buyer-name");
+    const emailEl = document.getElementById("modal-buyer-email");
+    if (avatarEl) avatarEl.innerText = (activeBuyer.full_name || "P").charAt(0).toUpperCase();
+    if (nameEl) nameEl.innerText = activeBuyer.full_name || "Pembeli";
+    if (emailEl) emailEl.innerText = activeBuyer.email || "-";
+
+    const phoneBadge = document.getElementById("buyer-phone-status-badge");
+    if (phoneBadge) {
+      if (activeBuyer.phone_verified && activeBuyer.phone_number) {
+        phoneBadge.innerHTML = `<span style="font-size:0.8rem; color:var(--emerald); font-weight:600">🟢 No. HP Terverifikasi: ${activeBuyer.phone_number}</span>`;
+      } else {
+        phoneBadge.innerHTML = `
+          <div style="display:flex; align-items:center; gap:0.5rem">
+            <span style="font-size:0.8rem; color:var(--rose); font-weight:600">🔴 Belum Verifikasi No. HP</span>
+            <button class="btn-sm-action" onclick="openOtpModal()">Verifikasi Sekarang</button>
+          </div>
+        `;
+      }
+    }
+
+    fetchBuyerAddresses();
   } else {
     if (loggedView) loggedView.style.display = "none";
-    if (loginForm) loginForm.style.display = "block";
+    if (unauthView) unauthView.style.display = "block";
+    renderGoogleSignInButton();
   }
 
   if (modal) modal.style.display = "flex";
@@ -132,51 +187,417 @@ function closeBuyerLoginModal() {
   if (modal) modal.style.display = "none";
 }
 
-function quickGuestLoginBuyer() {
-  const sampleBuyer = {
-    id: "buyer-" + Date.now(),
-    name: "Budi Santoso (Pembeli)",
-    email: "budi.santoso@shopee.co.id",
-    phone: "081234567890"
-  };
-  loginBuyerSuccess(sampleBuyer);
+async function fetchBuyerAuthConfig() {
+  try {
+    const res = await fetch("/api/v1/buyer/auth/config");
+    if (res.ok) {
+      const data = await res.json();
+      googleClientId = data.google_client_id || null;
+      renderGoogleSignInButton();
+    }
+  } catch (e) {
+    console.warn("Gagal memuat konfigurasi Google Client ID:", e);
+  }
 }
 
-function loginBuyerSuccess(buyerObj) {
-  activeBuyer = buyerObj;
-  localStorage.setItem("shopee_buyer_session", JSON.stringify(buyerObj));
-  renderBuyerHeaderState();
-  closeBuyerLoginModal();
-  alert(`🎉 Selamat datang kembali, ${buyerObj.name}! Akun pembeli berhasil masuk.`);
+function renderGoogleSignInButton() {
+  const btnContainer = document.getElementById("google-signin-btn");
+  const unconfiguredMsg = document.getElementById("google-signin-unconfigured");
+  if (!btnContainer) return;
+
+  if (!googleClientId || googleClientId.trim() === "") {
+    if (unconfiguredMsg) {
+      unconfiguredMsg.innerText = "Google Sign-In belum dikonfigurasi (GOOGLE_CLIENT_ID belum diatur di server).";
+      unconfiguredMsg.style.display = "block";
+    }
+    return;
+  }
+
+  if (unconfiguredMsg) unconfiguredMsg.style.display = "none";
+
+  if (typeof window.google === "undefined" || !window.google.accounts || !window.google.accounts.id) {
+    gisRenderAttempts++;
+    if (gisRenderAttempts < 15) {
+      setTimeout(renderGoogleSignInButton, 300);
+    } else {
+      if (unconfiguredMsg) {
+        unconfiguredMsg.innerText = "SDK Google Sign-In tidak dapat dimuat. Pastikan jaringan internet aktif.";
+        unconfiguredMsg.style.display = "block";
+      }
+    }
+    return;
+  }
+
+  gisRenderAttempts = 0;
+  btnContainer.innerHTML = "";
+
+  try {
+    window.google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: handleGoogleCredentialResponse,
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+
+    window.google.accounts.id.renderButton(btnContainer, {
+      theme: "outline",
+      size: "large",
+      shape: "rectangular",
+      text: "continue_with",
+      width: 320,
+      locale: "id"
+    });
+  } catch (err) {
+    console.error("Gagal merender tombol Google Sign-In:", err);
+  }
+}
+
+async function handleGoogleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    console.error("Google Sign-In response missing credential:", response);
+    return;
+  }
+  await verifyGoogleIdToken(response.credential);
+}
+
+async function verifyGoogleIdToken(idToken) {
+  try {
+    const res = await fetch("/api/v1/buyer/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: idToken })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      buyerToken = data.access_token || data.token;
+      activeBuyer = data.buyer;
+      localStorage.setItem("program1_buyer_token", buyerToken);
+      localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
+      renderBuyerHeaderState();
+      closeBuyerLoginModal();
+
+      alert(`🎉 Selamat datang, ${activeBuyer.full_name}! Login Google berhasil.`);
+
+      if (data.requires_phone_verification || !activeBuyer.phone_verified) {
+        openOtpModal();
+      } else {
+        await fetchBuyerAddresses();
+        updateCartUI();
+      }
+    } else {
+      const err = await res.json();
+      alert(`Gagal login dengan Google: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    console.error("Google Auth error:", e);
+    alert(`Error: ${e.message}`);
+  }
 }
 
 function logoutBuyer() {
+  buyerToken = null;
   activeBuyer = null;
-  localStorage.removeItem("shopee_buyer_session");
+  buyerAddresses = [];
+  selectedAddressId = null;
+  localStorage.removeItem("program1_buyer_token");
+  localStorage.removeItem("program1_buyer_user");
   renderBuyerHeaderState();
   closeBuyerLoginModal();
-  alert("👋 Akun pembeli berhasil keluar (logged out).");
+  updateCartUI();
 }
 
-function setupBuyerLoginForm() {
-  const form = document.getElementById("buyer-login-form");
-  if (form) {
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      const loginInput = document.getElementById("buyer-input-login").value;
-      const passInput = document.getElementById("buyer-input-pass").value;
+// --- OTP PHONE VERIFICATION ENGINE ---
+function openOtpModal() {
+  closeBuyerLoginModal();
+  const modal = document.getElementById("buyer-otp-modal");
+  const stepPhone = document.getElementById("otp-step-phone");
+  const stepVerify = document.getElementById("otp-step-verify");
+  if (stepPhone) stepPhone.style.display = "block";
+  if (stepVerify) stepVerify.style.display = "none";
+  if (activeBuyer && activeBuyer.phone_number) {
+    const phoneInput = document.getElementById("otp-input-phone");
+    if (phoneInput) phoneInput.value = activeBuyer.phone_number;
+  }
+  if (modal) modal.style.display = "flex";
+}
 
-      let buyerName = loginInput.split("@")[0];
-      buyerName = buyerName.charAt(0).toUpperCase() + buyerName.slice(1);
+function closeBuyerOtpModal() {
+  const modal = document.getElementById("buyer-otp-modal");
+  if (modal) modal.style.display = "none";
+  if (otpTimerInterval) clearInterval(otpTimerInterval);
+}
 
-      const buyerObj = {
-        id: "buyer-" + Date.now(),
-        name: buyerName.includes("08") ? "Pembeli WA (" + loginInput + ")" : buyerName,
-        email: loginInput.includes("@") ? loginInput : loginInput + "@buyer.shopee.co.id",
-        phone: loginInput
-      };
-      loginBuyerSuccess(buyerObj);
-    };
+async function handleRequestOtp() {
+  const phoneInput = document.getElementById("otp-input-phone");
+  const phone = phoneInput ? phoneInput.value.trim() : "";
+  if (!phone || phone.length < 8) {
+    alert("Harap masukkan nomor handphone / WhatsApp yang valid (minimal 8 digit).");
+    return;
+  }
+
+  const btn = document.getElementById("btn-request-otp");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "Mengirim OTP...";
+  }
+
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/otp/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone_number: phone })
+    });
+
+    if (res.ok) {
+      currentOtpPhone = phone;
+      const sentLabel = document.getElementById("otp-sent-phone-label");
+      if (sentLabel) sentLabel.innerText = phone;
+      document.getElementById("otp-step-phone").style.display = "none";
+      document.getElementById("otp-step-verify").style.display = "block";
+      startOtpCountdown(300);
+      alert(`📲 Kode OTP telah dikirimkan ke nomor ${phone}.`);
+    } else {
+      const err = await res.json();
+      alert(`Gagal mengirim OTP: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    console.error("Request OTP error:", e);
+    alert(`Error: ${e.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "📲 Kirim Kode OTP";
+    }
+  }
+}
+
+function startOtpCountdown(durationSeconds) {
+  if (otpTimerInterval) clearInterval(otpTimerInterval);
+  otpSecondsRemaining = durationSeconds;
+  const timerLabel = document.getElementById("otp-timer-label");
+
+  function update() {
+    const m = Math.floor(otpSecondsRemaining / 60);
+    const s = otpSecondsRemaining % 60;
+    if (timerLabel) {
+      timerLabel.innerText = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+    if (otpSecondsRemaining <= 0) {
+      clearInterval(otpTimerInterval);
+      if (timerLabel) timerLabel.innerText = "KEDALUWARSA";
+    } else {
+      otpSecondsRemaining--;
+    }
+  }
+  update();
+  otpTimerInterval = setInterval(update, 1000);
+}
+
+async function handleVerifyOtp() {
+  const codeInput = document.getElementById("otp-input-code");
+  const code = codeInput ? codeInput.value.trim() : "";
+  if (!code || code.length !== 6) {
+    alert("Harap masukkan 6 digit kode OTP.");
+    return;
+  }
+
+  const btn = document.getElementById("btn-submit-verify-otp");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "Memverifikasi...";
+  }
+
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/otp/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone_number: currentOtpPhone, code: code })
+    });
+
+    if (res.ok) {
+      const result = await res.json();
+      activeBuyer = (result && result.id) ? result : (result.buyer || result);
+      localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
+      if (otpTimerInterval) clearInterval(otpTimerInterval);
+      closeBuyerOtpModal();
+      renderBuyerHeaderState();
+      alert("🎉 Nomor HP Anda berhasil diverifikasi! Alamat pengiriman sekarang dapat digunakan.");
+      await fetchBuyerAddresses();
+      updateCartUI();
+    } else {
+      const err = await res.json();
+      alert(`Verifikasi OTP Gagal: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    console.error("Verify OTP error:", e);
+    alert(`Error: ${e.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "✅ Verifikasi Kode OTP";
+    }
+  }
+}
+
+function handleResendOtp() {
+  if (otpTimerInterval) clearInterval(otpTimerInterval);
+  document.getElementById("otp-step-phone").style.display = "block";
+  document.getElementById("otp-step-verify").style.display = "none";
+}
+
+// --- BUYER ADDRESS BOOK ENGINE ---
+async function fetchBuyerAddresses() {
+  if (!buyerToken) return;
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/addresses");
+    if (res.ok) {
+      buyerAddresses = await res.json();
+      const defaultAddr = buyerAddresses.find(a => a.is_default) || buyerAddresses[0];
+      if (defaultAddr) {
+        selectedAddressId = defaultAddr.id;
+      }
+      renderBuyerAddressesList();
+      renderConfirmedAddressInCheckout();
+    }
+  } catch (e) {
+    console.error("Fetch buyer addresses error:", e);
+  }
+}
+
+function renderBuyerAddressesList() {
+  const container = document.getElementById("buyer-addresses-list");
+  if (!container) return;
+
+  if (buyerAddresses.length === 0) {
+    container.innerHTML = `<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:1rem">Belum ada alamat tersimpan.</p>`;
+    return;
+  }
+
+  container.innerHTML = buyerAddresses.map(a => `
+    <div class="address-item-card ${a.is_default ? 'is-default' : ''}">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div style="display:flex; align-items:center; gap:0.4rem">
+          <span class="address-badge-label">${a.label || 'Rumah'}</span>
+          ${a.is_default ? '<span class="address-badge-default">UTAMA / DEFAULT</span>' : ''}
+        </div>
+        <div style="display:flex; gap:0.4rem">
+          ${!a.is_default ? `<button type="button" class="btn-sm-action" onclick="handleSetDefaultAddress('${a.id}')">Jadikan Utama</button>` : ''}
+          <button type="button" class="btn-sm-action" style="color:var(--rose); border-color:rgba(239,68,68,0.3)" onclick="handleDeleteAddress('${a.id}')">Hapus</button>
+        </div>
+      </div>
+      <div style="font-size:0.85rem; font-weight:700; color:var(--text-heading); margin-top:0.2rem">
+        ${a.recipient_name} <span style="font-weight:400; font-size:0.8rem; color:var(--text-muted)">(${a.phone_number})</span>
+      </div>
+      <div style="font-size:0.8rem; color:var(--text-muted)">
+        ${a.street_address}, Kec. ${a.subdistrict}, ${a.city}, ${a.province} ${a.postal_code}
+      </div>
+    </div>
+  `).join('');
+}
+
+function openAddAddressModal() {
+  const modal = document.getElementById("buyer-address-modal");
+  const form = document.getElementById("buyer-address-form");
+  if (form) form.reset();
+  const idInput = document.getElementById("addr-id");
+  if (idInput) idInput.value = "";
+  if (activeBuyer && activeBuyer.full_name) {
+    const recInput = document.getElementById("addr-recipient-name");
+    if (recInput) recInput.value = activeBuyer.full_name;
+  }
+  if (activeBuyer && activeBuyer.phone_number) {
+    const phoneInput = document.getElementById("addr-phone");
+    if (phoneInput) phoneInput.value = activeBuyer.phone_number;
+  }
+  const defCheck = document.getElementById("addr-is-default");
+  if (defCheck) defCheck.checked = buyerAddresses.length === 0;
+  if (modal) modal.style.display = "flex";
+}
+
+function closeBuyerAddressModal() {
+  const modal = document.getElementById("buyer-address-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function handleSaveBuyerAddress(e) {
+  if (e) e.preventDefault();
+  const id = document.getElementById("addr-id").value;
+  const label = document.getElementById("addr-label").value.trim() || "Rumah";
+  const recipient_name = document.getElementById("addr-recipient-name").value.trim();
+  const phone_number = document.getElementById("addr-phone").value.trim();
+  const street_address = document.getElementById("addr-street").value.trim();
+  const subdistrict = document.getElementById("addr-subdistrict").value.trim();
+  const city = document.getElementById("addr-city").value.trim();
+  const province = document.getElementById("addr-province").value.trim();
+  const postal_code = document.getElementById("addr-postal-code").value.trim();
+  const is_default = document.getElementById("addr-is-default").checked;
+
+  const payload = {
+    label: label ? label : undefined,
+    recipient_name,
+    phone_number,
+    street_address,
+    subdistrict,
+    city,
+    province,
+    postal_code,
+    set_as_default: is_default
+  };
+
+  try {
+    const url = id ? `/api/v1/buyer/addresses/${id}` : "/api/v1/buyer/addresses";
+    const method = id ? "PUT" : "POST";
+    const res = await buyerAuthFetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      closeBuyerAddressModal();
+      await fetchBuyerAddresses();
+      updateCartUI();
+      alert("✅ Alamat pengiriman berhasil disimpan!");
+    } else {
+      const err = await res.json();
+      alert(`Gagal menyimpan alamat: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (e) {
+    console.error("Save address error:", e);
+    alert(`Error: ${e.message}`);
+  }
+}
+
+async function handleSetDefaultAddress(id) {
+  try {
+    const res = await buyerAuthFetch(`/api/v1/buyer/addresses/${id}/default`, { method: "POST" });
+    if (res.ok) {
+      selectedAddressId = id;
+      await fetchBuyerAddresses();
+      updateCartUI();
+    } else {
+      const err = await res.json();
+      alert(`Gagal mengatur alamat default: ${err.message || err.error}`);
+    }
+  } catch (e) {
+    console.error("Set default address error:", e);
+  }
+}
+
+async function handleDeleteAddress(id) {
+  if (!confirm("Hapus alamat ini dari buku alamat Anda?")) return;
+  try {
+    const res = await buyerAuthFetch(`/api/v1/buyer/addresses/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      await fetchBuyerAddresses();
+      updateCartUI();
+    } else {
+      const err = await res.json();
+      alert(`Gagal menghapus alamat: ${err.message || err.error}`);
+    }
+  } catch (e) {
+    console.error("Delete address error:", e);
   }
 }
 
@@ -303,17 +724,21 @@ function updateQuantity(productId, delta) {
 }
 
 function updateCartUI() {
-  const totalCount = cart.reduce((acc, i) => acc + i.quantity, 0);
-  const badge = document.getElementById('cart-count');
-  if (badge) badge.innerText = totalCount;
-
   const container = document.getElementById('cart-items-container');
-  const form = document.getElementById('checkout-form');
-  if (!container || !form) return;
+  const checkoutSection = document.getElementById('checkout-section');
+  const unauthBox = document.getElementById('checkout-unauth-box');
+  const unverifiedBox = document.getElementById('checkout-unverified-box');
+  const confirmedForm = document.getElementById('checkout-confirmed-form');
+  const badge = document.getElementById('cart-count');
+
+  const count = cart.reduce((acc, i) => acc + i.quantity, 0);
+  if (badge) badge.innerText = count;
+
+  if (!container || !checkoutSection) return;
 
   if (cart.length === 0) {
     container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:1.5rem">Keranjang belanja Anda kosong.</p>';
-    form.style.display = 'none';
+    checkoutSection.style.display = 'none';
     return;
   }
 
@@ -342,12 +767,136 @@ function updateCartUI() {
     </div>
   `;
 
-  form.style.display = 'block';
+  checkoutSection.style.display = 'block';
+
+  // Evaluate Buyer Authentication & Phone Verification Gates
+  if (!buyerToken || !activeBuyer) {
+    if (unauthBox) unauthBox.style.display = 'block';
+    if (unverifiedBox) unverifiedBox.style.display = 'none';
+    if (confirmedForm) confirmedForm.style.display = 'none';
+  } else if (!activeBuyer.phone_verified) {
+    if (unauthBox) unauthBox.style.display = 'none';
+    if (unverifiedBox) unverifiedBox.style.display = 'block';
+    if (confirmedForm) confirmedForm.style.display = 'none';
+  } else {
+    if (unauthBox) unauthBox.style.display = 'none';
+    if (unverifiedBox) unverifiedBox.style.display = 'none';
+    if (confirmedForm) confirmedForm.style.display = 'block';
+    renderConfirmedAddressInCheckout();
+  }
+}
+
+function renderConfirmedAddressInCheckout() {
+  const card = document.getElementById("confirmed-address-card");
+  if (!card) return;
+
+  if (buyerAddresses.length === 0) {
+    card.innerHTML = `
+      <div style="text-align:center; padding:0.5rem">
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem">Belum ada alamat tersimpan.</p>
+        <button type="button" class="btn-checkout" style="font-size:0.85rem; padding:0.4rem 1rem" onclick="openAddAddressModal()">+ Tambah Alamat Pengiriman</button>
+      </div>
+    `;
+    return;
+  }
+
+  const currentAddr = buyerAddresses.find(a => a.id === selectedAddressId) || buyerAddresses[0];
+  selectedAddressId = currentAddr.id;
+
+  card.innerHTML = `
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
+        <span class="addr-title">👤 ${currentAddr.recipient_name} <span class="address-badge-label">${currentAddr.label || 'Rumah'}</span></span>
+        <select id="addr-switch-select" class="form-control" style="width:auto; font-size:0.75rem; padding:0.2rem 0.5rem" onchange="switchCheckoutAddress(this.value)">
+          ${buyerAddresses.map(a => `<option value="${a.id}" ${a.id === selectedAddressId ? 'selected' : ''}>${a.label || 'Alamat'}: ${a.recipient_name} (${a.city})</option>`).join('')}
+        </select>
+      </div>
+      <div class="addr-phone">📞 ${currentAddr.phone_number} (Terverifikasi OTP 🟢)</div>
+      <div class="addr-text">
+        📍 ${currentAddr.street_address}, Kec. ${currentAddr.subdistrict}, ${currentAddr.city}, ${currentAddr.province}
+      </div>
+      <div style="font-size:0.8rem; color:var(--cyan); font-family:'JetBrains Mono'; margin-top:0.25rem">
+        Kode Pos: ${currentAddr.postal_code}
+      </div>
+    </div>
+  `;
+}
+
+function switchCheckoutAddress(addrId) {
+  selectedAddressId = addrId;
+  renderConfirmedAddressInCheckout();
+}
+
+async function handleProcessCheckout(e) {
+  if (e) e.preventDefault();
+
+  if (cart.length === 0) {
+    alert("Keranjang belanja kosong.");
+    return;
+  }
+
+  if (!buyerToken || !activeBuyer) {
+    openBuyerLoginModal();
+    return;
+  }
+
+  if (!activeBuyer.phone_verified) {
+    openOtpModal();
+    return;
+  }
+
+  const selectedAddr = buyerAddresses.find(a => a.id === selectedAddressId);
+  if (!selectedAddr) {
+    alert("Harap tambahkan alamat pengiriman terlebih dahulu.");
+    openAddAddressModal();
+    return;
+  }
+
+  const items = cart.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+
+  const payload = {
+    address_id: selectedAddressId,
+    items: items
+  };
+
+  const btnSubmit = document.getElementById("btn-submit-order");
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.innerText = "Memproses Pesanan...";
+  }
+
+  try {
+    const res = await buyerAuthFetch("/api/v1/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const orderData = await res.json();
+      alert(`🎉 Pesanan Berhasil Dibuat!\nID Pesanan: ${orderData.id}\nPenerima: ${selectedAddr.recipient_name}\nSnapshot alamat pengiriman telah diamankan secara permanen.`);
+      cart = [];
+      updateCartUI();
+      closeCart();
+    } else {
+      const err = await res.json();
+      alert(`Checkout Gagal: ${err.message || err.error || JSON.stringify(err)}`);
+    }
+  } catch (err) {
+    console.error("Checkout order error:", err);
+    alert(`Error saat membuat order: ${err.message}`);
+  } finally {
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerText = "🚀 Konfirmasi & Pesan Sekarang";
+    }
+  }
 }
 
 function openCart() {
   const modal = document.getElementById('cart-modal');
   if (modal) modal.style.display = 'flex';
+  updateCartUI();
 }
 
 function closeCart() {
@@ -355,35 +904,27 @@ function closeCart() {
   if (modal) modal.style.display = 'none';
 }
 
-// Form Submission (Checkout Order)
+// Window Exports
+window.openBuyerLoginModal = openBuyerLoginModal;
+window.closeBuyerLoginModal = closeBuyerLoginModal;
+window.renderGoogleSignInButton = renderGoogleSignInButton;
+window.handleGoogleCredentialResponse = handleGoogleCredentialResponse;
+window.logoutBuyer = logoutBuyer;
+window.openOtpModal = openOtpModal;
+window.closeBuyerOtpModal = closeBuyerOtpModal;
+window.handleRequestOtp = handleRequestOtp;
+window.handleVerifyOtp = handleVerifyOtp;
+window.handleResendOtp = handleResendOtp;
+window.openAddAddressModal = openAddAddressModal;
+window.closeBuyerAddressModal = closeBuyerAddressModal;
+window.handleSaveBuyerAddress = handleSaveBuyerAddress;
+window.handleSetDefaultAddress = handleSetDefaultAddress;
+window.handleDeleteAddress = handleDeleteAddress;
+window.switchCheckoutAddress = switchCheckoutAddress;
+window.handleProcessCheckout = handleProcessCheckout;
+window.openCart = openCart;
+window.closeCart = closeCart;
+
 document.addEventListener("DOMContentLoaded", () => {
-  const checkoutForm = document.getElementById('checkout-form');
-  if (checkoutForm) {
-    checkoutForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const customer_name = document.getElementById('cust-name').value;
-      const customer_email = document.getElementById('cust-email').value;
-      const shipping_address = document.getElementById('cust-address').value;
-
-      const items = cart.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
-
-      const res = await fetch('/api/v1/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_name, customer_email, shipping_address, items })
-      });
-
-      if (res.ok) {
-        alert('🎉 Pesanan Berhasil Dibuat! Order Anda terhubung langsung ke Ginee Hub OMS.');
-        cart = [];
-        updateCartUI();
-        closeCart();
-      } else {
-        const err = await res.json();
-        alert(`Checkout Gagal: ${err.error || JSON.stringify(err)}`);
-      }
-    };
-  }
-
   initStore();
 });

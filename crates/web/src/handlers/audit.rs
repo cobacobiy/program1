@@ -42,7 +42,10 @@ pub async fn list_audit_logs(
     let offset = params.offset.unwrap_or(0);
     let res_type = params.resource_type.as_deref();
 
-    let logs = state.audit_contract.get_logs(res_type, limit, offset).await?;
+    let logs = state
+        .audit_contract
+        .get_logs(res_type, limit, offset)
+        .await?;
     Ok(Json(logs))
 }
 

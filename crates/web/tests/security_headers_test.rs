@@ -17,7 +17,9 @@ use tower::ServiceExt;
 
 async fn setup_test_app() -> axum::Router {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret, 24));
@@ -35,6 +37,18 @@ async fn setup_test_app() -> axum::Router {
     ));
     let audit_module = Arc::new(program1_module_audit::AuditModule::new(pool.clone()));
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
@@ -46,12 +60,11 @@ async fn setup_test_app() -> axum::Router {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
-
-
-
 
     create_app(state)
 }
@@ -71,11 +84,19 @@ async fn test_security_headers_present() {
 
     let headers = response.headers();
     assert_eq!(
-        headers.get(header::X_FRAME_OPTIONS).unwrap().to_str().unwrap(),
+        headers
+            .get(header::X_FRAME_OPTIONS)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "DENY"
     );
     assert_eq!(
-        headers.get(header::X_CONTENT_TYPE_OPTIONS).unwrap().to_str().unwrap(),
+        headers
+            .get(header::X_CONTENT_TYPE_OPTIONS)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "nosniff"
     );
     assert_eq!(
@@ -83,7 +104,11 @@ async fn test_security_headers_present() {
         "1; mode=block"
     );
     assert_eq!(
-        headers.get(header::REFERRER_POLICY).unwrap().to_str().unwrap(),
+        headers
+            .get(header::REFERRER_POLICY)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "strict-origin-when-cross-origin"
     );
     assert!(headers.get(header::CONTENT_SECURITY_POLICY).is_some());
@@ -98,7 +123,10 @@ async fn test_cors_preflight_allowed_origin() {
         .method("OPTIONS")
         .header(header::ORIGIN, "http://localhost:3000")
         .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
-        .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type")
+        .header(
+            header::ACCESS_CONTROL_REQUEST_HEADERS,
+            "authorization,content-type",
+        )
         .body(Body::empty())
         .unwrap();
 
@@ -107,11 +135,19 @@ async fn test_cors_preflight_allowed_origin() {
 
     let headers = response.headers();
     assert_eq!(
-        headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).unwrap().to_str().unwrap(),
+        headers
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "http://localhost:3000"
     );
     assert_eq!(
-        headers.get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS).unwrap().to_str().unwrap(),
+        headers
+            .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "true"
     );
 }

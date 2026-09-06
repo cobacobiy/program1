@@ -1,8 +1,8 @@
-use std::sync::OnceLock;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use thiserror::Error;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -83,7 +83,9 @@ pub enum ContractError {
     NotFound(String),
     #[error("Validation failed: {0}")]
     ValidationError(String),
-    #[error("Insufficient stock for product {product_id}: requested {requested}, available {available}")]
+    #[error(
+        "Insufficient stock for product {product_id}: requested {requested}, available {available}"
+    )]
     InsufficientStock {
         product_id: Uuid,
         requested: u32,
@@ -167,7 +169,11 @@ pub struct RegisterUserRequest {
     pub username: String,
     #[validate(length(min = 8, max = 100, message = "Password must be at least 8 characters"))]
     pub password: String,
-    #[validate(length(min = 1, max = 200, message = "Full name required (max 200 characters)"))]
+    #[validate(length(
+        min = 1,
+        max = 200,
+        message = "Full name required (max 200 characters)"
+    ))]
     pub full_name: String,
     #[validate(length(max = 50))]
     pub role: String,
@@ -181,7 +187,11 @@ pub struct CreateUserAccountRequest {
         custom(function = "validate_username_regex")
     )]
     pub username: String,
-    #[validate(length(min = 1, max = 200, message = "Full name required (max 200 characters)"))]
+    #[validate(length(
+        min = 1,
+        max = 200,
+        message = "Full name required (max 200 characters)"
+    ))]
     pub full_name: String,
     #[validate(length(min = 1, max = 50, message = "Role required (max 50 characters)"))]
     pub role: String,
@@ -193,37 +203,110 @@ pub struct UpdateUserPermissionsRequest {
     pub accessible_menus: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BreakGlassStatusDto {
+    pub is_active: bool,
+    pub active_until: Option<DateTime<Utc>>,
+    pub activated_by: Option<String>,
+    pub reason: Option<String>,
+    pub target_account: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ActivateBreakGlassRequest {
+    #[validate(length(
+        min = 5,
+        max = 500,
+        message = "Reason for break-glass emergency access required (5-500 chars)"
+    ))]
+    pub reason: String,
+    #[validate(range(
+        min = 5,
+        max = 240,
+        message = "Duration must be between 5 and 240 minutes"
+    ))]
+    pub duration_minutes: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct DeactivateBreakGlassRequest {
+    pub reason: Option<String>,
+}
+
 #[async_trait]
 pub trait UserContract: Send + Sync {
     async fn list_accounts(&self) -> Result<Vec<UserAccountDto>, ContractError>;
     async fn get_account(&self, id: Uuid) -> Result<UserAccountDto, ContractError>;
-    async fn create_account(&self, req: CreateUserAccountRequest) -> Result<UserAccountDto, ContractError>;
-    async fn update_permissions(&self, id: Uuid, accessible_menus: Vec<String>) -> Result<UserAccountDto, ContractError>;
+    async fn create_account(
+        &self,
+        req: CreateUserAccountRequest,
+    ) -> Result<UserAccountDto, ContractError>;
+    async fn update_permissions(
+        &self,
+        id: Uuid,
+        accessible_menus: Vec<String>,
+    ) -> Result<UserAccountDto, ContractError>;
 
     /// Authenticate user — returns account if credentials valid
-    async fn authenticate(&self, username: &str, password: &str) -> Result<UserAccountDto, ContractError>;
+    async fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<UserAccountDto, ContractError>;
 
     /// Register user baru dengan password
     async fn register(&self, req: RegisterUserRequest) -> Result<UserAccountDto, ContractError>;
+
+    /// Break-glass emergency developer access activation
+    async fn activate_break_glass(
+        &self,
+        req: ActivateBreakGlassRequest,
+        activated_by: &str,
+    ) -> Result<BreakGlassStatusDto, ContractError>;
+    async fn deactivate_break_glass(
+        &self,
+        deactivated_by: &str,
+        reason: Option<String>,
+    ) -> Result<BreakGlassStatusDto, ContractError>;
+    async fn get_break_glass_status(&self) -> Result<BreakGlassStatusDto, ContractError>;
 }
 
 // --- AUTH & JWT CONTRACT ---
 
+fn default_seller_user_type() -> String {
+    "seller_staff".to_string()
+}
+
 /// JWT Claims structure
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct JwtClaims {
-    pub sub: Uuid,           // user_id
+    pub sub: Uuid, // user_id or buyer_id
     pub username: String,
     pub role: String,
     pub accessible_menus: Vec<String>,
-    pub exp: i64,            // expiry timestamp
-    pub iat: i64,            // issued at
+    pub exp: i64, // expiry timestamp
+    pub iat: i64, // issued at
+    #[serde(default = "default_seller_user_type")]
+    pub user_type: String, // "buyer" | "seller_staff"
+}
+
+impl JwtClaims {
+    pub fn is_buyer(&self) -> bool {
+        self.user_type == "buyer"
+    }
+
+    pub fn is_seller_staff(&self) -> bool {
+        self.user_type == "seller_staff"
+    }
 }
 
 #[async_trait]
 pub trait AuthContract: Send + Sync {
-    /// Generate JWT token dari UserAccountDto
+    /// Generate JWT token dari UserAccountDto (Seller/Staff)
     fn generate_token(&self, user: &UserAccountDto) -> Result<String, ContractError>;
+
+    /// Generate JWT token dari BuyerAccountDto (Buyer Domain)
+    fn generate_buyer_token(&self, buyer: &BuyerAccountDto) -> Result<String, ContractError>;
 
     /// Validate & decode JWT token
     fn validate_token(&self, token: &str) -> Result<JwtClaims, ContractError>;
@@ -252,7 +335,11 @@ pub struct CreateCatalogItemRequest {
     pub sku: String,
     #[validate(length(max = 100, message = "Category max 100 characters"))]
     pub category: String,
-    #[validate(range(min = 0.0, max = 999999999.0, message = "Price must be between 0 and 999,999,999"))]
+    #[validate(range(
+        min = 0.0,
+        max = 999999999.0,
+        message = "Price must be between 0 and 999,999,999"
+    ))]
     pub price: f64,
     #[validate(range(max = 999999, message = "Stock cannot exceed 999,999"))]
     pub stock: u32,
@@ -266,7 +353,10 @@ pub struct CreateCatalogItemRequest {
 pub trait CatalogContract: Send + Sync {
     async fn list_items(&self) -> Result<Vec<CatalogItemDto>, ContractError>;
     async fn get_item(&self, id: Uuid) -> Result<CatalogItemDto, ContractError>;
-    async fn create_item(&self, req: CreateCatalogItemRequest) -> Result<CatalogItemDto, ContractError>;
+    async fn create_item(
+        &self,
+        req: CreateCatalogItemRequest,
+    ) -> Result<CatalogItemDto, ContractError>;
 }
 
 // --- INVENTORY CONTRACT (Ginee OMS Multi-Stock) ---
@@ -364,7 +454,11 @@ pub struct LowStockAlertDto {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct BulkStockAdjustmentItem {
     pub product_id: Uuid,
-    #[validate(length(min = 1, max = 20, message = "Tipe stok wajib diisi (warehouse/safety/spare/promotion)"))]
+    #[validate(length(
+        min = 1,
+        max = 20,
+        message = "Tipe stok wajib diisi (warehouse/safety/spare/promotion)"
+    ))]
     pub stock_type: String,
     #[validate(range(max = 999999, message = "Nilai stok tidak boleh melebihi 999,999"))]
     pub new_value: u32,
@@ -372,7 +466,10 @@ pub struct BulkStockAdjustmentItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct BulkStockUpdateRequest {
-    #[validate(length(min = 1, max = 100, message = "Batch harus berisi 1-100 item"), nested)]
+    #[validate(
+        length(min = 1, max = 100, message = "Batch harus berisi 1-100 item"),
+        nested
+    )]
     pub adjustments: Vec<BulkStockAdjustmentItem>,
     #[validate(length(max = 500, message = "Catatan Admin max 500 karakter"))]
     pub admin_note: String,
@@ -400,7 +497,10 @@ pub trait InventoryContract: Send + Sync {
         admin_note: String,
         updated_by: String,
     ) -> Result<InventoryStockDto, ContractError>;
-    async fn get_safety_stock_logs(&self, product_id: Uuid) -> Result<Vec<SafetyStockLogDto>, ContractError>;
+    async fn get_safety_stock_logs(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<SafetyStockLogDto>, ContractError>;
     async fn update_warehouse_stock(
         &self,
         product_id: Uuid,
@@ -464,6 +564,17 @@ pub struct OrderItemDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ShippingAddressSnapshot {
+    pub recipient_name: String,
+    pub phone_number: String,
+    pub street_address: String,
+    pub subdistrict: String,
+    pub city: String,
+    pub province: String,
+    pub postal_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OmniOrderDto {
     pub id: Uuid,
     pub channel: ChannelType,
@@ -474,6 +585,10 @@ pub struct OmniOrderDto {
     pub total_amount: f64,
     pub status: String,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub buyer_id: Option<Uuid>,
+    #[serde(default)]
+    pub shipping_snapshot: Option<ShippingAddressSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -489,9 +604,28 @@ pub struct StorefrontOrderRequest {
     pub customer_name: String,
     #[validate(email(message = "Invalid email format"))]
     pub customer_email: String,
-    #[validate(length(min = 1, max = 500, message = "Shipping address required (max 500 chars)"))]
+    #[validate(length(
+        min = 1,
+        max = 500,
+        message = "Shipping address required (max 500 chars)"
+    ))]
     pub shipping_address: String,
-    #[validate(length(min = 1, max = 50, message = "Order must have 1-50 items"), nested)]
+    #[validate(
+        length(min = 1, max = 50, message = "Order must have 1-50 items"),
+        nested
+    )]
+    pub items: Vec<StorefrontOrderItemRequest>,
+    pub buyer_id: Option<Uuid>,
+    pub shipping_snapshot: Option<ShippingAddressSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct BuyerCheckoutRequest {
+    pub address_id: Uuid,
+    #[validate(
+        length(min = 1, max = 50, message = "Order must have 1-50 items"),
+        nested
+    )]
     pub items: Vec<StorefrontOrderItemRequest>,
 }
 
@@ -507,8 +641,16 @@ pub struct MarketplaceOrderReq {
 
 #[async_trait]
 pub trait OrderContract: Send + Sync {
-    async fn create_storefront_order(&self, req: StorefrontOrderRequest) -> Result<OmniOrderDto, ContractError>;
-    async fn create_marketplace_order(&self, channel: ChannelType, customer_name: String, items: Vec<StorefrontOrderItemRequest>) -> Result<OmniOrderDto, ContractError>;
+    async fn create_storefront_order(
+        &self,
+        req: StorefrontOrderRequest,
+    ) -> Result<OmniOrderDto, ContractError>;
+    async fn create_marketplace_order(
+        &self,
+        channel: ChannelType,
+        customer_name: String,
+        items: Vec<StorefrontOrderItemRequest>,
+    ) -> Result<OmniOrderDto, ContractError>;
     async fn list_orders(&self) -> Result<Vec<OmniOrderDto>, ContractError>;
     async fn get_order(&self, id: Uuid) -> Result<OmniOrderDto, ContractError>;
 }
@@ -561,4 +703,160 @@ pub trait AuditContract: Send + Sync {
         offset: u32,
     ) -> Result<Vec<AuditLogEntry>, ContractError>;
     async fn get_logs_by_actor(&self, actor_id: Uuid) -> Result<Vec<AuditLogEntry>, ContractError>;
+}
+
+// --- BUYER & ADDRESS CONTRACT ---
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BuyerAccountDto {
+    pub id: Uuid,
+    pub google_sub: String,
+    pub email: String,
+    pub full_name: String,
+    pub avatar_url: Option<String>,
+    pub phone_number: Option<String>,
+    pub phone_verified: bool,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct GoogleAuthRequest {
+    #[validate(length(min = 1, message = "Google ID token is required"))]
+    pub id_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BuyerAuthResponse {
+    #[serde(alias = "token")]
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: u64,
+    pub buyer: BuyerAccountDto,
+    pub requires_phone_verification: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct OtpRequest {
+    #[validate(length(min = 8, max = 20, message = "Valid phone number required"))]
+    pub phone_number: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct OtpVerifyRequest {
+    #[validate(length(min = 8, max = 20, message = "Phone number is required"))]
+    pub phone_number: String,
+    #[serde(alias = "otp_code")]
+    #[validate(length(min = 4, max = 8, message = "OTP code must be 4-8 digits"))]
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BuyerAddressDto {
+    pub id: Uuid,
+    pub buyer_id: Uuid,
+    pub recipient_name: String,
+    pub phone_number: String,
+    pub street_address: String,
+    pub subdistrict: String,
+    pub city: String,
+    pub province: String,
+    pub postal_code: String,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateBuyerAddressRequest {
+    #[validate(length(
+        min = 1,
+        max = 200,
+        message = "Recipient name required (max 200 chars)"
+    ))]
+    pub recipient_name: String,
+    #[validate(length(min = 8, max = 25, message = "Valid recipient phone number required"))]
+    pub phone_number: String,
+    #[validate(length(min = 3, max = 500, message = "Street address required"))]
+    pub street_address: String,
+    #[validate(length(min = 1, max = 100, message = "Subdistrict / Kecamatan required"))]
+    pub subdistrict: String,
+    #[validate(length(min = 1, max = 100, message = "City / Kota required"))]
+    pub city: String,
+    #[validate(length(min = 1, max = 100, message = "Province / Provinsi required"))]
+    pub province: String,
+    #[validate(length(min = 3, max = 10, message = "Valid postal code required"))]
+    pub postal_code: String,
+    #[serde(default, alias = "is_default")]
+    pub set_as_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateBuyerAddressRequest {
+    #[validate(length(
+        min = 1,
+        max = 200,
+        message = "Recipient name required (max 200 chars)"
+    ))]
+    pub recipient_name: String,
+    #[validate(length(min = 8, max = 25, message = "Valid recipient phone number required"))]
+    pub phone_number: String,
+    #[validate(length(min = 3, max = 500, message = "Street address required"))]
+    pub street_address: String,
+    #[validate(length(min = 1, max = 100, message = "Subdistrict / Kecamatan required"))]
+    pub subdistrict: String,
+    #[validate(length(min = 1, max = 100, message = "City / Kota required"))]
+    pub city: String,
+    #[validate(length(min = 1, max = 100, message = "Province / Provinsi required"))]
+    pub province: String,
+    #[validate(length(min = 3, max = 10, message = "Valid postal code required"))]
+    pub postal_code: String,
+    #[serde(default, alias = "is_default")]
+    pub set_as_default: bool,
+}
+
+#[async_trait]
+pub trait BuyerContract: Send + Sync {
+    async fn authenticate_google(&self, id_token: &str)
+        -> Result<BuyerAuthResponse, ContractError>;
+    async fn request_phone_otp(
+        &self,
+        buyer_id: Uuid,
+        phone_number: &str,
+    ) -> Result<(), ContractError>;
+    async fn verify_phone_otp(
+        &self,
+        buyer_id: Uuid,
+        phone_number: &str,
+        code: &str,
+    ) -> Result<BuyerAccountDto, ContractError>;
+    async fn get_buyer_profile(&self, buyer_id: Uuid) -> Result<BuyerAccountDto, ContractError>;
+    async fn list_addresses(&self, buyer_id: Uuid) -> Result<Vec<BuyerAddressDto>, ContractError>;
+    async fn get_address(
+        &self,
+        buyer_id: Uuid,
+        address_id: Uuid,
+    ) -> Result<BuyerAddressDto, ContractError>;
+    async fn create_address(
+        &self,
+        buyer_id: Uuid,
+        req: CreateBuyerAddressRequest,
+    ) -> Result<BuyerAddressDto, ContractError>;
+    async fn update_address(
+        &self,
+        buyer_id: Uuid,
+        address_id: Uuid,
+        req: UpdateBuyerAddressRequest,
+    ) -> Result<BuyerAddressDto, ContractError>;
+    async fn delete_address(&self, buyer_id: Uuid, address_id: Uuid) -> Result<(), ContractError>;
+    async fn set_default_address(
+        &self,
+        buyer_id: Uuid,
+        address_id: Uuid,
+    ) -> Result<BuyerAddressDto, ContractError>;
 }

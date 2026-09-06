@@ -100,7 +100,12 @@ pub async fn update_safety_stock(
         .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
-        .update_safety_stock(id, payload.new_safety_stock, payload.admin_note.clone(), operator.clone())
+        .update_safety_stock(
+            id,
+            payload.new_safety_stock,
+            payload.admin_note.clone(),
+            operator.clone(),
+        )
         .await?;
 
     if let Err(e) = state.audit_contract.log_action(AuditLogEntry {
@@ -179,7 +184,12 @@ pub async fn update_warehouse_stock(
         .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
-        .update_warehouse_stock(id, payload.new_warehouse_stock, payload.admin_note.clone(), operator.clone())
+        .update_warehouse_stock(
+            id,
+            payload.new_warehouse_stock,
+            payload.admin_note.clone(),
+            operator.clone(),
+        )
         .await?;
 
     if let Err(e) = state.audit_contract.log_action(AuditLogEntry {
@@ -234,7 +244,12 @@ pub async fn update_spare_stock(
         .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
-        .update_spare_stock(id, payload.new_spare_stock, payload.admin_note.clone(), operator.clone())
+        .update_spare_stock(
+            id,
+            payload.new_spare_stock,
+            payload.admin_note.clone(),
+            operator.clone(),
+        )
         .await?;
 
     if let Err(e) = state.audit_contract.log_action(AuditLogEntry {
@@ -289,7 +304,12 @@ pub async fn update_promotion_stock(
         .unwrap_or_else(|| claims.username.clone());
     let updated = state
         .inventory_contract
-        .update_promotion_stock(id, payload.new_promotion_stock, payload.admin_note.clone(), operator.clone())
+        .update_promotion_stock(
+            id,
+            payload.new_promotion_stock,
+            payload.admin_note.clone(),
+            operator.clone(),
+        )
         .await?;
 
     if let Err(e) = state.audit_contract.log_action(AuditLogEntry {
@@ -392,24 +412,32 @@ pub async fn bulk_update_stock(
     let mut update_req = payload;
     update_req.updated_by = Some(operator.clone());
 
-    let result = state.inventory_contract.bulk_update_stock(update_req).await?;
+    let result = state
+        .inventory_contract
+        .bulk_update_stock(update_req)
+        .await?;
 
-    if let Err(e) = state.audit_contract.log_action(AuditLogEntry {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
-        actor_id: Some(claims.sub),
-        actor_username: claims.username.clone(),
-        action: "BULK_STOCK_UPDATED".to_string(),
-        resource_type: "inventory".to_string(),
-        resource_id: None,
-        details: json!({
-            "total_requested": count,
-            "success": result.total_success,
-            "failed": result.total_failed,
-            "note": note
-        }).to_string(),
-        ip_address: None,
-    }).await {
+    if let Err(e) = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: claims.username.clone(),
+            action: "BULK_STOCK_UPDATED".to_string(),
+            resource_type: "inventory".to_string(),
+            resource_id: None,
+            details: json!({
+                "total_requested": count,
+                "success": result.total_success,
+                "failed": result.total_failed,
+                "note": note
+            })
+            .to_string(),
+            ip_address: None,
+        })
+        .await
+    {
         tracing::warn!(error = %e, "Failed to write audit log for bulk stock update");
     }
 

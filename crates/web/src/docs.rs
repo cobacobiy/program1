@@ -7,13 +7,13 @@ use crate::error::ApiError;
 use crate::handlers;
 use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, BulkStockAdjustmentItem, BulkStockUpdateRequest,
-    BulkStockUpdateResult, CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelType,
-    CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode, InventoryStockDto, JwtClaims,
-    LoginRequest, LowStockAlertDto, MarketplaceOrderReq, OmniOrderDto, OrderItemDto,
-    RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto, StockAdjustmentLogDto,
-    StorefrontOrderItemRequest, StorefrontOrderRequest, UpdatePromotionStockRequest,
-    UpdateSafetyStockRequest, UpdateSpareStockRequest, UpdateUserPermissionsRequest,
-    UpdateWarehouseStockRequest, UserAccountDto,
+    BulkStockUpdateResult, BuyerCheckoutRequest, CatalogItemDto, ChannelRevenueDto,
+    ChannelStatusDto, ChannelType, CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode,
+    InventoryStockDto, JwtClaims, LoginRequest, LowStockAlertDto, MarketplaceOrderReq,
+    OmniOrderDto, OrderItemDto, RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto,
+    StockAdjustmentLogDto, StorefrontOrderItemRequest, StorefrontOrderRequest,
+    UpdatePromotionStockRequest, UpdateSafetyStockRequest, UpdateSpareStockRequest,
+    UpdateUserPermissionsRequest, UpdateWarehouseStockRequest, UserAccountDto,
 };
 
 struct SecurityAddon;
@@ -41,6 +41,7 @@ impl Modify for SecurityAddon {
         handlers::health_check,
         handlers::readiness_check,
         handlers::get_store_info,
+        handlers::get_buyer_auth_config_handler,
 
         handlers::login_handler,
         handlers::register_handler,
@@ -98,6 +99,7 @@ impl Modify for SecurityAddon {
             ChannelStatusDto,
             OrderItemDto,
             OmniOrderDto,
+            BuyerCheckoutRequest,
             StorefrontOrderItemRequest,
             StorefrontOrderRequest,
             MarketplaceOrderReq,
@@ -126,4 +128,3 @@ impl Modify for SecurityAddon {
     )
 )]
 pub struct ApiDoc;
-

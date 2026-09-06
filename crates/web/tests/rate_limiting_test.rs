@@ -18,7 +18,9 @@ use tower::ServiceExt;
 
 async fn setup_test_app() -> (axum::Router, Arc<IpRateLimiter>) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret, 24));
@@ -37,6 +39,18 @@ async fn setup_test_app() -> (axum::Router, Arc<IpRateLimiter>) {
     let audit_module = Arc::new(program1_module_audit::AuditModule::new(pool.clone()));
     let rate_limiter = Arc::new(IpRateLimiter::new());
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
@@ -52,11 +66,11 @@ async fn setup_test_app() -> (axum::Router, Arc<IpRateLimiter>) {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter: rate_limiter.clone(),
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
-
-
 
     (create_app(state), rate_limiter)
 }
@@ -99,10 +113,26 @@ async fn test_login_rate_limit_exceeded_returns_429() {
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
     let headers = response.headers();
-    let retry_after_hdr: u64 = headers.get(header::RETRY_AFTER).unwrap().to_str().unwrap().parse().unwrap();
+    let retry_after_hdr: u64 = headers
+        .get(header::RETRY_AFTER)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
     assert!(retry_after_hdr > 0 && retry_after_hdr <= 60);
-    assert_eq!(headers.get("x-ratelimit-limit").unwrap().to_str().unwrap(), "5");
-    assert_eq!(headers.get("x-ratelimit-remaining").unwrap().to_str().unwrap(), "0");
+    assert_eq!(
+        headers.get("x-ratelimit-limit").unwrap().to_str().unwrap(),
+        "5"
+    );
+    assert_eq!(
+        headers
+            .get("x-ratelimit-remaining")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "0"
+    );
 
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
@@ -110,7 +140,6 @@ async fn test_login_rate_limit_exceeded_returns_429() {
     let retry_val = body["retry_after"].as_u64().unwrap();
     assert!(retry_val > 0 && retry_val <= 60);
 }
-
 
 #[tokio::test]
 async fn test_forwarded_for_ip_isolation() {

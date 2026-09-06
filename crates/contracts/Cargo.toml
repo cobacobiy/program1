@@ -15,4 +15,5 @@ validator = { workspace = true }
 regex = { workspace = true }
 utoipa = { workspace = true }
 
-
+[dev-dependencies]
+serde_json.workspace = true

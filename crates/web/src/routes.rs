@@ -4,7 +4,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use tower_http::catch_panic::CatchPanicLayer;
@@ -29,7 +29,33 @@ pub fn create_app(state: AppState) -> Router {
     let login_limit_layer = axum::middleware::from_fn(move |req, next| {
         let lim = login_limiter.clone();
         async move {
-            rate_limit::rate_limit_layer(lim, "auth_login", 5, Duration::from_secs(60), req, next).await
+            rate_limit::rate_limit_layer(lim, "auth_login", 5, Duration::from_secs(60), req, next)
+                .await
+        }
+    });
+
+    let buyer_auth_limiter = limiter.clone();
+    let buyer_auth_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = buyer_auth_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(
+                lim,
+                "buyer_auth_google",
+                10,
+                Duration::from_secs(60),
+                req,
+                next,
+            )
+            .await
+        }
+    });
+
+    let otp_limiter = limiter.clone();
+    let otp_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = otp_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(lim, "buyer_otp", 5, Duration::from_secs(60), req, next)
+                .await
         }
     });
 
@@ -37,7 +63,15 @@ pub fn create_app(state: AppState) -> Router {
     let register_limit_layer = axum::middleware::from_fn(move |req, next| {
         let lim = register_limiter.clone();
         async move {
-            rate_limit::rate_limit_layer(lim, "auth_register", 3, Duration::from_secs(60), req, next).await
+            rate_limit::rate_limit_layer(
+                lim,
+                "auth_register",
+                3,
+                Duration::from_secs(60),
+                req,
+                next,
+            )
+            .await
         }
     });
 
@@ -45,7 +79,8 @@ pub fn create_app(state: AppState) -> Router {
     let order_limit_layer = axum::middleware::from_fn(move |req, next| {
         let lim = order_limiter.clone();
         async move {
-            rate_limit::rate_limit_layer(lim, "orders", 10, Duration::from_secs(60), req, next).await
+            rate_limit::rate_limit_layer(lim, "orders", 10, Duration::from_secs(60), req, next)
+                .await
         }
     });
 
@@ -53,7 +88,8 @@ pub fn create_app(state: AppState) -> Router {
     let catalog_limit_layer = axum::middleware::from_fn(move |req, next| {
         let lim = catalog_limiter.clone();
         async move {
-            rate_limit::rate_limit_layer(lim, "catalog", 20, Duration::from_secs(60), req, next).await
+            rate_limit::rate_limit_layer(lim, "catalog", 20, Duration::from_secs(60), req, next)
+                .await
         }
     });
 
@@ -61,7 +97,15 @@ pub fn create_app(state: AppState) -> Router {
     let inventory_limit_layer = axum::middleware::from_fn(move |req, next| {
         let lim = inventory_limiter.clone();
         async move {
-            rate_limit::rate_limit_layer(lim, "inventory_mutation", 10, Duration::from_secs(60), req, next).await
+            rate_limit::rate_limit_layer(
+                lim,
+                "inventory_mutation",
+                10,
+                Duration::from_secs(60),
+                req,
+                next,
+            )
+            .await
         }
     });
 
@@ -70,41 +114,144 @@ pub fn create_app(state: AppState) -> Router {
         .route("/health", get(health_check))
         .route("/health/ready", get(readiness_check))
         .route("/api/v1/store/info", get(get_store_info))
-        .route("/api/v1/auth/login", post(login_handler).route_layer(login_limit_layer))
+        .route(
+            "/api/v1/buyer/auth/config",
+            get(get_buyer_auth_config_handler),
+        )
+        .route(
+            "/api/v1/auth/login",
+            post(login_handler).route_layer(login_limit_layer),
+        )
+        .route(
+            "/api/v1/buyer/auth/google",
+            post(google_auth_handler).route_layer(buyer_auth_limit_layer),
+        )
         .route("/api/v1/catalog", get(list_catalog))
-        .route("/api/v1/catalog/:id", get(get_catalog_item))
-        .route("/api/v1/orders", post(create_storefront_order).route_layer(order_limit_layer.clone()));
+        .route("/api/v1/catalog/:id", get(get_catalog_item));
 
-    // 2. Protected routes (valid JWT authentication required)
+    // 2. Buyer protected routes (valid Buyer JWT required)
+    let buyer_routes = Router::new()
+        .route(
+            "/api/v1/buyer/otp/request",
+            post(request_otp_handler).route_layer(otp_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/buyer/otp/verify",
+            post(verify_otp_handler).route_layer(otp_limit_layer),
+        )
+        .route("/api/v1/buyer/profile", get(get_buyer_profile_handler))
+        .route(
+            "/api/v1/buyer/addresses",
+            get(list_addresses_handler).post(create_address_handler),
+        )
+        .route(
+            "/api/v1/buyer/addresses/:id",
+            put(update_address_handler).delete(delete_address_handler),
+        )
+        .route(
+            "/api/v1/buyer/addresses/:id/default",
+            post(set_default_address_handler),
+        )
+        .route(
+            "/api/v1/orders",
+            post(create_storefront_order).route_layer(order_limit_layer.clone()),
+        )
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_buyer_auth,
+        ));
+
+    // 3. Seller Protected routes (valid Seller/Staff JWT authentication required)
     let protected_routes = Router::new()
-        .route("/api/v1/catalog", post(create_catalog_item).route_layer(catalog_limit_layer))
+        .route(
+            "/api/v1/catalog",
+            post(create_catalog_item).route_layer(catalog_limit_layer),
+        )
         .route("/api/v1/inventory", get(list_all_inventory))
-        .route("/api/v1/inventory/alerts/low-stock", get(get_low_stock_alerts))
+        .route(
+            "/api/v1/inventory/alerts/low-stock",
+            get(get_low_stock_alerts),
+        )
         .route("/api/v1/inventory/:id", get(get_inventory_stock))
-        .route("/api/v1/inventory/:id/safety-stock-logs", get(get_safety_stock_logs))
-        .route("/api/v1/inventory/:id/adjustment-logs", get(get_adjustment_logs))
+        .route(
+            "/api/v1/inventory/:id/safety-stock-logs",
+            get(get_safety_stock_logs),
+        )
+        .route(
+            "/api/v1/inventory/:id/adjustment-logs",
+            get(get_adjustment_logs),
+        )
         .route("/api/v1/channels", get(list_channels))
         .route("/api/v1/channels/sync/:channel", post(sync_channel))
         .route("/api/v1/orders", get(list_orders))
         .route("/api/v1/orders/:id", get(get_order))
-        .route("/api/v1/orders/marketplace", post(create_marketplace_order).route_layer(order_limit_layer))
+        .route(
+            "/api/v1/orders/marketplace",
+            post(create_marketplace_order).route_layer(order_limit_layer),
+        )
         .route("/api/v1/users/accounts", get(list_user_accounts))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware::require_auth));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_auth,
+        ));
 
-    // 3. Admin-only routes (valid JWT with admin role required)
+    // 4. Admin-only routes (valid Seller JWT with admin role required)
     let admin_routes = Router::new()
-        .route("/api/v1/auth/register", post(register_handler).route_layer(register_limit_layer))
+        .route(
+            "/api/v1/auth/register",
+            post(register_handler).route_layer(register_limit_layer),
+        )
         .route("/api/v1/users/accounts", post(create_user_account))
-        .route("/api/v1/users/accounts/:id/permissions", post(update_user_permissions))
-        .route("/api/v1/inventory/bulk-update", post(bulk_update_stock).route_layer(inventory_limit_layer.clone()))
-        .route("/api/v1/inventory/:id/safety-stock", post(update_safety_stock).route_layer(inventory_limit_layer.clone()))
-        .route("/api/v1/inventory/:id/warehouse-stock", post(update_warehouse_stock).route_layer(inventory_limit_layer.clone()))
-        .route("/api/v1/inventory/:id/spare-stock", post(update_spare_stock).route_layer(inventory_limit_layer.clone()))
-        .route("/api/v1/inventory/:id/promotion-stock", post(update_promotion_stock).route_layer(inventory_limit_layer))
+        .route(
+            "/api/v1/users/accounts/:id/permissions",
+            post(update_user_permissions),
+        )
+        .route(
+            "/api/v1/inventory/bulk-update",
+            post(bulk_update_stock).route_layer(inventory_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/inventory/:id/safety-stock",
+            post(update_safety_stock).route_layer(inventory_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/inventory/:id/warehouse-stock",
+            post(update_warehouse_stock).route_layer(inventory_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/inventory/:id/spare-stock",
+            post(update_spare_stock).route_layer(inventory_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/inventory/:id/promotion-stock",
+            post(update_promotion_stock).route_layer(inventory_limit_layer),
+        )
         .route("/api/v1/analytics", get(get_analytics))
         .route("/api/v1/audit/logs", get(list_audit_logs))
         .route("/api/v1/audit/logs/user/:id", get(get_user_audit_logs))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware::require_admin));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_admin,
+        ));
+
+    // 5. Merchant Owner / Super Admin only routes (Break-Glass emergency access)
+    let break_glass_routes = Router::new()
+        .route(
+            "/api/v1/admin/break-glass/activate",
+            post(activate_break_glass),
+        )
+        .route(
+            "/api/v1/admin/break-glass/deactivate",
+            post(deactivate_break_glass),
+        )
+        .route(
+            "/api/v1/admin/break-glass/status",
+            get(get_break_glass_status),
+        )
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_seller_owner,
+        ));
 
     // Static pages
     let admin_page = std::fs::read_to_string("crates/web/static/index.html")
@@ -124,8 +271,10 @@ pub fn create_app(state: AppState) -> Router {
 
     Router::new()
         .merge(public_routes)
+        .merge(buyer_routes)
         .merge(protected_routes)
         .merge(admin_routes)
+        .merge(break_glass_routes)
         .merge(static_routes)
         .merge(doc_routes)
         .layer(CatchPanicLayer::custom(|panic_info| {

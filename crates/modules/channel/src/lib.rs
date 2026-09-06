@@ -1,8 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use program1_contracts::{
-    ChannelStatusDto, ChannelSyncContract, ChannelType, ContractError,
-};
+use program1_contracts::{ChannelStatusDto, ChannelSyncContract, ChannelType, ContractError};
 use program1_core::database::DbPool;
 use sqlx::Row;
 
@@ -51,7 +49,6 @@ impl ChannelSyncModule {
 
         Ok(())
     }
-
 
     pub fn channel_to_db_key(channel: &ChannelType) -> &'static str {
         match channel {
@@ -170,7 +167,10 @@ mod tests {
         let statuses = module.get_channel_statuses().await.unwrap();
         assert_eq!(statuses.len(), 4);
 
-        let synced = module.sync_channel_stock(ChannelType::TikTokShop).await.unwrap();
+        let synced = module
+            .sync_channel_stock(ChannelType::TikTokShop)
+            .await
+            .unwrap();
         assert!(synced > 0);
     }
 }

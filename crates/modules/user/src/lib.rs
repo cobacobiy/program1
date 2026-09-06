@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
-    ContractError, CreateUserAccountRequest, RegisterUserRequest, UserAccountDto, UserContract,
+    ActivateBreakGlassRequest, BreakGlassStatusDto, ContractError, CreateUserAccountRequest,
+    RegisterUserRequest, UserAccountDto, UserContract,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
 use uuid::Uuid;
-
 
 /// Password validation rules:
 /// - Minimum 8 karakter
@@ -41,34 +41,64 @@ pub fn validate_password(password: &str, username: &str) -> Result<(), ContractE
 #[derive(Clone)]
 pub struct UserModule {
     pool: DbPool,
+    dev_support_password: Option<String>,
 }
 
 impl UserModule {
     pub fn new(pool: DbPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            dev_support_password: None,
+        }
+    }
+
+    pub fn with_dev_support_password(mut self, password: Option<String>) -> Self {
+        self.dev_support_password = password;
+        self
     }
 
     pub async fn seed_default_users(&self) -> Result<(), ContractError> {
-        let count_row = sqlx::query("SELECT COUNT(*) as count FROM user_accounts")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContractError::Internal(e.to_string()))?;
-
-        let count: i64 = count_row.get("count");
-        if count > 0 {
-            return Ok(());
-        }
-
         let all_menus = vec![
-            "dashboard", "orders", "master_products", "channel_products", "purchases",
-            "stocks", "warehouses", "promotions", "customers", "chat", "reports",
-            "logistics", "finances", "integrations", "settings", "service",
+            "dashboard",
+            "orders",
+            "master_products",
+            "channel_products",
+            "purchases",
+            "stocks",
+            "warehouses",
+            "promotions",
+            "customers",
+            "chat",
+            "reports",
+            "logistics",
+            "finances",
+            "integrations",
+            "settings",
+            "service",
         ];
 
-        let admin_default_password = std::env::var("ADMIN_DEFAULT_PASSWORD")
-            .unwrap_or_else(|_| "admin123".to_string());
+        let admin_default_password =
+            std::env::var("ADMIN_DEFAULT_PASSWORD").unwrap_or_else(|_| "admin123".to_string());
         let seed_password_hash = program1_core::auth::hash_password(&admin_default_password)
-            .unwrap_or_else(|_| "$argon2id$v=19$m=19456,t=2,p=1$placeholder$placeholder".to_string());
+            .unwrap_or_else(|_| {
+                "$argon2id$v=19$m=19456,t=2,p=1$placeholder$placeholder".to_string()
+            });
+
+        let dev_support_password = self
+            .dev_support_password
+            .clone()
+            .or_else(|| std::env::var("DEV_SUPPORT_PASSWORD").ok())
+            .unwrap_or_else(|| {
+                format!(
+                    "sec_rnd_{}_{}",
+                    Uuid::new_v4().simple(),
+                    Uuid::new_v4().simple()
+                )
+            });
+        let dev_support_password_hash = program1_core::auth::hash_password(&dev_support_password)
+            .unwrap_or_else(|_| {
+                "$argon2id$v=19$m=19456,t=2,p=1$placeholder$placeholder".to_string()
+            });
 
         let seed_accounts = vec![
             (
@@ -77,6 +107,7 @@ impl UserModule {
                 "Admin Super (Owner)",
                 "Super Admin",
                 serde_json::to_string(&all_menus).unwrap(),
+                1,
             ),
             (
                 "00000000-0000-0000-0000-000000000005",
@@ -84,13 +115,23 @@ impl UserModule {
                 "Budi Hartono (Admin Ops)",
                 "Admin Operasional",
                 serde_json::to_string(&all_menus).unwrap(),
+                1,
             ),
             (
                 "00000000-0000-0000-0000-000000000003",
                 "manager_gudang",
                 "Bambang W (Manager Gudang)",
                 "Warehouse Manager",
-                serde_json::to_string(&vec!["dashboard", "master_products", "channel_products", "stocks", "warehouses", "logistics"]).unwrap(),
+                serde_json::to_string(&vec![
+                    "dashboard",
+                    "master_products",
+                    "channel_products",
+                    "stocks",
+                    "warehouses",
+                    "logistics",
+                ])
+                .unwrap(),
+                1,
             ),
             (
                 "00000000-0000-0000-0000-000000000006",
@@ -98,6 +139,7 @@ impl UserModule {
                 "Joko Susilo (Staff Gudang)",
                 "Staff Gudang & Stok",
                 serde_json::to_string(&vec!["dashboard", "stocks", "master_products"]).unwrap(),
+                1,
             ),
             (
                 "00000000-0000-0000-0000-000000000004",
@@ -105,37 +147,63 @@ impl UserModule {
                 "Dewi Lestari (Staff Keuangan)",
                 "Finance Officer",
                 serde_json::to_string(&vec!["dashboard", "orders", "reports", "finances"]).unwrap(),
+                1,
             ),
             (
                 "00000000-0000-0000-0000-000000000002",
                 "staff_cs",
                 "Siti Rahma (Staff CS)",
                 "Customer Support",
-                serde_json::to_string(&vec!["dashboard", "orders", "customers", "chat", "service"]).unwrap(),
+                serde_json::to_string(&vec!["dashboard", "orders", "customers", "chat", "service"])
+                    .unwrap(),
+                1,
+            ),
+            (
+                "00000000-0000-0000-0000-000000000007",
+                "dev_support",
+                "Developer Support (Break-Glass)",
+                "Developer Support",
+                serde_json::to_string(&all_menus).unwrap(),
+                0, // Break-glass: INACTIVE by default
             ),
         ];
 
         let now = Utc::now().to_rfc3339();
-        for (id, username, full_name, role, menus) in seed_accounts {
+        for (id, username, full_name, role, menus, is_active) in seed_accounts {
+            let pass_hash = if username == "dev_support" {
+                &dev_support_password_hash
+            } else {
+                &seed_password_hash
+            };
             sqlx::query(
                 "INSERT OR IGNORE INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, 1, $7)",
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             )
             .bind(id)
             .bind(username)
-            .bind(&seed_password_hash)
+            .bind(pass_hash)
             .bind(full_name)
             .bind(role)
             .bind(menus)
+            .bind(is_active)
             .bind(&now)
             .execute(&self.pool)
             .await
             .map_err(|e| ContractError::Internal(e.to_string()))?;
         }
 
+        // Initialize break_glass_sessions record for dev_support
+        sqlx::query(
+            "INSERT OR IGNORE INTO break_glass_sessions (id, account_username, is_active, active_until, activated_by, reason, created_at)
+             VALUES ('00000000-0000-0000-0000-000000000099', 'dev_support', 0, NULL, NULL, NULL, $1)",
+        )
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
         Ok(())
     }
-
 
     fn row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<UserAccountDto, ContractError> {
         let id_str: String = row.get("id");
@@ -146,14 +214,25 @@ impl UserModule {
         let full_name: String = row.get("full_name");
         let role: String = row.get("role");
         let menus_json: String = row.get("accessible_menus");
-        let mut accessible_menus: Vec<String> = serde_json::from_str(&menus_json).unwrap_or_default();
+        let mut accessible_menus: Vec<String> =
+            serde_json::from_str(&menus_json).unwrap_or_default();
         if role.to_lowercase().contains("admin") {
             accessible_menus = vec![
-                "dashboard".to_string(), "orders".to_string(), "master_products".to_string(),
-                "channel_products".to_string(), "purchases".to_string(), "stocks".to_string(),
-                "warehouses".to_string(), "promotions".to_string(), "customers".to_string(),
-                "chat".to_string(), "reports".to_string(), "logistics".to_string(),
-                "finances".to_string(), "integrations".to_string(), "settings".to_string(),
+                "dashboard".to_string(),
+                "orders".to_string(),
+                "master_products".to_string(),
+                "channel_products".to_string(),
+                "purchases".to_string(),
+                "stocks".to_string(),
+                "warehouses".to_string(),
+                "promotions".to_string(),
+                "customers".to_string(),
+                "chat".to_string(),
+                "reports".to_string(),
+                "logistics".to_string(),
+                "finances".to_string(),
+                "integrations".to_string(),
+                "settings".to_string(),
                 "service".to_string(),
             ];
         }
@@ -200,6 +279,16 @@ impl UserContract for UserModule {
             }
         };
 
+        let clean_user = username.trim().to_lowercase();
+        if clean_user == "dev_support" {
+            let bg_status = self.get_break_glass_status().await?;
+            if !bg_status.is_active {
+                return Err(ContractError::ValidationError(
+                    "Akses Developer Support (Break-Glass) sedang nonaktif. Memerlukan otorisasi darurat dari Seller Owner.".to_string(),
+                ));
+            }
+        }
+
         let password_hash: String = row.get("password_hash");
         let is_active: i64 = row.get("is_active");
         if is_active == 0 {
@@ -239,7 +328,6 @@ impl UserContract for UserModule {
         }
     }
 
-
     async fn list_accounts(&self) -> Result<Vec<UserAccountDto>, ContractError> {
         let rows = sqlx::query(
             "SELECT id, username, full_name, role, accessible_menus, is_active, created_at
@@ -264,11 +352,13 @@ impl UserContract for UserModule {
         }
 
         // Check if username already exists
-        let exists_row = sqlx::query("SELECT COUNT(*) as count FROM user_accounts WHERE LOWER(username) = LOWER($1)")
-            .bind(&clean_username)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContractError::Internal(e.to_string()))?;
+        let exists_row = sqlx::query(
+            "SELECT COUNT(*) as count FROM user_accounts WHERE LOWER(username) = LOWER($1)",
+        )
+        .bind(&clean_username)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         let exists_count: i64 = exists_row.get("count");
         if exists_count > 0 {
@@ -280,12 +370,13 @@ impl UserContract for UserModule {
 
         let new_id = Uuid::new_v4();
         let now = Utc::now();
-        let default_password = std::env::var("ADMIN_DEFAULT_PASSWORD")
-            .unwrap_or_else(|_| "admin123".to_string());
+        let default_password =
+            std::env::var("ADMIN_DEFAULT_PASSWORD").unwrap_or_else(|_| "admin123".to_string());
         let password_hash = program1_core::auth::hash_password(&default_password)
             .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        let menus_json = serde_json::to_string(&req.accessible_menus).unwrap_or_else(|_| "[]".to_string());
+        let menus_json =
+            serde_json::to_string(&req.accessible_menus).unwrap_or_else(|_| "[]".to_string());
 
         sqlx::query(
             "INSERT INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
@@ -305,11 +396,21 @@ impl UserContract for UserModule {
         let mut final_menus = req.accessible_menus;
         if req.role.to_lowercase().contains("admin") {
             final_menus = vec![
-                "dashboard".to_string(), "orders".to_string(), "master_products".to_string(),
-                "channel_products".to_string(), "purchases".to_string(), "stocks".to_string(),
-                "warehouses".to_string(), "promotions".to_string(), "customers".to_string(),
-                "chat".to_string(), "reports".to_string(), "logistics".to_string(),
-                "finances".to_string(), "integrations".to_string(), "settings".to_string(),
+                "dashboard".to_string(),
+                "orders".to_string(),
+                "master_products".to_string(),
+                "channel_products".to_string(),
+                "purchases".to_string(),
+                "stocks".to_string(),
+                "warehouses".to_string(),
+                "promotions".to_string(),
+                "customers".to_string(),
+                "chat".to_string(),
+                "reports".to_string(),
+                "logistics".to_string(),
+                "finances".to_string(),
+                "integrations".to_string(),
+                "settings".to_string(),
                 "service".to_string(),
             ];
         }
@@ -330,16 +431,15 @@ impl UserContract for UserModule {
         user_id: Uuid,
         accessible_menus: Vec<String>,
     ) -> Result<UserAccountDto, ContractError> {
-        let menus_json = serde_json::to_string(&accessible_menus).unwrap_or_else(|_| "[]".to_string());
+        let menus_json =
+            serde_json::to_string(&accessible_menus).unwrap_or_else(|_| "[]".to_string());
 
-        let result = sqlx::query(
-            "UPDATE user_accounts SET accessible_menus = $1 WHERE id = $2",
-        )
-        .bind(menus_json)
-        .bind(user_id.to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ContractError::Internal(e.to_string()))?;
+        let result = sqlx::query("UPDATE user_accounts SET accessible_menus = $1 WHERE id = $2")
+            .bind(menus_json)
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(ContractError::NotFound(format!(
@@ -351,7 +451,6 @@ impl UserContract for UserModule {
         self.get_account(user_id).await
     }
 
-
     async fn register(&self, req: RegisterUserRequest) -> Result<UserAccountDto, ContractError> {
         let clean_username = req.username.trim().to_lowercase();
         if clean_username.is_empty() {
@@ -362,11 +461,13 @@ impl UserContract for UserModule {
 
         validate_password(&req.password, &clean_username)?;
 
-        let exists_row = sqlx::query("SELECT COUNT(*) as count FROM user_accounts WHERE LOWER(username) = LOWER($1)")
-            .bind(&clean_username)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContractError::Internal(e.to_string()))?;
+        let exists_row = sqlx::query(
+            "SELECT COUNT(*) as count FROM user_accounts WHERE LOWER(username) = LOWER($1)",
+        )
+        .bind(&clean_username)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         let exists_count: i64 = exists_row.get("count");
         if exists_count > 0 {
@@ -381,7 +482,11 @@ impl UserContract for UserModule {
 
         let new_id = Uuid::new_v4();
         let now = Utc::now();
-        let role = if req.role.trim().is_empty() { "Staff".to_string() } else { req.role.trim().to_string() };
+        let role = if req.role.trim().is_empty() {
+            "Staff".to_string()
+        } else {
+            req.role.trim().to_string()
+        };
         let menus = if req.accessible_menus.is_empty() {
             vec!["dashboard".to_string(), "orders".to_string()]
         } else {
@@ -413,7 +518,130 @@ impl UserContract for UserModule {
             is_active: true,
             created_at: now,
         })
+    }
 
+    async fn activate_break_glass(
+        &self,
+        req: ActivateBreakGlassRequest,
+        activated_by: &str,
+    ) -> Result<BreakGlassStatusDto, ContractError> {
+        let duration = req.duration_minutes.clamp(5, 240);
+        let now = Utc::now();
+        let until = now + chrono::Duration::minutes(duration as i64);
+        let until_str = until.to_rfc3339();
+
+        sqlx::query(
+            "UPDATE break_glass_sessions
+             SET is_active = 1, active_until = $1, activated_by = $2, reason = $3
+             WHERE account_username = 'dev_support'",
+        )
+        .bind(&until_str)
+        .bind(activated_by.trim())
+        .bind(req.reason.trim())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        sqlx::query("UPDATE user_accounts SET is_active = 1 WHERE LOWER(username) = 'dev_support'")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(BreakGlassStatusDto {
+            is_active: true,
+            active_until: Some(until),
+            activated_by: Some(activated_by.trim().to_string()),
+            reason: Some(req.reason.trim().to_string()),
+            target_account: "dev_support".to_string(),
+        })
+    }
+
+    async fn deactivate_break_glass(
+        &self,
+        _deactivated_by: &str,
+        _reason: Option<String>,
+    ) -> Result<BreakGlassStatusDto, ContractError> {
+        sqlx::query(
+            "UPDATE break_glass_sessions
+             SET is_active = 0, active_until = NULL
+             WHERE account_username = 'dev_support'",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        sqlx::query("UPDATE user_accounts SET is_active = 0 WHERE LOWER(username) = 'dev_support'")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(BreakGlassStatusDto {
+            is_active: false,
+            active_until: None,
+            activated_by: None,
+            reason: None,
+            target_account: "dev_support".to_string(),
+        })
+    }
+
+    async fn get_break_glass_status(&self) -> Result<BreakGlassStatusDto, ContractError> {
+        let row = sqlx::query(
+            "SELECT is_active, active_until, activated_by, reason FROM break_glass_sessions
+             WHERE account_username = 'dev_support' ORDER BY created_at DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        match row {
+            Some(r) => {
+                let active: i64 = r.get("is_active");
+                let until_str: Option<String> = r.get("active_until");
+                let activated_by: Option<String> = r.get("activated_by");
+                let reason: Option<String> = r.get("reason");
+
+                let mut is_active = active == 1;
+                let mut active_until = None;
+
+                if let Some(ref u_str) = until_str {
+                    if let Ok(u_dt) = DateTime::parse_from_rfc3339(u_str) {
+                        let u_utc = u_dt.with_timezone(&Utc);
+                        if Utc::now() > u_utc {
+                            // Expired! Automatically mark inactive
+                            let _ = self
+                                .deactivate_break_glass(
+                                    "system",
+                                    Some("Session expired".to_string()),
+                                )
+                                .await;
+                            is_active = false;
+                            active_until = Some(u_utc);
+                        } else {
+                            active_until = Some(u_utc);
+                        }
+                    } else {
+                        is_active = false;
+                    }
+                } else {
+                    is_active = false;
+                }
+
+                Ok(BreakGlassStatusDto {
+                    is_active,
+                    active_until,
+                    activated_by,
+                    reason,
+                    target_account: "dev_support".to_string(),
+                })
+            }
+            None => Ok(BreakGlassStatusDto {
+                is_active: false,
+                active_until: None,
+                activated_by: None,
+                reason: None,
+                target_account: "dev_support".to_string(),
+            }),
+        }
     }
 }
 
@@ -423,8 +651,11 @@ mod tests {
     use program1_core::init_database;
 
     async fn create_test_user_module() -> UserModule {
-        let pool = init_database("sqlite::memory:").await.expect("In-memory SQLite init failed");
-        let module = UserModule::new(pool);
+        let pool = init_database("sqlite::memory:")
+            .await
+            .expect("In-memory SQLite init failed");
+        let module = UserModule::new(pool)
+            .with_dev_support_password(Some("test_dev_support_secret_token_12345!".to_string()));
         module.seed_default_users().await.expect("Seeding failed");
         module
     }
@@ -433,7 +664,7 @@ mod tests {
     async fn test_user_accounts_and_rbac() {
         let module = create_test_user_module().await;
         let accounts = module.list_accounts().await.unwrap();
-        assert_eq!(accounts.len(), 6);
+        assert_eq!(accounts.len(), 7);
 
         let admin = &accounts[0];
         assert_eq!(admin.username, "admin");
@@ -547,7 +778,10 @@ mod tests {
             accessible_menus: vec!["dashboard".to_string(), "orders".to_string()],
         };
 
-        let user = module.register(req).await.expect("Registration should succeed");
+        let user = module
+            .register(req)
+            .await
+            .expect("Registration should succeed");
         assert_eq!(user.username, "newuser");
         assert_eq!(user.full_name, "New User");
         assert_eq!(user.role, "Staff");
@@ -577,4 +811,166 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn test_developer_support_disabled_by_default_and_cannot_login() {
+        let module = create_test_user_module().await;
+        let status = module.get_break_glass_status().await.unwrap();
+        assert!(!status.is_active);
+
+        let dev_pass = "test_dev_support_secret_token_12345!";
+
+        // Dev support cannot use admin123
+        let wrong_pass_res = module.authenticate("dev_support", "admin123").await;
+        assert!(wrong_pass_res.is_err());
+
+        // Even with correct password, dev_support login fails when break-glass is inactive
+        let login_res = module.authenticate("dev_support", dev_pass).await;
+        assert!(login_res.is_err());
+        assert!(login_res.unwrap_err().to_string().contains("Break-Glass"));
+    }
+
+    #[tokio::test]
+    async fn test_break_glass_activation_and_deactivation() {
+        let module = create_test_user_module().await;
+        let dev_pass = "test_dev_support_secret_token_12345!";
+
+        // 1. Activate break-glass
+        let activated = module
+            .activate_break_glass(
+                ActivateBreakGlassRequest {
+                    reason: "Emergency investigation of database connection pool exhaustion"
+                        .to_string(),
+                    duration_minutes: 60,
+                },
+                "admin",
+            )
+            .await
+            .unwrap();
+
+        assert!(activated.is_active);
+        assert_eq!(activated.activated_by.as_deref(), Some("admin"));
+        assert!(activated.active_until.is_some());
+
+        // 2. dev_support cannot login with admin123
+        let wrong_pass = module.authenticate("dev_support", "admin123").await;
+        assert!(wrong_pass.is_err());
+
+        // 3. dev_support can now authenticate with independent password
+        let auth_res = module.authenticate("dev_support", dev_pass).await;
+        assert!(auth_res.is_ok());
+        let user = auth_res.unwrap();
+        assert_eq!(user.username, "dev_support");
+        assert_eq!(user.role, "Developer Support");
+
+        // 4. Deactivate break-glass
+        let deactivated = module
+            .deactivate_break_glass("admin", Some("Incident resolved".to_string()))
+            .await
+            .unwrap();
+        assert!(!deactivated.is_active);
+
+        // 5. dev_support can no longer authenticate
+        let re_auth = module.authenticate("dev_support", dev_pass).await;
+        assert!(re_auth.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_dev_support_random_password_when_env_not_set() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let module = UserModule::new(pool);
+        module.seed_default_users().await.unwrap();
+
+        // Activate break-glass
+        let _ = module
+            .activate_break_glass(
+                ActivateBreakGlassRequest {
+                    reason: "Testing random password fallback".to_string(),
+                    duration_minutes: 30,
+                },
+                "admin",
+            )
+            .await
+            .unwrap();
+
+        // Old hardcoded password must fail
+        let res = module
+            .authenticate("dev_support", "dev_support_secret_token_12345!")
+            .await;
+        assert!(
+            res.is_err(),
+            "Old hardcoded password must never succeed when env var is unset"
+        );
+
+        // Common defaults must fail
+        let res2 = module.authenticate("dev_support", "admin123").await;
+        assert!(res2.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_upgrade_existing_database_with_user_accounts_seeds_dev_support_and_breakglass() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+
+        // Simulate pre-existing database with user_accounts already populated by an older release
+        sqlx::query(
+            "INSERT INTO user_accounts (id, username, password_hash, full_name, role, accessible_menus, is_active, created_at)
+             VALUES ('00000000-0000-0000-0000-000000000001', 'legacy_admin', 'hash', 'Legacy Admin', 'Super Admin', '[]', 1, '2025-01-01T00:00:00Z')"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let initial_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM user_accounts")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(initial_count, 1);
+
+        // break_glass_sessions table is currently empty
+        let initial_bg_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM break_glass_sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(initial_bg_count, 0);
+
+        // Run seed_default_users on the existing database
+        let module = UserModule::new(pool.clone())
+            .with_dev_support_password(Some("test_upgrade_dev_pass_123!".to_string()));
+        module
+            .seed_default_users()
+            .await
+            .expect("Upgraded seeding should not fail");
+
+        // Verify dev_support user account was successfully seeded
+        let dev_user = sqlx::query(
+            "SELECT id, username, role FROM user_accounts WHERE username = 'dev_support'",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert!(
+            dev_user.is_some(),
+            "dev_support must be added to user_accounts during upgrade"
+        );
+
+        // Verify break_glass_sessions row was successfully seeded
+        let bg_row = sqlx::query("SELECT id, account_username, is_active FROM break_glass_sessions WHERE account_username = 'dev_support'")
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+        assert!(
+            bg_row.is_some(),
+            "break_glass_sessions row must be added during upgrade"
+        );
+
+        // Verify legacy_admin was untouched
+        let legacy =
+            sqlx::query("SELECT username FROM user_accounts WHERE username = 'legacy_admin'")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+        assert!(
+            legacy.is_some(),
+            "legacy_admin must remain intact after upgrade"
+        );
+    }
 }

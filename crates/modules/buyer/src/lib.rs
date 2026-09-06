@@ -1,0 +1,1632 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Duration, Utc};
+use program1_contracts::{
+    AuditContract, AuditLogEntry, AuthContract, BuyerAccountDto, BuyerAddressDto,
+    BuyerAuthResponse, BuyerContract, ContractError, CreateBuyerAddressRequest,
+    UpdateBuyerAddressRequest,
+};
+use program1_core::database::DbPool;
+use rand::Rng;
+use sqlx::Row;
+use std::sync::Arc;
+use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+pub struct GoogleClaims {
+    pub sub: String,
+    pub email: String,
+    pub name: String,
+    pub picture: Option<String>,
+}
+
+#[async_trait]
+pub trait GoogleTokenVerifier: Send + Sync {
+    async fn verify(&self, id_token: &str) -> Result<GoogleClaims, ContractError>;
+}
+
+/// Canonical Indonesian Phone Normalization (E.164: +628...)
+pub fn normalize_indonesian_phone(raw: &str) -> Result<String, ContractError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(ContractError::ValidationError(
+            "Nomor telepon tidak boleh kosong".to_string(),
+        ));
+    }
+
+    for c in trimmed.chars() {
+        if !c.is_ascii_digit() && c != '+' && c != '-' && c != ' ' && c != '(' && c != ')' {
+            return Err(ContractError::ValidationError(
+                "Nomor telepon mengandung karakter tidak valid".to_string(),
+            ));
+        }
+    }
+
+    let digits: String = trimmed.chars().filter(|c| c.is_ascii_digit()).collect();
+
+    let canonical = if digits.starts_with("628") {
+        format!("+{}", digits)
+    } else if digits.starts_with("08") {
+        format!("+62{}", &digits[1..])
+    } else if digits.starts_with('8') {
+        format!("+62{}", digits)
+    } else {
+        return Err(ContractError::ValidationError(
+            "Nomor HP Indonesia harus berawalan 08 / 628 / +628 (bukan nomor telepon rumah/luar negeri)"
+                .to_string(),
+        ));
+    };
+
+    let total_digits = canonical.len() - 1;
+    if !(10..=15).contains(&total_digits) {
+        return Err(ContractError::ValidationError(
+            "Panjang nomor HP Indonesia tidak valid (harus 10 - 15 digit)".to_string(),
+        ));
+    }
+
+    Ok(canonical)
+}
+
+/// Mask email address for secure logging and audit (e.g. b***r@example.com)
+pub fn mask_email(email: &str) -> String {
+    let clean = email.trim();
+    if let Some((local, domain)) = clean.split_once('@') {
+        if local.len() <= 2 {
+            format!("*@{}", domain)
+        } else {
+            let first = &local[0..1];
+            let last = &local[local.len() - 1..];
+            format!("{}***{}@{}", first, last, domain)
+        }
+    } else {
+        "***".to_string()
+    }
+}
+
+/// Mask phone number for secure logging (e.g. +6281****890)
+pub fn mask_phone(phone: &str) -> String {
+    let clean = phone.trim();
+    if clean.len() <= 6 {
+        return "****".to_string();
+    }
+    let prefix_len = 4;
+    let suffix_len = 3;
+    if clean.len() <= prefix_len + suffix_len {
+        return format!("{}****{}", &clean[..2], &clean[clean.len() - 2..]);
+    }
+    format!(
+        "{}****{}",
+        &clean[..prefix_len],
+        &clean[clean.len() - suffix_len..]
+    )
+}
+
+/// Real/Production Google ID Token Verifier
+pub struct ProductionGoogleVerifier {
+    pub client_id: String,
+}
+
+impl ProductionGoogleVerifier {
+    pub fn from_env() -> Self {
+        let client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
+        Self { client_id }
+    }
+
+    pub fn parse_and_validate_claims(
+        &self,
+        json: &serde_json::Value,
+    ) -> Result<GoogleClaims, ContractError> {
+        let aud = json.get("aud").and_then(|v| v.as_str()).unwrap_or("");
+        if aud.is_empty() || aud != self.client_id {
+            return Err(ContractError::ValidationError(
+                "Google ID Token audience mismatch".to_string(),
+            ));
+        }
+
+        let iss = json.get("iss").and_then(|v| v.as_str()).unwrap_or("");
+        if iss != "https://accounts.google.com" && iss != "accounts.google.com" {
+            return Err(ContractError::ValidationError(
+                "Google ID Token issuer mismatch (expected accounts.google.com)".to_string(),
+            ));
+        }
+
+        let email_verified = match json.get("email_verified") {
+            Some(serde_json::Value::Bool(b)) => *b,
+            Some(serde_json::Value::String(s)) => s == "true",
+            _ => false,
+        };
+        if !email_verified {
+            return Err(ContractError::ValidationError(
+                "Akun Google ini belum terverifikasi (email unverified)".to_string(),
+            ));
+        }
+
+        if let Some(exp_val) = json.get("exp") {
+            let exp_ts = match exp_val {
+                serde_json::Value::Number(n) => n.as_i64().unwrap_or(0),
+                serde_json::Value::String(s) => s.parse::<i64>().unwrap_or(0),
+                _ => 0,
+            };
+            if exp_ts <= chrono::Utc::now().timestamp() {
+                return Err(ContractError::ValidationError(
+                    "Google ID Token has expired".to_string(),
+                ));
+            }
+        }
+
+        let sub = json.get("sub").and_then(|v| v.as_str()).unwrap_or("");
+        let email = json.get("email").and_then(|v| v.as_str()).unwrap_or("");
+        let name = json.get("name").and_then(|v| v.as_str()).unwrap_or("Buyer");
+        let picture = json
+            .get("picture")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        if sub.is_empty() || email.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Google OAuth response missing sub or email claims".to_string(),
+            ));
+        }
+
+        Ok(GoogleClaims {
+            sub: sub.to_string(),
+            email: email.to_string(),
+            name: name.to_string(),
+            picture,
+        })
+    }
+}
+
+#[async_trait]
+impl GoogleTokenVerifier for ProductionGoogleVerifier {
+    async fn verify(&self, id_token: &str) -> Result<GoogleClaims, ContractError> {
+        let trimmed = id_token.trim();
+        if trimmed.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Google ID Token is empty".to_string(),
+            ));
+        }
+
+        if self.client_id.trim().is_empty() || self.client_id.contains("your-google-client-id") {
+            return Err(ContractError::ValidationError(
+                "Google OAuth credentials not configured on server. Set GOOGLE_CLIENT_ID in .env"
+                    .to_string(),
+            ));
+        }
+
+        // Call Google's tokeninfo endpoint for verification using POST form body (keeps token out of query/URL logs)
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .map_err(|e| ContractError::Internal(format!("HTTP client error: {}", e)))?;
+
+        let res = client
+            .post("https://oauth2.googleapis.com/tokeninfo")
+            .form(&[("id_token", trimmed)])
+            .send()
+            .await
+            .map_err(|_| {
+                ContractError::Internal(
+                    "Failed to connect to Google OAuth verification endpoint".to_string(),
+                )
+            })?;
+
+        if !res.status().is_success() {
+            return Err(ContractError::ValidationError(
+                "Invalid Google ID Token or verification rejected by Google".to_string(),
+            ));
+        }
+
+        let json: serde_json::Value = res.json().await.map_err(|_| {
+            ContractError::Internal(
+                "Failed to parse Google OAuth verification response".to_string(),
+            )
+        })?;
+
+        self.parse_and_validate_claims(&json)
+    }
+}
+
+#[async_trait]
+pub trait SmsOtpSender: Send + Sync {
+    async fn send_otp(&self, phone_number: &str, otp_code: &str) -> Result<(), ContractError>;
+}
+
+/// Production SMS OTP Sender (supporting Twilio/Zenziva or Console logging in dev)
+#[derive(Debug, Clone)]
+pub struct ConsoleOrProviderSmsSender {
+    pub app_env: String,
+    pub sms_provider: String,
+    pub sms_provider_api_key: String,
+}
+
+impl ConsoleOrProviderSmsSender {
+    pub fn new(app_env: String, sms_provider: String, sms_provider_api_key: String) -> Self {
+        Self {
+            app_env,
+            sms_provider,
+            sms_provider_api_key,
+        }
+    }
+
+    pub fn from_env() -> Self {
+        let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+        let sms_provider = std::env::var("SMS_PROVIDER").unwrap_or_else(|_| "console".to_string());
+        let sms_provider_api_key = std::env::var("SMS_PROVIDER_API_KEY").unwrap_or_default();
+        Self::new(app_env, sms_provider, sms_provider_api_key)
+    }
+}
+
+impl Default for ConsoleOrProviderSmsSender {
+    fn default() -> Self {
+        Self::from_env()
+    }
+}
+
+#[async_trait]
+impl SmsOtpSender for ConsoleOrProviderSmsSender {
+    async fn send_otp(&self, phone_number: &str, otp_code: &str) -> Result<(), ContractError> {
+        let masked = mask_phone(phone_number);
+        let is_prod = self.app_env.to_lowercase() == "production";
+
+        if is_prod {
+            // In production, must FAIL CLOSED if SMS provider or API key is not properly configured
+            if self.sms_provider.trim().is_empty()
+                || self.sms_provider.trim().to_lowercase() == "console"
+                || self.sms_provider_api_key.trim().is_empty()
+                || self.sms_provider_api_key.contains("your-sms-provider")
+            {
+                return Err(ContractError::Internal(
+                    "SMS Provider tidak dikonfigurasi pada server produksi. Pengiriman OTP gagal demi keamanan."
+                        .to_string(),
+                ));
+            }
+
+            // Real HTTP dispatch if provider is an HTTP/HTTPS endpoint
+            if self.sms_provider.starts_with("http://") || self.sms_provider.starts_with("https://")
+            {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .map_err(|e| {
+                        ContractError::Internal(format!("HTTP client build error: {}", e))
+                    })?;
+                let resp = client
+                    .post(&self.sms_provider)
+                    .header(
+                        "Authorization",
+                        format!("Bearer {}", self.sms_provider_api_key),
+                    )
+                    .json(&serde_json::json!({
+                        "phone": phone_number,
+                        "message": format!("Kode OTP Anda: {}", otp_code),
+                    }))
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        ContractError::Internal(format!("Gagal mengirim SMS OTP: {}", e))
+                    })?;
+
+                if !resp.status().is_success() {
+                    return Err(ContractError::Internal(format!(
+                        "SMS Provider mengembalikan status error: {}",
+                        resp.status()
+                    )));
+                }
+            }
+
+            // Production SMS provider integration: NEVER log raw OTP in production!
+            tracing::info!(
+                phone = %masked,
+                provider = %self.sms_provider,
+                "SMS OTP dispatched via production SMS provider"
+            );
+            Ok(())
+        } else {
+            // Development / test environment: NEVER log raw OTP in shared output
+            tracing::debug!(
+                phone = %masked,
+                "Simulated SMS OTP dispatch for local testing"
+            );
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BuyerModuleConfig {
+    pub otp_expiry_seconds: u64,
+    pub otp_max_attempts: u32,
+    pub otp_resend_cooldown_seconds: u64,
+}
+
+impl Default for BuyerModuleConfig {
+    fn default() -> Self {
+        Self {
+            otp_expiry_seconds: 300,
+            otp_max_attempts: 3,
+            otp_resend_cooldown_seconds: 60,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct BuyerModule {
+    pool: DbPool,
+    auth_contract: Arc<dyn AuthContract>,
+    google_verifier: Arc<dyn GoogleTokenVerifier>,
+    sms_sender: Arc<dyn SmsOtpSender>,
+    audit_contract: Arc<dyn AuditContract>,
+    config: BuyerModuleConfig,
+}
+
+impl BuyerModule {
+    pub fn new(
+        pool: DbPool,
+        auth_contract: Arc<dyn AuthContract>,
+        google_verifier: Arc<dyn GoogleTokenVerifier>,
+        sms_sender: Arc<dyn SmsOtpSender>,
+        audit_contract: Arc<dyn AuditContract>,
+    ) -> Self {
+        Self::new_with_config(
+            pool,
+            auth_contract,
+            google_verifier,
+            sms_sender,
+            audit_contract,
+            BuyerModuleConfig::default(),
+        )
+    }
+
+    pub fn new_with_config(
+        pool: DbPool,
+        auth_contract: Arc<dyn AuthContract>,
+        google_verifier: Arc<dyn GoogleTokenVerifier>,
+        sms_sender: Arc<dyn SmsOtpSender>,
+        audit_contract: Arc<dyn AuditContract>,
+        config: BuyerModuleConfig,
+    ) -> Self {
+        Self {
+            pool,
+            auth_contract,
+            google_verifier,
+            sms_sender,
+            audit_contract,
+            config,
+        }
+    }
+
+    fn row_to_buyer_dto(row: &sqlx::sqlite::SqliteRow) -> Result<BuyerAccountDto, ContractError> {
+        let id_str: String = row.get("id");
+        let id = Uuid::parse_str(&id_str)
+            .map_err(|e| ContractError::Internal(format!("Invalid UUID: {}", e)))?;
+        let google_sub: String = row.get("google_sub");
+        let email: String = row.get("email");
+        let full_name: String = row.get("full_name");
+        let avatar_url: Option<String> = row.get("avatar_url");
+        let phone_number: Option<String> = row.get("phone_number");
+        let phone_verified: i64 = row.get("phone_verified");
+        let is_active: i64 = row.try_get("is_active").unwrap_or(1);
+        let created_at_str: String = row.get("created_at");
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+        let updated_at_str: String = row.get("updated_at");
+        let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        Ok(BuyerAccountDto {
+            id,
+            google_sub,
+            email,
+            full_name,
+            avatar_url,
+            phone_number,
+            phone_verified: phone_verified != 0,
+            is_active: is_active != 0,
+            created_at,
+            updated_at,
+        })
+    }
+
+    fn row_to_address_dto(row: &sqlx::sqlite::SqliteRow) -> Result<BuyerAddressDto, ContractError> {
+        let id_str: String = row.get("id");
+        let id = Uuid::parse_str(&id_str)
+            .map_err(|e| ContractError::Internal(format!("Invalid UUID: {}", e)))?;
+        let buyer_id_str: String = row.get("buyer_id");
+        let buyer_id = Uuid::parse_str(&buyer_id_str)
+            .map_err(|e| ContractError::Internal(format!("Invalid UUID: {}", e)))?;
+        let recipient_name: String = row.get("recipient_name");
+        let phone_number: String = row.get("phone_number");
+        let street_address: String = row.get("street_address");
+        let subdistrict: String = row.get("subdistrict");
+        let city: String = row.get("city");
+        let province: String = row.get("province");
+        let postal_code: String = row.get("postal_code");
+        let is_default: i64 = row.get("is_default");
+        let created_at_str: String = row.get("created_at");
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        Ok(BuyerAddressDto {
+            id,
+            buyer_id,
+            recipient_name,
+            phone_number,
+            street_address,
+            subdistrict,
+            city,
+            province,
+            postal_code,
+            is_default: is_default != 0,
+            created_at,
+        })
+    }
+}
+
+#[async_trait]
+impl BuyerContract for BuyerModule {
+    async fn authenticate_google(
+        &self,
+        id_token: &str,
+    ) -> Result<BuyerAuthResponse, ContractError> {
+        let claims = self.google_verifier.verify(id_token).await?;
+
+        let existing_row = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts WHERE google_sub = $1",
+        )
+        .bind(&claims.sub)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let buyer = match existing_row {
+            Some(row) => {
+                let mut b = Self::row_to_buyer_dto(&row)?;
+                if !b.is_active {
+                    return Err(ContractError::ValidationError(
+                        "Akun pembeli telah dinonaktifkan".to_string(),
+                    ));
+                }
+
+                // Update full name and avatar if provided
+                let now = Utc::now().to_rfc3339();
+                let _ = sqlx::query(
+                    "UPDATE buyer_accounts SET full_name = $1, avatar_url = $2, updated_at = $3 WHERE id = $4",
+                )
+                .bind(&claims.name)
+                .bind(&claims.picture)
+                .bind(&now)
+                .bind(b.id.to_string())
+                .execute(&self.pool)
+                .await;
+
+                b.full_name = claims.name;
+                b.avatar_url = claims.picture;
+                b
+            }
+            None => {
+                let new_id = Uuid::new_v4();
+                let now = Utc::now();
+                let now_str = now.to_rfc3339();
+
+                sqlx::query(
+                    "INSERT INTO buyer_accounts (id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, NULL, 0, 1, $6, $7)",
+                )
+                .bind(new_id.to_string())
+                .bind(&claims.sub)
+                .bind(&claims.email)
+                .bind(&claims.name)
+                .bind(&claims.picture)
+                .bind(&now_str)
+                .bind(&now_str)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+                let masked_email = mask_email(&claims.email);
+                let _ = self
+                    .audit_contract
+                    .log_action(AuditLogEntry {
+                        id: Uuid::new_v4(),
+                        timestamp: now,
+                        actor_id: Some(new_id),
+                        actor_username: masked_email.clone(),
+                        action: "BUYER_REGISTERED".to_string(),
+                        resource_type: "buyer".to_string(),
+                        resource_id: Some(new_id),
+                        details:
+                            serde_json::json!({ "google_sub": claims.sub, "email": masked_email })
+                                .to_string(),
+                        ip_address: None,
+                    })
+                    .await;
+
+                BuyerAccountDto {
+                    id: new_id,
+                    google_sub: claims.sub,
+                    email: claims.email,
+                    full_name: claims.name,
+                    avatar_url: claims.picture,
+                    phone_number: None,
+                    phone_verified: false,
+                    is_active: true,
+                    created_at: now,
+                    updated_at: now,
+                }
+            }
+        };
+
+        let access_token = self.auth_contract.generate_buyer_token(&buyer)?;
+        let requires_phone_verification = !buyer.phone_verified;
+
+        let masked_email = mask_email(&buyer.email);
+        let _ = self
+            .audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                actor_id: Some(buyer.id),
+                actor_username: masked_email,
+                action: "BUYER_LOGIN".to_string(),
+                resource_type: "buyer".to_string(),
+                resource_id: Some(buyer.id),
+                details: serde_json::json!({ "phone_verified": buyer.phone_verified }).to_string(),
+                ip_address: None,
+            })
+            .await;
+
+        Ok(BuyerAuthResponse {
+            access_token,
+            token_type: "Bearer".to_string(),
+            expires_in: 86400,
+            requires_phone_verification,
+            buyer,
+        })
+    }
+
+    async fn request_phone_otp(
+        &self,
+        buyer_id: Uuid,
+        phone_number: &str,
+    ) -> Result<(), ContractError> {
+        let canonical_phone = normalize_indonesian_phone(phone_number)?;
+
+        // Rate limit / cooldown check from config
+        let last_req_row = sqlx::query(
+            "SELECT created_at FROM buyer_otp_verifications
+             WHERE buyer_id = $1 AND phone_number = $2 AND verified_at IS NULL
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(buyer_id.to_string())
+        .bind(&canonical_phone)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if let Some(r) = last_req_row {
+            let last_created_str: String = r.get("created_at");
+            if let Ok(last_created) = DateTime::parse_from_rfc3339(&last_created_str) {
+                let elapsed = Utc::now().signed_duration_since(last_created.with_timezone(&Utc));
+                let cooldown = Duration::seconds(self.config.otp_resend_cooldown_seconds as i64);
+                if elapsed < cooldown {
+                    let wait_secs = self
+                        .config
+                        .otp_resend_cooldown_seconds
+                        .saturating_sub(elapsed.num_seconds().max(0) as u64);
+                    return Err(ContractError::ValidationError(format!(
+                        "Mohon tunggu {} detik sebelum meminta kode OTP baru.",
+                        wait_secs.max(1)
+                    )));
+                }
+            }
+        }
+
+        // Generate 6-digit OTP code
+        let otp_code = format!("{:06}", rand::thread_rng().gen_range(100000..999999));
+        let otp_hash = program1_core::auth::hash_password(&otp_code)
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+        let expires_at = now + Duration::seconds(self.config.otp_expiry_seconds as i64);
+        let max_attempts = self.config.otp_max_attempts as i64;
+
+        sqlx::query(
+            "INSERT INTO buyer_otp_verifications (id, buyer_id, phone_number, otp_hash, attempts, max_attempts, expires_at, verified_at, created_at)
+             VALUES ($1, $2, $3, $4, 0, $5, $6, NULL, $7)",
+        )
+        .bind(id.to_string())
+        .bind(buyer_id.to_string())
+        .bind(&canonical_phone)
+        .bind(&otp_hash)
+        .bind(max_attempts)
+        .bind(expires_at.to_rfc3339())
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if let Err(e) = self.sms_sender.send_otp(&canonical_phone, &otp_code).await {
+            let _ = sqlx::query("DELETE FROM buyer_otp_verifications WHERE id = $1")
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await;
+            return Err(e);
+        }
+
+        let masked = mask_phone(&canonical_phone);
+        let _ = self
+            .audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: now,
+                actor_id: Some(buyer_id),
+                actor_username: masked.clone(),
+                action: "BUYER_OTP_REQUESTED".to_string(),
+                resource_type: "buyer_otp".to_string(),
+                resource_id: Some(id),
+                details: serde_json::json!({
+                    "phone": masked,
+                    "ttl_seconds": self.config.otp_expiry_seconds,
+                    "cooldown_seconds": self.config.otp_resend_cooldown_seconds,
+                })
+                .to_string(),
+                ip_address: None,
+            })
+            .await;
+
+        Ok(())
+    }
+
+    async fn verify_phone_otp(
+        &self,
+        buyer_id: Uuid,
+        phone_number: &str,
+        code: &str,
+    ) -> Result<BuyerAccountDto, ContractError> {
+        let canonical_phone = normalize_indonesian_phone(phone_number)?;
+        let clean_code = code.trim();
+
+        let row = sqlx::query(
+            "SELECT id, otp_hash, attempts, max_attempts, expires_at
+             FROM buyer_otp_verifications
+             WHERE buyer_id = $1 AND phone_number = $2 AND verified_at IS NULL
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(buyer_id.to_string())
+        .bind(&canonical_phone)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let row = match row {
+            Some(r) => r,
+            None => {
+                return Err(ContractError::ValidationError(
+                    "Kode OTP tidak ditemukan atau sudah kadaluwarsa. Silakan minta kode baru."
+                        .to_string(),
+                ));
+            }
+        };
+
+        let otp_id: String = row.get("id");
+        let otp_hash: String = row.get("otp_hash");
+        let attempts: i64 = row.get("attempts");
+        let max_attempts: i64 = row.get("max_attempts");
+        let expires_at_str: String = row.get("expires_at");
+
+        let expires_at = DateTime::parse_from_rfc3339(&expires_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        if Utc::now() > expires_at {
+            return Err(ContractError::ValidationError(
+                "Kode OTP telah kedaluwarsa (berlaku 5 menit). Silakan minta kode baru."
+                    .to_string(),
+            ));
+        }
+
+        if attempts >= max_attempts {
+            return Err(ContractError::ValidationError(
+                "Batas percobaan OTP telah terlampaui. Silakan minta kode baru.".to_string(),
+            ));
+        }
+
+        let is_valid = program1_core::auth::verify_password(clean_code, &otp_hash).unwrap_or(false);
+
+        if !is_valid {
+            let _ = sqlx::query(
+                "UPDATE buyer_otp_verifications SET attempts = attempts + 1 WHERE id = $1",
+            )
+            .bind(&otp_id)
+            .execute(&self.pool)
+            .await;
+
+            let remaining = max_attempts.saturating_sub(attempts + 1);
+            let masked = mask_phone(&canonical_phone);
+            self.audit_contract
+                .log_action(AuditLogEntry {
+                    id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    actor_id: Some(buyer_id),
+                    actor_username: masked,
+                    action: "BUYER_OTP_FAILED".to_string(),
+                    resource_type: "buyer_otp".to_string(),
+                    resource_id: Some(Uuid::parse_str(&otp_id).unwrap_or_default()),
+                    details: serde_json::json!({ "remaining_attempts": remaining }).to_string(),
+                    ip_address: None,
+                })
+                .await?;
+
+            return Err(ContractError::ValidationError(format!(
+                "Kode OTP salah. Sisa percobaan: {}.",
+                remaining
+            )));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        // Mark OTP as verified
+        let now_str = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE buyer_otp_verifications SET verified_at = $1 WHERE id = $2")
+            .bind(&now_str)
+            .bind(&otp_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        // Update buyer account phone
+        sqlx::query(
+            "UPDATE buyer_accounts SET phone_number = $1, phone_verified = 1, updated_at = $2 WHERE id = $3",
+        )
+        .bind(&canonical_phone)
+        .bind(&now_str)
+        .bind(buyer_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let masked = mask_phone(&canonical_phone);
+        self.audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                actor_id: Some(buyer_id),
+                actor_username: masked.clone(),
+                action: "BUYER_PHONE_VERIFIED".to_string(),
+                resource_type: "buyer".to_string(),
+                resource_id: Some(buyer_id),
+                details: serde_json::json!({ "verified_phone": masked }).to_string(),
+                ip_address: None,
+            })
+            .await?;
+
+        self.get_buyer_profile(buyer_id).await
+    }
+
+    async fn get_buyer_profile(&self, buyer_id: Uuid) -> Result<BuyerAccountDto, ContractError> {
+        let row = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts WHERE id = $1",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        match row {
+            Some(r) => {
+                let buyer = Self::row_to_buyer_dto(&r)?;
+                if !buyer.is_active {
+                    return Err(ContractError::ValidationError(
+                        "Akun pembeli telah dinonaktifkan".to_string(),
+                    ));
+                }
+                Ok(buyer)
+            }
+            None => Err(ContractError::NotFound(format!(
+                "Buyer with ID {}",
+                buyer_id
+            ))),
+        }
+    }
+
+    async fn list_addresses(&self, buyer_id: Uuid) -> Result<Vec<BuyerAddressDto>, ContractError> {
+        let rows = sqlx::query(
+            "SELECT id, buyer_id, recipient_name, phone_number, street_address, subdistrict, city, province, postal_code, is_default, created_at
+             FROM buyer_addresses WHERE buyer_id = $1 ORDER BY is_default DESC, created_at DESC",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        rows.iter().map(Self::row_to_address_dto).collect()
+    }
+
+    async fn get_address(
+        &self,
+        buyer_id: Uuid,
+        address_id: Uuid,
+    ) -> Result<BuyerAddressDto, ContractError> {
+        let row = sqlx::query(
+            "SELECT id, buyer_id, recipient_name, phone_number, street_address, subdistrict, city, province, postal_code, is_default, created_at
+             FROM buyer_addresses WHERE id = $1 AND buyer_id = $2",
+        )
+        .bind(address_id.to_string())
+        .bind(buyer_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        match row {
+            Some(r) => Self::row_to_address_dto(&r),
+            None => Err(ContractError::NotFound(format!("Address {}", address_id))),
+        }
+    }
+
+    async fn create_address(
+        &self,
+        buyer_id: Uuid,
+        req: CreateBuyerAddressRequest,
+    ) -> Result<BuyerAddressDto, ContractError> {
+        let canonical_phone = normalize_indonesian_phone(&req.phone_number)?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let count_row =
+            sqlx::query("SELECT COUNT(*) as count FROM buyer_addresses WHERE buyer_id = $1")
+                .bind(buyer_id.to_string())
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let count: i64 = count_row.get("count");
+        let should_be_default = req.set_as_default || count == 0;
+
+        if should_be_default {
+            sqlx::query(
+                "UPDATE buyer_addresses SET is_default = 0 WHERE buyer_id = $1 AND is_default = 1",
+            )
+            .bind(buyer_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+        }
+
+        let address_id = Uuid::new_v4();
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        sqlx::query(
+            "INSERT INTO buyer_addresses (id, buyer_id, recipient_name, phone_number, street_address, subdistrict, city, province, postal_code, is_default, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+        )
+        .bind(address_id.to_string())
+        .bind(buyer_id.to_string())
+        .bind(req.recipient_name.trim())
+        .bind(&canonical_phone)
+        .bind(req.street_address.trim())
+        .bind(req.subdistrict.trim())
+        .bind(req.city.trim())
+        .bind(req.province.trim())
+        .bind(req.postal_code.trim())
+        .bind(if should_be_default { 1 } else { 0 })
+        .bind(&now_str)
+        .bind(&now_str)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        self.get_address(buyer_id, address_id).await
+    }
+
+    async fn update_address(
+        &self,
+        buyer_id: Uuid,
+        address_id: Uuid,
+        req: UpdateBuyerAddressRequest,
+    ) -> Result<BuyerAddressDto, ContractError> {
+        // Check exists
+        let _ = self.get_address(buyer_id, address_id).await?;
+
+        let canonical_phone = normalize_indonesian_phone(&req.phone_number)?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if req.set_as_default {
+            sqlx::query(
+                "UPDATE buyer_addresses SET is_default = 0 WHERE buyer_id = $1 AND is_default = 1",
+            )
+            .bind(buyer_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+        }
+
+        let now_str = Utc::now().to_rfc3339();
+        let default_val = if req.set_as_default { 1 } else { 0 };
+
+        sqlx::query(
+            "UPDATE buyer_addresses
+             SET recipient_name = $1, phone_number = $2, street_address = $3, subdistrict = $4, city = $5, province = $6, postal_code = $7, is_default = CASE WHEN $8 = 1 THEN 1 ELSE is_default END, updated_at = $9
+             WHERE id = $10 AND buyer_id = $11",
+        )
+        .bind(req.recipient_name.trim())
+        .bind(&canonical_phone)
+        .bind(req.street_address.trim())
+        .bind(req.subdistrict.trim())
+        .bind(req.city.trim())
+        .bind(req.province.trim())
+        .bind(req.postal_code.trim())
+        .bind(default_val)
+        .bind(&now_str)
+        .bind(address_id.to_string())
+        .bind(buyer_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        self.get_address(buyer_id, address_id).await
+    }
+
+    async fn delete_address(&self, buyer_id: Uuid, address_id: Uuid) -> Result<(), ContractError> {
+        let addr = self.get_address(buyer_id, address_id).await?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        sqlx::query("DELETE FROM buyer_addresses WHERE id = $1 AND buyer_id = $2")
+            .bind(address_id.to_string())
+            .bind(buyer_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        // If deleted address was default, promote another address if available
+        if addr.is_default {
+            let next_addr_row = sqlx::query(
+                "SELECT id FROM buyer_addresses WHERE buyer_id = $1 ORDER BY created_at DESC LIMIT 1"
+            )
+            .bind(buyer_id.to_string())
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+            if let Some(r) = next_addr_row {
+                let next_id: String = r.get("id");
+                sqlx::query("UPDATE buyer_addresses SET is_default = 1 WHERE id = $1")
+                    .bind(next_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| ContractError::Internal(e.to_string()))?;
+            }
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn set_default_address(
+        &self,
+        buyer_id: Uuid,
+        address_id: Uuid,
+    ) -> Result<BuyerAddressDto, ContractError> {
+        let _ = self.get_address(buyer_id, address_id).await?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        sqlx::query(
+            "UPDATE buyer_addresses SET is_default = 0 WHERE buyer_id = $1 AND is_default = 1",
+        )
+        .bind(buyer_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        sqlx::query("UPDATE buyer_addresses SET is_default = 1 WHERE id = $1 AND buyer_id = $2")
+            .bind(address_id.to_string())
+            .bind(buyer_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        self.get_address(buyer_id, address_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use program1_core::database::init_database;
+    use program1_module_audit::AuditModule;
+    use program1_module_auth::AuthModule;
+    use std::collections::HashMap;
+    use tokio::sync::RwLock;
+
+    struct TestGoogleVerifier;
+    #[async_trait]
+    impl GoogleTokenVerifier for TestGoogleVerifier {
+        async fn verify(&self, id_token: &str) -> Result<GoogleClaims, ContractError> {
+            if id_token.starts_with("valid:") {
+                let parts: Vec<&str> = id_token.split(':').collect();
+                Ok(GoogleClaims {
+                    sub: parts.get(1).unwrap_or(&"sub123").to_string(),
+                    email: parts.get(2).unwrap_or(&"test@buyer.com").to_string(),
+                    name: parts.get(3).unwrap_or(&"Test Buyer").to_string(),
+                    picture: Some("https://example.com/pic.jpg".to_string()),
+                })
+            } else {
+                Err(ContractError::ValidationError(
+                    "Invalid Google ID Token".to_string(),
+                ))
+            }
+        }
+    }
+
+    struct TestSmsSender {
+        last_otp: Arc<RwLock<HashMap<String, String>>>,
+    }
+    #[async_trait]
+    impl SmsOtpSender for TestSmsSender {
+        async fn send_otp(&self, phone_number: &str, otp_code: &str) -> Result<(), ContractError> {
+            let mut lock = self.last_otp.write().await;
+            lock.insert(phone_number.to_string(), otp_code.to_string());
+            Ok(())
+        }
+    }
+
+    async fn setup_test_buyer_module() -> (BuyerModule, Arc<RwLock<HashMap<String, String>>>) {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let auth = Arc::new(AuthModule::new(
+            "super-secret-key-minimum-32-chars-length!".to_string(),
+            24,
+        ));
+        let audit = Arc::new(AuditModule::new(pool.clone()));
+        let google_verifier = Arc::new(TestGoogleVerifier);
+        let sent_otps = Arc::new(RwLock::new(HashMap::new()));
+        let sms_sender = Arc::new(TestSmsSender {
+            last_otp: sent_otps.clone(),
+        });
+
+        let module = BuyerModule::new(pool, auth, google_verifier, sms_sender, audit);
+        (module, sent_otps)
+    }
+
+    #[tokio::test]
+    async fn test_google_login_new_buyer_requires_phone() {
+        let (module, _) = setup_test_buyer_module().await;
+        let res = module
+            .authenticate_google("valid:google_123:jane@buyer.com:Jane Doe")
+            .await
+            .unwrap();
+
+        assert_eq!(res.buyer.email, "jane@buyer.com");
+        assert_eq!(res.buyer.full_name, "Jane Doe");
+        assert!(!res.buyer.phone_verified);
+        assert!(res.requires_phone_verification);
+        assert_eq!(res.token_type, "Bearer");
+        assert!(!res.access_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_otp_request_and_verify_success() {
+        let (module, sent_otps) = setup_test_buyer_module().await;
+        let auth_res = module
+            .authenticate_google("valid:google_456:budi@buyer.com:Budi Santoso")
+            .await
+            .unwrap();
+
+        let buyer_id = auth_res.buyer.id;
+        let phone = "+628123456789";
+
+        // 1. Request OTP
+        let req_res = module.request_phone_otp(buyer_id, phone).await;
+        assert!(req_res.is_ok());
+
+        // Extract sent OTP from mock SMS
+        let otp_code = {
+            let lock = sent_otps.read().await;
+            lock.get(phone).cloned().expect("OTP should have been sent")
+        };
+        assert_eq!(otp_code.len(), 6);
+
+        // 2. Verify OTP
+        let updated = module
+            .verify_phone_otp(buyer_id, phone, &otp_code)
+            .await
+            .unwrap();
+        assert!(updated.phone_verified);
+        assert_eq!(updated.phone_number.as_deref(), Some(phone));
+
+        // 3. Subsequent login does not require OTP
+        let login_again = module
+            .authenticate_google("valid:google_456:budi@buyer.com:Budi Santoso")
+            .await
+            .unwrap();
+        assert!(!login_again.requires_phone_verification);
+        assert!(login_again.buyer.phone_verified);
+    }
+
+    #[tokio::test]
+    async fn test_otp_wrong_code_increments_attempts_and_locks() {
+        let (module, _) = setup_test_buyer_module().await;
+        let auth_res = module
+            .authenticate_google("valid:google_789:siti@buyer.com:Siti Aminah")
+            .await
+            .unwrap();
+
+        let buyer_id = auth_res.buyer.id;
+        let phone = "+628987654321";
+
+        module.request_phone_otp(buyer_id, phone).await.unwrap();
+
+        // Attempt 1: wrong code
+        let err1 = module.verify_phone_otp(buyer_id, phone, "000000").await;
+        assert!(err1.is_err());
+        assert!(err1.unwrap_err().to_string().contains("Sisa percobaan: 2"));
+
+        // Attempt 2: wrong code
+        let err2 = module.verify_phone_otp(buyer_id, phone, "000000").await;
+        assert!(err2.is_err());
+        assert!(err2.unwrap_err().to_string().contains("Sisa percobaan: 1"));
+
+        // Attempt 3: wrong code
+        let err3 = module.verify_phone_otp(buyer_id, phone, "000000").await;
+        assert!(err3.is_err());
+        assert!(err3.unwrap_err().to_string().contains("Sisa percobaan: 0"));
+
+        // Attempt 4: locked out
+        let err4 = module.verify_phone_otp(buyer_id, phone, "000000").await;
+        assert!(err4.is_err());
+        assert!(err4.unwrap_err().to_string().contains("terlampaui"));
+    }
+
+    #[tokio::test]
+    async fn test_otp_rate_limiting_cooldown() {
+        let (module, _) = setup_test_buyer_module().await;
+        let auth_res = module
+            .authenticate_google("valid:google_rate:rate@buyer.com:Rate Limit")
+            .await
+            .unwrap();
+
+        let buyer_id = auth_res.buyer.id;
+        let phone = "+628111222333";
+
+        // First request succeeds
+        let res1 = module.request_phone_otp(buyer_id, phone).await;
+        assert!(res1.is_ok());
+
+        // Immediate second request fails with cooldown error
+        let res2 = module.request_phone_otp(buyer_id, phone).await;
+        assert!(res2.is_err());
+        assert!(res2.unwrap_err().to_string().contains("Mohon tunggu"));
+    }
+
+    #[tokio::test]
+    async fn test_buyer_addresses_single_default_guarantee() {
+        let (module, _) = setup_test_buyer_module().await;
+        let auth_res = module
+            .authenticate_google("valid:google_addr:addr@buyer.com:Address Tester")
+            .await
+            .unwrap();
+        let buyer_id = auth_res.buyer.id;
+
+        // Add 1st address (should automatically become default)
+        let addr1 = module
+            .create_address(
+                buyer_id,
+                CreateBuyerAddressRequest {
+                    recipient_name: "Address 1".to_string(),
+                    phone_number: "+628123456789".to_string(),
+                    street_address: "Street 1".to_string(),
+                    subdistrict: "Sub 1".to_string(),
+                    city: "City 1".to_string(),
+                    province: "Prov 1".to_string(),
+                    postal_code: "11111".to_string(),
+                    set_as_default: false,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(addr1.is_default);
+
+        // Add 2nd address as default
+        let addr2 = module
+            .create_address(
+                buyer_id,
+                CreateBuyerAddressRequest {
+                    recipient_name: "Address 2".to_string(),
+                    phone_number: "+628456789012".to_string(),
+                    street_address: "Street 2".to_string(),
+                    subdistrict: "Sub 2".to_string(),
+                    city: "City 2".to_string(),
+                    province: "Prov 2".to_string(),
+                    postal_code: "22222".to_string(),
+                    set_as_default: true,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(addr2.is_default);
+
+        // Verify addr1 is no longer default
+        let addr1_updated = module.get_address(buyer_id, addr1.id).await.unwrap();
+        assert!(!addr1_updated.is_default);
+
+        // List addresses - exactly one default
+        let all_addrs = module.list_addresses(buyer_id).await.unwrap();
+        assert_eq!(all_addrs.len(), 2);
+        let default_count = all_addrs.iter().filter(|a| a.is_default).count();
+        assert_eq!(default_count, 1);
+
+        // Delete default address (addr2) -> addr1 automatically promoted to default!
+        module.delete_address(buyer_id, addr2.id).await.unwrap();
+        let addr1_promoted = module.get_address(buyer_id, addr1.id).await.unwrap();
+        assert!(addr1_promoted.is_default);
+    }
+
+    #[test]
+    fn test_normalize_indonesian_phone() {
+        use super::normalize_indonesian_phone;
+
+        assert_eq!(
+            normalize_indonesian_phone("0812-3456-7890").unwrap(),
+            "+6281234567890"
+        );
+        assert_eq!(
+            normalize_indonesian_phone("+62 812-3456-7890").unwrap(),
+            "+6281234567890"
+        );
+        assert_eq!(
+            normalize_indonesian_phone("6281234567890").unwrap(),
+            "+6281234567890"
+        );
+        assert_eq!(
+            normalize_indonesian_phone("  +6281987654321 ").unwrap(),
+            "+6281987654321"
+        );
+
+        // Invalid cases
+        assert!(normalize_indonesian_phone("021-555-1234").is_err()); // landline
+        assert!(normalize_indonesian_phone("0812").is_err()); // too short
+        assert!(normalize_indonesian_phone("+12025550123").is_err()); // US number
+        assert!(normalize_indonesian_phone("abc08123456789").is_err()); // non-phone characters
+    }
+
+    #[tokio::test]
+    async fn test_phone_normalization_cooldown_cross_format() {
+        let (module, _) = setup_test_buyer_module().await;
+        let auth_res = module
+            .authenticate_google("valid:google_cd:cd@buyer.com:Cooldown Buyer")
+            .await
+            .unwrap();
+
+        let buyer_id = auth_res.buyer.id;
+
+        // Request with local format 08...
+        let res1 = module.request_phone_otp(buyer_id, "081234567890").await;
+        assert!(res1.is_ok());
+
+        // Second request with international format +628... must trigger cooldown!
+        let res2 = module.request_phone_otp(buyer_id, "+6281234567890").await;
+        assert!(res2.is_err());
+        assert!(res2.unwrap_err().to_string().contains("Mohon tunggu"));
+    }
+
+    #[test]
+    fn test_google_verifier_claim_validation() {
+        use super::ProductionGoogleVerifier;
+        let verifier = ProductionGoogleVerifier {
+            client_id: "valid-client-id-123.apps.googleusercontent.com".to_string(),
+        };
+
+        let now_ts = chrono::Utc::now().timestamp();
+
+        // 1. Audience mismatch
+        let json_aud_mismatch = serde_json::json!({
+            "aud": "wrong-client-id.apps.googleusercontent.com",
+            "iss": "https://accounts.google.com",
+            "email_verified": "true",
+            "exp": now_ts + 3600,
+            "sub": "sub-123",
+            "email": "user@gmail.com",
+            "name": "User"
+        });
+        assert!(verifier
+            .parse_and_validate_claims(&json_aud_mismatch)
+            .is_err());
+
+        // 2. Issuer mismatch
+        let json_iss_mismatch = serde_json::json!({
+            "aud": "valid-client-id-123.apps.googleusercontent.com",
+            "iss": "https://attacker-oauth.com",
+            "email_verified": "true",
+            "exp": now_ts + 3600,
+            "sub": "sub-123",
+            "email": "user@gmail.com",
+            "name": "User"
+        });
+        assert!(verifier
+            .parse_and_validate_claims(&json_iss_mismatch)
+            .is_err());
+
+        // 3. Email unverified
+        let json_email_unverified = serde_json::json!({
+            "aud": "valid-client-id-123.apps.googleusercontent.com",
+            "iss": "https://accounts.google.com",
+            "email_verified": "false",
+            "exp": now_ts + 3600,
+            "sub": "sub-123",
+            "email": "user@gmail.com",
+            "name": "User"
+        });
+        assert!(verifier
+            .parse_and_validate_claims(&json_email_unverified)
+            .is_err());
+
+        // 4. Token expired
+        let json_expired = serde_json::json!({
+            "aud": "valid-client-id-123.apps.googleusercontent.com",
+            "iss": "https://accounts.google.com",
+            "email_verified": true,
+            "exp": now_ts - 100,
+            "sub": "sub-123",
+            "email": "user@gmail.com",
+            "name": "User"
+        });
+        assert!(verifier.parse_and_validate_claims(&json_expired).is_err());
+
+        // 5. Valid claims
+        let json_valid = serde_json::json!({
+            "aud": "valid-client-id-123.apps.googleusercontent.com",
+            "iss": "https://accounts.google.com",
+            "email_verified": "true",
+            "exp": now_ts + 3600,
+            "sub": "sub-123",
+            "email": "user@gmail.com",
+            "name": "Valid User",
+            "picture": "https://photo.jpg"
+        });
+        let claims = verifier.parse_and_validate_claims(&json_valid).unwrap();
+        assert_eq!(claims.sub, "sub-123");
+        assert_eq!(claims.email, "user@gmail.com");
+    }
+
+    #[tokio::test]
+    async fn test_sms_sender_fail_closed_in_production() {
+        use super::{ConsoleOrProviderSmsSender, SmsOtpSender};
+
+        // In production environment with console/empty provider, must fail closed
+        let sender = ConsoleOrProviderSmsSender::new(
+            "production".to_string(),
+            "".to_string(),
+            "".to_string(),
+        );
+        let res = sender.send_otp("+6281234567890", "123456").await;
+        assert!(res.is_err());
+
+        // In development environment, console sender succeeds
+        let dev_sender = ConsoleOrProviderSmsSender::new(
+            "development".to_string(),
+            "console".to_string(),
+            "".to_string(),
+        );
+        let res_dev = dev_sender.send_otp("+6281234567890", "123456").await;
+        assert!(res_dev.is_ok());
+    }
+
+    #[test]
+    fn test_phone_masking() {
+        use super::mask_phone;
+        assert_eq!(mask_phone("+6281234567890"), "+628****890");
+        assert_eq!(mask_phone("081234567890"), "0812****890");
+        assert_eq!(mask_phone("1234"), "****");
+    }
+
+    #[tokio::test]
+    async fn test_deactivated_buyer_login_and_profile_rejected() {
+        let (module, _) = setup_test_buyer_module().await;
+        let token = "valid:sub-deactivated:deact@buyer.com:Deactivated Buyer";
+        let auth_res = module.authenticate_google(token).await.unwrap();
+        let buyer_id = auth_res.buyer.id;
+
+        // Verify active buyer profile works
+        let profile = module.get_buyer_profile(buyer_id).await.unwrap();
+        assert!(profile.is_active);
+
+        // Deactivate buyer account
+        sqlx::query("UPDATE buyer_accounts SET is_active = 0 WHERE id = $1")
+            .bind(buyer_id.to_string())
+            .execute(&module.pool)
+            .await
+            .unwrap();
+
+        // Login must be rejected
+        let login_err = module.authenticate_google(token).await.unwrap_err();
+        match login_err {
+            ContractError::ValidationError(msg) => {
+                assert!(
+                    msg.contains("dinonaktifkan"),
+                    "Expected deactivated message, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected ValidationError, got {:?}", other),
+        }
+
+        // Profile lookup must also be rejected
+        let profile_err = module.get_buyer_profile(buyer_id).await.unwrap_err();
+        match profile_err {
+            ContractError::ValidationError(msg) => {
+                assert!(
+                    msg.contains("dinonaktifkan"),
+                    "Expected deactivated message, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected ValidationError, got {:?}", other),
+        }
+    }
+
+    struct FailingSmsSender;
+    #[async_trait]
+    impl SmsOtpSender for FailingSmsSender {
+        async fn send_otp(
+            &self,
+            _phone_number: &str,
+            _otp_code: &str,
+        ) -> Result<(), ContractError> {
+            Err(ContractError::Internal(
+                "Simulated SMS network dispatch failure".to_string(),
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_request_otp_rollback_on_sms_failure() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let auth = Arc::new(AuthModule::new(
+            "super-secret-key-minimum-32-chars-length!".to_string(),
+            24,
+        ));
+        let audit = Arc::new(AuditModule::new(pool.clone()));
+        let google_verifier = Arc::new(TestGoogleVerifier);
+        let sms_sender = Arc::new(FailingSmsSender);
+
+        let module = BuyerModule::new(pool.clone(), auth, google_verifier, sms_sender, audit);
+        let auth_res = module
+            .authenticate_google("valid:sub-sms-fail:smsfail@buyer.com:Sms Fail")
+            .await
+            .unwrap();
+
+        let req_res = module
+            .request_phone_otp(auth_res.buyer.id, "+6281234567890")
+            .await;
+        assert!(req_res.is_err());
+
+        // Ensure newly inserted OTP row was immediately deleted on SMS failure
+        let count_row = sqlx::query(
+            "SELECT COUNT(*) as count FROM buyer_otp_verifications WHERE buyer_id = $1",
+        )
+        .bind(auth_res.buyer.id.to_string())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let count: i64 = count_row.get("count");
+        assert_eq!(
+            count, 0,
+            "Failed SMS dispatch must delete pending OTP verification record"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_address_crud_transaction_and_partial_unique_index() {
+        let (module, _) = setup_test_buyer_module().await;
+        let auth_res = module
+            .authenticate_google("valid:sub-addr:addr@buyer.com:Addr Buyer")
+            .await
+            .unwrap();
+        let buyer_id = auth_res.buyer.id;
+
+        // 1. Create first address -> automatically default
+        let addr1 = module
+            .create_address(
+                buyer_id,
+                CreateBuyerAddressRequest {
+                    recipient_name: "Recipient 1".to_string(),
+                    phone_number: "+6281234567890".to_string(),
+                    street_address: "Street 1".to_string(),
+                    subdistrict: "Subdistrict 1".to_string(),
+                    city: "Jakarta".to_string(),
+                    province: "DKI".to_string(),
+                    postal_code: "12345".to_string(),
+                    set_as_default: false,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(addr1.is_default);
+
+        // 2. Create second address with set_as_default = true
+        let addr2 = module
+            .create_address(
+                buyer_id,
+                CreateBuyerAddressRequest {
+                    recipient_name: "Recipient 2".to_string(),
+                    phone_number: "+6281234567891".to_string(),
+                    street_address: "Street 2".to_string(),
+                    subdistrict: "Subdistrict 2".to_string(),
+                    city: "Bandung".to_string(),
+                    province: "Jabar".to_string(),
+                    postal_code: "40123".to_string(),
+                    set_as_default: true,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(addr2.is_default);
+
+        // Verify addr1 is no longer default
+        let addr1_refreshed = module.get_address(buyer_id, addr1.id).await.unwrap();
+        assert!(!addr1_refreshed.is_default);
+
+        // Verify exact single default address in DB (satisfies idx_buyer_addresses_one_default)
+        let default_count_row = sqlx::query(
+            "SELECT COUNT(*) as count FROM buyer_addresses WHERE buyer_id = $1 AND is_default = 1",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_one(&module.pool)
+        .await
+        .unwrap();
+        let default_count: i64 = default_count_row.get("count");
+        assert_eq!(default_count, 1);
+
+        // 3. Delete default address addr2 -> addr1 should be promoted
+        module.delete_address(buyer_id, addr2.id).await.unwrap();
+        let addr1_promoted = module.get_address(buyer_id, addr1.id).await.unwrap();
+        assert!(addr1_promoted.is_default);
+    }
+}

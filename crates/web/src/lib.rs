@@ -10,4 +10,3 @@ pub use docs::ApiDoc;
 pub use error::ApiError;
 pub use routes::create_app;
 pub use state::{AppState, ValidatedJson};
-

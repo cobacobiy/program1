@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
@@ -8,6 +7,7 @@ use program1_contracts::{
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -24,7 +24,13 @@ impl InventoryModule {
         }
     }
 
-    fn calculate_available(warehouse: u32, locked: u32, spare: u32, promo: u32, _safety: u32) -> u32 {
+    fn calculate_available(
+        warehouse: u32,
+        locked: u32,
+        spare: u32,
+        promo: u32,
+        _safety: u32,
+    ) -> u32 {
         warehouse.saturating_sub(locked + spare + promo)
     }
 
@@ -99,7 +105,10 @@ impl InventoryModule {
         Ok(())
     }
 
-    async fn ensure_product_initialized(&self, product_id: Uuid) -> Result<InventoryStockDto, ContractError> {
+    async fn ensure_product_initialized(
+        &self,
+        product_id: Uuid,
+    ) -> Result<InventoryStockDto, ContractError> {
         let existing = sqlx::query(
             "SELECT product_id, sku, product_name, image_url, average_purchase_price,
                     warehouse_stock, spare_stock, locked_stock, promotion_stock, safety_stock,
@@ -123,7 +132,13 @@ impl InventoryModule {
         let locked_stock = 0;
         let promotion_stock = 0;
         let safety_stock = 15;
-        let available_stock = Self::calculate_available(warehouse_stock, locked_stock, spare_stock, promotion_stock, safety_stock);
+        let available_stock = Self::calculate_available(
+            warehouse_stock,
+            locked_stock,
+            spare_stock,
+            promotion_stock,
+            safety_stock,
+        );
         let now = Utc::now();
         let cost_price = item.price * 0.65;
 
@@ -319,7 +334,10 @@ impl InventoryContract for InventoryModule {
         self.get_stock(product_id).await
     }
 
-    async fn get_safety_stock_logs(&self, product_id: Uuid) -> Result<Vec<SafetyStockLogDto>, ContractError> {
+    async fn get_safety_stock_logs(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<SafetyStockLogDto>, ContractError> {
         let rows = sqlx::query(
             "SELECT id, product_id, old_safety_stock, new_safety_stock, admin_note, updated_by, timestamp
              FROM safety_stock_logs WHERE product_id = $1 ORDER BY timestamp DESC",
@@ -380,12 +398,10 @@ impl InventoryContract for InventoryModule {
         };
 
         if new_warehouse_stock < stock.locked_stock {
-            return Err(ContractError::ValidationError(
-                format!(
-                    "Stok gudang baru ({}) tidak boleh lebih kecil dari stok terkunci pesanan ({})",
-                    new_warehouse_stock, stock.locked_stock
-                ),
-            ));
+            return Err(ContractError::ValidationError(format!(
+                "Stok gudang baru ({}) tidak boleh lebih kecil dari stok terkunci pesanan ({})",
+                new_warehouse_stock, stock.locked_stock
+            )));
         }
 
         let new_available = Self::calculate_available(
@@ -679,7 +695,9 @@ impl InventoryContract for InventoryModule {
                 "warning" => 1,
                 _ => 2,
             };
-            score_a.cmp(&score_b).then_with(|| b.deficit.cmp(&a.deficit))
+            score_a
+                .cmp(&score_b)
+                .then_with(|| b.deficit.cmp(&a.deficit))
         });
 
         Ok(alerts)
@@ -795,7 +813,12 @@ mod tests {
 
         // Update safety stock with note
         let updated = inventory
-            .update_safety_stock(target.id, 50, "Penyesuaian Promo 9.9".to_string(), "Admin Super".to_string())
+            .update_safety_stock(
+                target.id,
+                50,
+                "Penyesuaian Promo 9.9".to_string(),
+                "Admin Super".to_string(),
+            )
             .await
             .unwrap();
 
@@ -820,30 +843,51 @@ mod tests {
 
         // 1. Update warehouse stock
         let updated_warehouse = inventory
-            .update_warehouse_stock(target.id, 1000, "Stock opname gudang A".to_string(), "Admin Gudang".to_string())
+            .update_warehouse_stock(
+                target.id,
+                1000,
+                "Stock opname gudang A".to_string(),
+                "Admin Gudang".to_string(),
+            )
             .await
             .unwrap();
         assert_eq!(updated_warehouse.warehouse_stock, 1000);
 
         // 2. Update spare stock
         let updated_spare = inventory
-            .update_spare_stock(target.id, 25, "Alokasi sampel event".to_string(), "Admin Gudang".to_string())
+            .update_spare_stock(
+                target.id,
+                25,
+                "Alokasi sampel event".to_string(),
+                "Admin Gudang".to_string(),
+            )
             .await
             .unwrap();
         assert_eq!(updated_spare.spare_stock, 25);
 
         // 3. Update promotion stock
         let updated_promo = inventory
-            .update_promotion_stock(target.id, 100, "Flash sale 11.11".to_string(), "Admin Promo".to_string())
+            .update_promotion_stock(
+                target.id,
+                100,
+                "Flash sale 11.11".to_string(),
+                "Admin Promo".to_string(),
+            )
             .await
             .unwrap();
         assert_eq!(updated_promo.promotion_stock, 100);
 
         // 4. Check unified logs
-        let all_logs = inventory.get_adjustment_logs(target.id, None).await.unwrap();
+        let all_logs = inventory
+            .get_adjustment_logs(target.id, None)
+            .await
+            .unwrap();
         assert_eq!(all_logs.len(), 3);
 
-        let promo_logs = inventory.get_adjustment_logs(target.id, Some("promotion")).await.unwrap();
+        let promo_logs = inventory
+            .get_adjustment_logs(target.id, Some("promotion"))
+            .await
+            .unwrap();
         assert_eq!(promo_logs.len(), 1);
         assert_eq!(promo_logs[0].old_value, 0);
         assert_eq!(promo_logs[0].new_value, 100);
@@ -889,4 +933,3 @@ mod tests {
         assert!(alerts.iter().any(|a| a.product_id == target1.id));
     }
 }
-

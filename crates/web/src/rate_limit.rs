@@ -102,7 +102,11 @@ impl IpRateLimiter {
 /// Helper function to extract real client IP address
 pub fn extract_client_ip(req: &Request<Body>) -> String {
     // Check X-Forwarded-For first (format: client, proxy1, proxy2)
-    if let Some(forwarded) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+    if let Some(forwarded) = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
         if let Some(first_ip) = forwarded.split(',').next() {
             let clean = first_ip.trim();
             if !clean.is_empty() {
@@ -134,7 +138,10 @@ pub async fn rate_limit_layer(
 ) -> Response<Body> {
     let client_ip = extract_client_ip(&req);
 
-    match limiter.check(&client_ip, route_key, max_requests, window).await {
+    match limiter
+        .check(&client_ip, route_key, max_requests, window)
+        .await
+    {
         Ok(info) => {
             let mut response = next.run(req).await;
             let headers = response.headers_mut();

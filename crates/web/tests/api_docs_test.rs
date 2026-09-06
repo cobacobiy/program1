@@ -20,7 +20,9 @@ use utoipa::OpenApi;
 
 async fn setup_test_app() -> axum::Router {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret, 24));
@@ -39,6 +41,18 @@ async fn setup_test_app() -> axum::Router {
     let audit_module = Arc::new(AuditModule::new(pool.clone()));
     let rate_limiter = Arc::new(IpRateLimiter::new());
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
@@ -50,10 +64,11 @@ async fn setup_test_app() -> axum::Router {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
-
 
     create_app(state)
 }
@@ -104,7 +119,11 @@ async fn test_x_api_version_header_returned() {
     let res = app.oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(
-        res.headers().get("x-api-version").unwrap().to_str().unwrap(),
+        res.headers()
+            .get("x-api-version")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "1.0.0"
     );
 }

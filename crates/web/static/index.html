@@ -36,45 +36,12 @@
         </div>
         <div class="form-group">
           <label>Password</label>
-          <input type="password" id="login-password" class="form-control" placeholder="••••••••" value="admin123" required>
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
         </div>
         <button type="submit" id="btn-submit-seller-login" class="ginee-btn-purple" style="width:100%; padding:0.75rem; font-size:0.95rem; margin-top:0.5rem">
           🚀 Masuk ke Seller Portal
         </button>
       </form>
-
-      <div style="margin-top:1.8rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1.2rem">
-        <div style="font-size:0.8rem; font-weight:600; color:var(--text-muted); margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center">
-          <span>⚡ PILIH CEPAT SUB-AKUN (DEMO):</span>
-          <span style="font-size:0.7rem; color:#a78bfa">Password: admin123</span>
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem">
-          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('admin')">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">👑 Super Admin</span>
-            <span class="badge-role" style="font-size:0.65rem; background:rgba(239,68,68,0.2); color:#fca5a5">ADMIN</span>
-          </div>
-          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('admin_ops')">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">🛡️ Admin Ops</span>
-            <span class="badge-role" style="font-size:0.65rem; background:rgba(239,68,68,0.2); color:#fca5a5">ADMIN</span>
-          </div>
-          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('manager_gudang')">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">🏬 Mgr Gudang</span>
-            <span class="badge-role" style="font-size:0.65rem; background:rgba(59,130,246,0.2); color:#93c5fd">MGR</span>
-          </div>
-          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('staff_gudang')">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">📦 Staff Gudang</span>
-            <span class="badge-role" style="font-size:0.65rem; background:rgba(16,185,129,0.2); color:#6ee7b7">STAFF</span>
-          </div>
-          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('staff_finance')">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">💰 Staff Finance</span>
-            <span class="badge-role" style="font-size:0.65rem; background:rgba(16,185,129,0.2); color:#6ee7b7">STAFF</span>
-          </div>
-          <div class="quick-subaccount-chip" onclick="quickLoginSubAccount('staff_cs')">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--text-heading)">🎧 Staff CS</span>
-            <span class="badge-role" style="font-size:0.65rem; background:rgba(245,158,11,0.2); color:#fcd34d">CS</span>
-          </div>
-        </div>
-      </div>
 
       <div style="margin-top:1.5rem; text-align:center">
         <a href="/store" target="_blank" style="font-size:0.8rem; color:var(--cyan); text-decoration:none">🛒 Buka Toko / Storefront Pembeli &rarr;</a>
@@ -508,6 +475,58 @@
 
       <!-- VIEW 16: SETTINGS & RBAC MANAGEMENT -->
       <div id="view-settings" class="spa-view">
+        <!-- BREAK-GLASS DEVELOPER SUPPORT PANEL -->
+        <div class="panel-card" style="margin-bottom:1.5rem; border:1px solid rgba(239, 68, 68, 0.3)">
+          <div class="panel-header" style="align-items:flex-start">
+            <div>
+              <h3 class="panel-title" style="color:#fca5a5; display:flex; align-items:center; gap:0.5rem">
+                <span>🚨</span> Akses Darurat Developer (Break-Glass Support)
+              </h3>
+              <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem">
+                Kontrol darurat bagi Seller/Owner untuk memberikan akses sementara kepada tim teknisi (akun <code>dev_support</code>).
+                Akun developer nonaktif secara default. Akses dibatasi waktu (1-24 jam) dan seluruh aktivitas diaudit secara ketat.
+              </p>
+            </div>
+            <div id="break-glass-status-badge">
+              <span class="badge-role" style="background:rgba(16,185,129,0.15); color:#6ee7b7">🟢 MEMUAT STATUS...</span>
+            </div>
+          </div>
+
+          <!-- ACTIVE BANNER (Visible when Break-Glass is Active) -->
+          <div id="break-glass-active-banner" style="display:none; padding:1.2rem; border-radius:8px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); margin-top:1rem">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem">
+              <div>
+                <div style="display:flex; align-items:center; gap:0.5rem">
+                  <span style="font-size:1.2rem">⚠️</span>
+                  <strong style="color:#fca5a5; font-size:0.95rem">SESI DARURAT DEVELOPER SEDANG AKTIF</strong>
+                </div>
+                <div id="break-glass-info-text" style="font-size:0.85rem; color:var(--text); margin-top:0.4rem; line-height:1.4">
+                  -
+                </div>
+              </div>
+              <button type="button" class="btn-action" style="background:var(--rose); color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:6px; font-weight:600; cursor:pointer" onclick="handleDeactivateBreakGlass()">
+                🛑 Nonaktifkan Akses Sekarang
+              </button>
+            </div>
+          </div>
+
+          <!-- INACTIVE FORM (Visible when Break-Glass is Inactive) -->
+          <div id="break-glass-inactive-form-box" style="margin-top:1rem">
+            <form id="break-glass-activate-form" onsubmit="handleActivateBreakGlass(event)" style="display:grid; grid-template-columns:2fr 1fr auto; gap:1rem; align-items:end">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.8rem">Alasan Emergency / Tiket Masalah</label>
+                <input type="text" id="bg-reason" class="form-control" placeholder="Contoh: Investigasi kritis inkonsistensi stok pesanan #9281" required>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.8rem">Durasi Akses (Jam)</label>
+                <input type="number" id="bg-duration" class="form-control" min="1" max="24" value="2" required>
+              </div>
+              <button type="submit" class="ginee-btn-purple" style="height:38px; padding:0 1.2rem; white-space:nowrap">
+                ⚡ Aktifkan Break-Glass
+              </button>
+            </form>
+          </div>
+        </div>
         <div class="panel-card">
           <div class="panel-header">
             <div>

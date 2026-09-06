@@ -30,7 +30,12 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
         .get("x-request-id")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim())
-        .filter(|s| !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'))
+        .filter(|s| {
+            !s.is_empty()
+                && s.len() <= 128
+                && s.chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        })
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
@@ -68,9 +73,7 @@ pub fn extract_and_validate_token(
         .and_then(|val| val.to_str().ok());
 
     let token = match auth_header {
-        Some(header_val) if header_val.starts_with("Bearer ") => {
-            &header_val["Bearer ".len()..]
-        }
+        Some(header_val) if header_val.starts_with("Bearer ") => &header_val["Bearer ".len()..],
         _ => {
             return Err((
                 StatusCode::UNAUTHORIZED,
@@ -107,6 +110,62 @@ pub fn extract_and_validate_token(
     }
 }
 
+/// Validate whether dev_support token is currently allowed (break-glass session is active and not expired)
+pub async fn validate_dev_support_active(
+    claims: &JwtClaims,
+    state: &AppState,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if claims.username == "dev_support" || claims.role.to_lowercase().contains("developer support")
+    {
+        let bg = state
+            .user_contract
+            .get_break_glass_status()
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": "internal_error",
+                        "message": format!("Failed to verify break-glass status: {}", e)
+                    })),
+                )
+            })?;
+
+        if let Some(active_until) = bg.active_until {
+            if chrono::Utc::now() > active_until {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "error": "token_expired",
+                        "message": "Sesi break-glass dev_support telah kedaluwarsa."
+                    })),
+                ));
+            }
+        }
+
+        if bg.reason.as_deref() == Some("Session expired") {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "token_expired",
+                    "message": "Sesi break-glass dev_support telah kedaluwarsa."
+                })),
+            ));
+        }
+
+        if !bg.is_active {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "token_revoked",
+                    "message": "Sesi break-glass dev_support tidak aktif atau telah dinonaktifkan."
+                })),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Extractor for authenticated user claims
 #[derive(Debug, Clone)]
 pub struct AuthUser(pub JwtClaims);
@@ -115,19 +174,33 @@ pub struct AuthUser(pub JwtClaims);
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let claims = extract_and_validate_token(&parts.headers, state)?;
+        validate_dev_support_active(&claims, state).await?;
         Ok(AuthUser(claims))
     }
 }
 
-/// Middleware to enforce authentication on protected endpoints
+/// Middleware to enforce authentication on seller protected endpoints
 pub async fn require_auth(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
     let claims = extract_and_validate_token(req.headers(), &state)?;
+    if !claims.is_seller_staff() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": "Akses ditolak: endpoint operasional seller tidak dapat diakses oleh akun pembeli."
+            })),
+        ));
+    }
+    validate_dev_support_active(&claims, &state).await?;
     req.extensions_mut().insert(claims);
     Ok(next.run(req).await)
 }
@@ -139,6 +212,16 @@ pub async fn require_admin(
     next: Next,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
     let claims = extract_and_validate_token(req.headers(), &state)?;
+    if !claims.is_seller_staff() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": "Akses ditolak: endpoint admin seller tidak dapat diakses oleh akun pembeli."
+            })),
+        ));
+    }
+    validate_dev_support_active(&claims, &state).await?;
     let role = claims.role.to_lowercase();
     if role.contains("admin") {
         req.extensions_mut().insert(claims);
@@ -154,6 +237,103 @@ pub async fn require_admin(
     }
 }
 
+/// Middleware to enforce Merchant Owner / Super Admin only RBAC access (Break-Glass)
+pub async fn require_seller_owner(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
+    let claims = extract_and_validate_token(req.headers(), &state)?;
+    if !claims.is_seller_staff() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": "Akses ditolak: endpoint admin seller tidak dapat diakses oleh akun pembeli."
+            })),
+        ));
+    }
+    validate_dev_support_active(&claims, &state).await?;
+    let role = claims.role.trim().to_lowercase();
+    if role == "super admin" || role == "owner" {
+        req.extensions_mut().insert(claims);
+        Ok(next.run(req).await)
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": "Akses ditolak: Fitur emergency break-glass hanya dapat dikendalikan oleh Super Admin / Pemilik Toko (Merchant Owner)."
+            })),
+        ))
+    }
+}
+
+/// Middleware to enforce Buyer-only authenticated access
+pub async fn require_buyer_auth(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
+    let claims = extract_and_validate_token(req.headers(), &state)?;
+    if !claims.is_buyer() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": "Akses ditolak: endpoint pembeli hanya dapat diakses oleh sesi akun pembeli."
+            })),
+        ));
+    }
+
+    // Verify buyer account is active
+    match state.buyer_contract.get_buyer_profile(claims.sub).await {
+        Ok(buyer) => {
+            if !buyer.is_active {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "error": "account_deactivated",
+                        "message": "Akun pembeli telah dinonaktifkan."
+                    })),
+                ));
+            }
+        }
+        Err(program1_contracts::ContractError::ValidationError(msg))
+            if msg.contains("dinonaktifkan") || msg.contains("deactivated") =>
+        {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "error": "account_deactivated",
+                    "message": "Akun pembeli telah dinonaktifkan."
+                })),
+            ));
+        }
+        Err(program1_contracts::ContractError::NotFound(_)) => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "account_not_found",
+                    "message": "Akun pembeli tidak ditemukan."
+                })),
+            ));
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "internal_error",
+                    "message": e.to_string()
+                })),
+            ));
+        }
+    }
+
+    req.extensions_mut().insert(claims);
+    Ok(next.run(req).await)
+}
+
 /// Middleware to attach hardened security headers
 pub async fn security_headers(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
@@ -163,13 +343,22 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
 
     // Prevent MIME type sniffing
-    headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
 
     // XSS protection (legacy browsers)
-    headers.insert(HeaderName::from_static("x-xss-protection"), HeaderValue::from_static("1; mode=block"));
+    headers.insert(
+        HeaderName::from_static("x-xss-protection"),
+        HeaderValue::from_static("1; mode=block"),
+    );
 
     // Referrer policy
-    headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("strict-origin-when-cross-origin"));
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
 
     // API Version header
     headers.insert(
@@ -177,11 +366,11 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
         HeaderValue::from_static("1.0.0"),
     );
 
-    // Hardened Content Security Policy (unsafe-eval removed)
+    // Hardened Content Security Policy (supporting Google Identity Services GIS)
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'"
+            "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://accounts.google.com/gsi/; frame-src 'self' https://accounts.google.com/gsi/;"
         ),
     );
 

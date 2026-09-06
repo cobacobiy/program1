@@ -11,8 +11,8 @@ use validator::Validate;
 use crate::error::ApiError;
 use crate::rate_limit::IpRateLimiter;
 use program1_contracts::{
-    AnalyticsContract, AuditContract, AuthContract, CatalogContract, ChannelSyncContract,
-    ErrorCode, InventoryContract, OrderContract, UserContract,
+    AnalyticsContract, AuditContract, AuthContract, BuyerContract, CatalogContract,
+    ChannelSyncContract, ErrorCode, InventoryContract, OrderContract, UserContract,
 };
 
 #[derive(Clone)]
@@ -27,10 +27,11 @@ pub struct AppState {
     pub order_contract: Arc<dyn OrderContract>,
     pub analytics_contract: Arc<dyn AnalyticsContract>,
     pub audit_contract: Arc<dyn AuditContract>,
+    pub buyer_contract: Arc<dyn BuyerContract>,
     pub rate_limiter: Arc<IpRateLimiter>,
     pub started_at: std::time::Instant,
+    pub google_client_id: String,
 }
-
 
 /// Custom Axum extractor that parses JSON and automatically runs validation
 #[derive(Debug, Clone, Copy, Default)]
@@ -44,9 +45,13 @@ where
     type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &AppState) -> Result<Self, Self::Rejection> {
-        let Json(value) = Json::<T>::from_request(req, state)
-            .await
-            .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string(), StatusCode::BAD_REQUEST))?;
+        let Json(value) = Json::<T>::from_request(req, state).await.map_err(|e| {
+            ApiError::new(
+                ErrorCode::InvalidRequest,
+                e.to_string(),
+                StatusCode::BAD_REQUEST,
+            )
+        })?;
 
         value.validate().map_err(|e| {
             let mut details = Vec::new();

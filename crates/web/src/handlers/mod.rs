@@ -1,6 +1,7 @@
 pub mod analytics;
 pub mod audit;
 pub mod auth;
+pub mod buyer;
 pub mod catalog;
 pub mod channel;
 pub mod health;
@@ -11,6 +12,7 @@ pub mod user;
 pub use analytics::*;
 pub use audit::*;
 pub use auth::*;
+pub use buyer::*;
 pub use catalog::*;
 pub use channel::*;
 pub use health::*;

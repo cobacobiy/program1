@@ -1,9 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde_json::json;
 
 use crate::state::AppState;
@@ -47,21 +42,30 @@ pub async fn readiness_check(State(state): State<AppState>) -> impl IntoResponse
 
     // 1. Check catalog subsystem
     let catalog_ok = state.catalog_contract.list_items().await.is_ok();
-    checks.insert("catalog_module".into(), json!(if catalog_ok { "ok" } else { "fail" }));
+    checks.insert(
+        "catalog_module".into(),
+        json!(if catalog_ok { "ok" } else { "fail" }),
+    );
     if !catalog_ok {
         overall_healthy = false;
     }
 
     // 2. Check inventory subsystem
     let inventory_ok = state.inventory_contract.get_all_stocks().await.is_ok();
-    checks.insert("inventory_module".into(), json!(if inventory_ok { "ok" } else { "fail" }));
+    checks.insert(
+        "inventory_module".into(),
+        json!(if inventory_ok { "ok" } else { "fail" }),
+    );
     if !inventory_ok {
         overall_healthy = false;
     }
 
     // 3. Check user subsystem
     let user_ok = state.user_contract.list_accounts().await.is_ok();
-    checks.insert("user_module".into(), json!(if user_ok { "ok" } else { "fail" }));
+    checks.insert(
+        "user_module".into(),
+        json!(if user_ok { "ok" } else { "fail" }),
+    );
     if !user_ok {
         overall_healthy = false;
     }
@@ -100,6 +104,7 @@ pub async fn get_store_info(State(state): State<AppState>) -> impl IntoResponse 
         Json(json!({
             "store_name": state.store_name,
             "currency": state.store_currency,
+            "google_client_id": state.google_client_id,
         })),
     )
 }

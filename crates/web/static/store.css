@@ -805,3 +805,124 @@ main {
 :root[data-theme="light"] .mobile-bottom-nav {
   background: rgba(255, 255, 255, 0.96);
 }
+
+/* ==========================================================================
+   BUYER AUTHENTICATION & ADDRESS BOOK ENHANCEMENTS
+   ========================================================================== */
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+}
+
+.btn-google:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.btn-sm-action {
+  background: rgba(238, 77, 45, 0.15);
+  border: 1px solid var(--shopee-orange);
+  color: var(--shopee-orange);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-sm-action:hover {
+  background: var(--shopee-orange);
+  color: #fff;
+}
+
+.address-item-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: border-color 0.2s;
+}
+
+.address-item-card.is-default {
+  border-color: rgba(238, 77, 45, 0.5);
+  background: rgba(238, 77, 45, 0.04);
+}
+
+.address-badge-default {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  background: rgba(238, 77, 45, 0.2);
+  color: var(--shopee-orange);
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.address-badge-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+
+.confirmed-address-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(238, 77, 45, 0.35);
+  border-radius: 10px;
+  padding: 1rem;
+  position: relative;
+}
+
+.confirmed-address-card .addr-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.confirmed-address-card .addr-phone {
+  font-size: 0.8rem;
+  color: var(--emerald);
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
+.confirmed-address-card .addr-text {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+  line-height: 1.4;
+}
+
+:root[data-theme="light"] .confirmed-address-card {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+:root[data-theme="light"] .address-item-card {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}

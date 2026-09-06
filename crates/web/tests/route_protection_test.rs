@@ -22,7 +22,9 @@ use uuid::Uuid;
 
 async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret.clone(), 24));
@@ -40,6 +42,18 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
     ));
     let audit_module = Arc::new(program1_module_audit::AuditModule::new(pool.clone()));
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
@@ -55,12 +69,11 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
-
-
-
 
     let router = create_app(state);
     (router, auth_module, secret)
@@ -123,11 +136,15 @@ async fn test_login_returns_valid_jwt_token() {
     let body_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
 
-    let access_token = body_json["access_token"].as_str().expect("access_token should be string");
+    let access_token = body_json["access_token"]
+        .as_str()
+        .expect("access_token should be string");
     assert!(!access_token.is_empty());
 
     // Validate the token claims
-    let claims = auth_module.validate_token(access_token).expect("Token should be valid");
+    let claims = auth_module
+        .validate_token(access_token)
+        .expect("Token should be valid");
     assert_eq!(claims.username, "admin");
     assert_eq!(claims.role, "Super Admin");
 }
@@ -245,6 +262,7 @@ async fn test_expired_token_returns_token_expired_error() {
         sub: Uuid::new_v4(),
         username: "admin".to_string(),
         role: "Super Admin".to_string(),
+        user_type: "seller_staff".to_string(),
         accessible_menus: vec![],
         exp: now - 3600, // 1 hour in the past
         iat: now - 7200,
@@ -301,18 +319,24 @@ async fn test_multi_tier_accounts_and_user_list_access() {
 
     let body_bytes = to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
     let accounts: Vec<Value> = serde_json::from_slice(&body_bytes).unwrap();
-    assert_eq!(accounts.len(), 6); // 6 seeded multi-tier accounts
+    assert_eq!(accounts.len(), 7); // 6 seeded multi-tier accounts + 1 dev_support break-glass account
 
     // 2. Staff tries to modify permissions -> 403 Forbidden
     let target_user_id = accounts[0]["id"].as_str().unwrap();
     let req_perm = Request::builder()
-        .uri(format!("/api/v1/users/accounts/{}/permissions", target_user_id))
+        .uri(format!(
+            "/api/v1/users/accounts/{}/permissions",
+            target_user_id
+        ))
         .method("POST")
         .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "accessible_menus": ["dashboard"]
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "accessible_menus": ["dashboard"]
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let res_perm = app.clone().oneshot(req_perm).await.unwrap();
@@ -331,13 +355,19 @@ async fn test_multi_tier_accounts_and_user_list_access() {
     let admin_token = auth_module.generate_token(&admin_claims).unwrap();
 
     let req_perm_admin = Request::builder()
-        .uri(format!("/api/v1/users/accounts/{}/permissions", target_user_id))
+        .uri(format!(
+            "/api/v1/users/accounts/{}/permissions",
+            target_user_id
+        ))
         .method("POST")
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "accessible_menus": ["dashboard", "orders"]
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "accessible_menus": ["dashboard", "orders"]
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let res_perm_admin = app.oneshot(req_perm_admin).await.unwrap();

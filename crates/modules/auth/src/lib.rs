@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use program1_contracts::{AuthContract, ContractError, JwtClaims, UserAccountDto};
+use program1_contracts::{AuthContract, BuyerAccountDto, ContractError, JwtClaims, UserAccountDto};
 
 #[derive(Clone)]
 pub struct AuthModule {
@@ -17,7 +17,11 @@ impl AuthModule {
         );
         Self {
             jwt_secret,
-            token_expiry_hours: if token_expiry_hours == 0 { 24 } else { token_expiry_hours },
+            token_expiry_hours: if token_expiry_hours == 0 {
+                24
+            } else {
+                token_expiry_hours
+            },
         }
     }
 }
@@ -35,6 +39,7 @@ impl AuthContract for AuthModule {
             accessible_menus: user.accessible_menus.clone(),
             exp,
             iat: now,
+            user_type: "seller_staff".to_string(),
         };
 
         let header = Header::new(jsonwebtoken::Algorithm::HS256);
@@ -45,6 +50,30 @@ impl AuthContract for AuthModule {
             &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
         )
         .map_err(|e| ContractError::Internal(format!("Failed to generate JWT: {}", e)))
+    }
+
+    fn generate_buyer_token(&self, buyer: &BuyerAccountDto) -> Result<String, ContractError> {
+        let now = Utc::now().timestamp();
+        let exp = now + (self.token_expiry_hours as i64 * 3600);
+
+        let claims = JwtClaims {
+            sub: buyer.id,
+            username: buyer.email.clone(),
+            role: "Buyer".to_string(),
+            accessible_menus: vec![],
+            exp,
+            iat: now,
+            user_type: "buyer".to_string(),
+        };
+
+        let header = Header::new(jsonwebtoken::Algorithm::HS256);
+
+        encode(
+            &header,
+            &claims,
+            &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
+        )
+        .map_err(|e| ContractError::Internal(format!("Failed to generate Buyer JWT: {}", e)))
     }
 
     fn validate_token(&self, token: &str) -> Result<JwtClaims, ContractError> {
@@ -90,10 +119,14 @@ mod tests {
         let auth = AuthModule::new(secret, 24);
         let user = sample_user();
 
-        let token = auth.generate_token(&user).expect("Token generation should succeed");
+        let token = auth
+            .generate_token(&user)
+            .expect("Token generation should succeed");
         assert!(!token.is_empty());
 
-        let claims = auth.validate_token(&token).expect("Token validation should succeed");
+        let claims = auth
+            .validate_token(&token)
+            .expect("Token validation should succeed");
         assert_eq!(claims.sub, user.id);
         assert_eq!(claims.username, user.username);
         assert_eq!(claims.role, user.role);
@@ -115,6 +148,7 @@ mod tests {
             accessible_menus: user.accessible_menus.clone(),
             exp: now - 3600, // 1 hour in the past
             iat: now - 7200,
+            user_type: "seller_staff".to_string(),
         };
 
         let token = encode(
@@ -130,8 +164,41 @@ mod tests {
             ContractError::ValidationError(msg) => {
                 assert!(msg.contains("expired") || msg.contains("ExpiredSignature"));
             }
-            other => panic!("Expected ValidationError for expired token, got {:?}", other),
+            other => panic!(
+                "Expected ValidationError for expired token, got {:?}",
+                other
+            ),
         }
+    }
+
+    #[test]
+    fn test_buyer_token_roundtrip() {
+        let secret = "super-secret-key-minimum-32-chars-length!".to_string();
+        let auth = AuthModule::new(secret, 24);
+        let buyer_id = Uuid::new_v4();
+        let buyer = BuyerAccountDto {
+            id: buyer_id,
+            google_sub: "google-sub-999".to_string(),
+            email: "buyer_test@example.com".to_string(),
+            full_name: "Buyer Test".to_string(),
+            avatar_url: None,
+            phone_number: Some("+628123456789".to_string()),
+            phone_verified: true,
+            is_active: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let token = auth
+            .generate_buyer_token(&buyer)
+            .expect("Buyer token should generate");
+        let claims = auth
+            .validate_token(&token)
+            .expect("Buyer token should validate");
+        assert_eq!(claims.sub, buyer_id);
+        assert_eq!(claims.username, "buyer_test@example.com");
+        assert!(claims.is_buyer());
+        assert!(!claims.is_seller_staff());
     }
 
     // 3. Test invalid token format

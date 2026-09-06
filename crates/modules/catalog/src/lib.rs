@@ -84,7 +84,6 @@ impl CatalogModule {
         Ok(())
     }
 
-
     fn row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<CatalogItemDto, ContractError> {
         let id_str: String = row.get("id");
         let id = Uuid::parse_str(&id_str)
@@ -146,20 +145,31 @@ impl CatalogContract for CatalogModule {
         }
     }
 
-    async fn create_item(&self, req: CreateCatalogItemRequest) -> Result<CatalogItemDto, ContractError> {
+    async fn create_item(
+        &self,
+        req: CreateCatalogItemRequest,
+    ) -> Result<CatalogItemDto, ContractError> {
         if req.name.trim().is_empty() {
-            return Err(ContractError::ValidationError("Item name cannot be empty".to_string()));
+            return Err(ContractError::ValidationError(
+                "Item name cannot be empty".to_string(),
+            ));
         }
         if req.price < 0.0 {
-            return Err(ContractError::ValidationError("Price cannot be negative".to_string()));
+            return Err(ContractError::ValidationError(
+                "Price cannot be negative".to_string(),
+            ));
         }
 
         let id = Uuid::new_v4();
         let sku = req.sku.trim().to_uppercase();
         let name = req.name.trim().to_string();
         let category = req.category.trim().to_string();
-        let image_url = req.image_url.unwrap_or_else(|| "https://via.placeholder.com/500".to_string());
-        let description = req.description.unwrap_or_else(|| "Product description".to_string());
+        let image_url = req
+            .image_url
+            .unwrap_or_else(|| "https://via.placeholder.com/500".to_string());
+        let description = req
+            .description
+            .unwrap_or_else(|| "Product description".to_string());
         let now = Utc::now();
 
         sqlx::query(
@@ -201,7 +211,9 @@ mod tests {
     use program1_core::init_database;
 
     async fn create_test_catalog_module() -> CatalogModule {
-        let pool = init_database("sqlite::memory:").await.expect("In-memory SQLite init failed");
+        let pool = init_database("sqlite::memory:")
+            .await
+            .expect("In-memory SQLite init failed");
         let module = CatalogModule::new(pool);
         module.seed_default_catalog().await.expect("Seeding failed");
         module

@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 use program1_contracts::{
     AnalyticsContract, CatalogContract, ChannelRevenueDto, ChannelType, ContractError,
@@ -42,7 +42,9 @@ impl AnalyticsContract for AnalyticsModule {
 
         for order in &orders {
             gross_revenue += order.total_amount;
-            let entry = channel_revenue_map.entry(order.channel.clone()).or_insert((0, 0.0));
+            let entry = channel_revenue_map
+                .entry(order.channel.clone())
+                .or_insert((0, 0.0));
             entry.0 += 1;
             entry.1 += order.total_amount;
         }
@@ -51,26 +53,50 @@ impl AnalyticsContract for AnalyticsModule {
             ChannelRevenueDto {
                 channel: ChannelType::NativeWeb,
                 channel_name: ChannelType::NativeWeb.to_string(),
-                total_orders: channel_revenue_map.get(&ChannelType::NativeWeb).map(|x| x.0).unwrap_or(0),
-                total_revenue: channel_revenue_map.get(&ChannelType::NativeWeb).map(|x| x.1).unwrap_or(0.0),
+                total_orders: channel_revenue_map
+                    .get(&ChannelType::NativeWeb)
+                    .map(|x| x.0)
+                    .unwrap_or(0),
+                total_revenue: channel_revenue_map
+                    .get(&ChannelType::NativeWeb)
+                    .map(|x| x.1)
+                    .unwrap_or(0.0),
             },
             ChannelRevenueDto {
                 channel: ChannelType::TikTokShop,
                 channel_name: ChannelType::TikTokShop.to_string(),
-                total_orders: channel_revenue_map.get(&ChannelType::TikTokShop).map(|x| x.0).unwrap_or(0),
-                total_revenue: channel_revenue_map.get(&ChannelType::TikTokShop).map(|x| x.1).unwrap_or(0.0),
+                total_orders: channel_revenue_map
+                    .get(&ChannelType::TikTokShop)
+                    .map(|x| x.0)
+                    .unwrap_or(0),
+                total_revenue: channel_revenue_map
+                    .get(&ChannelType::TikTokShop)
+                    .map(|x| x.1)
+                    .unwrap_or(0.0),
             },
             ChannelRevenueDto {
                 channel: ChannelType::Shopee,
                 channel_name: ChannelType::Shopee.to_string(),
-                total_orders: channel_revenue_map.get(&ChannelType::Shopee).map(|x| x.0).unwrap_or(0),
-                total_revenue: channel_revenue_map.get(&ChannelType::Shopee).map(|x| x.1).unwrap_or(0.0),
+                total_orders: channel_revenue_map
+                    .get(&ChannelType::Shopee)
+                    .map(|x| x.0)
+                    .unwrap_or(0),
+                total_revenue: channel_revenue_map
+                    .get(&ChannelType::Shopee)
+                    .map(|x| x.1)
+                    .unwrap_or(0.0),
             },
             ChannelRevenueDto {
                 channel: ChannelType::Tokopedia,
                 channel_name: ChannelType::Tokopedia.to_string(),
-                total_orders: channel_revenue_map.get(&ChannelType::Tokopedia).map(|x| x.0).unwrap_or(0),
-                total_revenue: channel_revenue_map.get(&ChannelType::Tokopedia).map(|x| x.1).unwrap_or(0.0),
+                total_orders: channel_revenue_map
+                    .get(&ChannelType::Tokopedia)
+                    .map(|x| x.0)
+                    .unwrap_or(0),
+                total_revenue: channel_revenue_map
+                    .get(&ChannelType::Tokopedia)
+                    .map(|x| x.1)
+                    .unwrap_or(0.0),
             },
         ];
 

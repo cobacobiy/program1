@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/store.css">
   <link rel="stylesheet" href="store.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/assets/store.js" defer></script>
   <script src="store.js" defer></script>
 </head>
@@ -105,33 +106,173 @@
 
   <!-- BUYER LOGIN / REGISTER MODAL -->
   <div class="modal-overlay" id="buyer-login-modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width:480px">
       <div class="modal-header">
-        <h2>🔑 Login Pembeli Shopee Store</h2>
+        <h2 id="buyer-modal-title">🔐 Akun Pembeli</h2>
         <button class="modal-close" onclick="closeBuyerLoginModal()">&times;</button>
       </div>
-      
-      <div id="buyer-logged-in-view" style="display:none; text-align:center; padding:1rem 0">
-        <div class="buyer-avatar-lg" id="modal-buyer-avatar">P</div>
-        <h3 id="modal-buyer-name" style="font-size:1.2rem; margin-top:0.6rem; color:#fff">Status Akun Pembeli</h3>
-        <p id="modal-buyer-email" style="font-size:0.85rem; color:var(--cyan); margin-bottom:1.5rem">buyer@shopee.co.id</p>
-        <button type="button" class="btn-checkout" style="background:var(--shopee-red)" onclick="logoutBuyer()">Keluar / Logout Pembeli</button>
+
+      <!-- LOGGED IN PROFILE VIEW -->
+      <div id="buyer-logged-in-view" style="display:none; padding:0.5rem 0">
+        <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.2rem; background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border:1px solid var(--card-border)">
+          <div class="buyer-avatar-lg" id="modal-buyer-avatar">P</div>
+          <div style="flex:1">
+            <h3 id="modal-buyer-name" style="font-size:1.1rem; color:var(--text-heading); margin:0">Nama Pembeli</h3>
+            <p id="modal-buyer-email" style="font-size:0.85rem; color:var(--text-muted); margin:0.2rem 0">buyer@gmail.com</p>
+            <div id="buyer-phone-status-badge" style="margin-top:0.4rem"></div>
+          </div>
+        </div>
+
+        <!-- ADDRESS BOOK SECTION -->
+        <div style="margin-bottom:1.5rem">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem">
+            <strong style="font-size:0.9rem; color:var(--text-heading)">📍 Buku Alamat Pengiriman</strong>
+            <button type="button" class="btn-sm-action" onclick="openAddAddressModal()">+ Tambah Alamat</button>
+          </div>
+          <div id="buyer-addresses-list" style="display:flex; flex-direction:column; gap:0.6rem; max-height:220px; overflow-y:auto">
+            <p style="font-size:0.8rem; color:var(--text-muted)">Memuat alamat...</p>
+          </div>
+        </div>
+
+        <button type="button" class="btn-checkout" style="background:var(--shopee-red); margin-top:0.5rem" onclick="logoutBuyer()">Keluar / Logout Pembeli</button>
       </div>
 
-      <form id="buyer-login-form">
+      <!-- GOOGLE LOGIN VIEW -->
+      <div id="buyer-unauthenticated-view">
+        <div style="text-align:center; margin-bottom:1.5rem">
+          <p style="font-size:0.88rem; color:var(--text-muted); line-height:1.5">
+            Masuk dengan Akun Google untuk sinkronisasi riwayat pesanan, verifikasi nomor WhatsApp/HP, dan penyimpanan alamat pengiriman resmi.
+          </p>
+        </div>
+
+        <div id="google-signin-wrapper" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:50px; margin:1rem 0">
+          <div id="google-signin-btn"></div>
+          <p id="google-signin-unconfigured" style="display:none; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:0.5rem">
+            Google Sign-In belum dikonfigurasi (GOOGLE_CLIENT_ID belum diatur di server).
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUYER OTP PHONE VERIFICATION MODAL -->
+  <div class="modal-overlay" id="buyer-otp-modal">
+    <div class="modal-content" style="max-width:440px">
+      <div class="modal-header">
+        <h2>📱 Verifikasi Nomor WhatsApp / HP</h2>
+        <button class="modal-close" onclick="closeBuyerOtpModal()">&times;</button>
+      </div>
+
+      <div style="padding:0.5rem 0">
+        <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.5; margin-bottom:1rem">
+          Untuk keamanan transaksi dan konfirmasi pengiriman pesanan, harap verifikasi nomor handphone / WhatsApp Anda melalui kode OTP.
+        </p>
+
+        <!-- STEP 1: INPUT PHONE & REQUEST OTP -->
+        <div id="otp-step-phone">
+          <div class="form-group">
+            <label>Nomor WhatsApp / HP Aktif</label>
+            <input type="tel" id="otp-input-phone" class="form-control" placeholder="Contoh: 081234567890" required>
+            <span style="font-size:0.72rem; color:var(--text-muted)">Gunakan format nomor Indonesia (08... atau 628...)</span>
+          </div>
+          <button type="button" class="btn-checkout" id="btn-request-otp" onclick="handleRequestOtp()">
+            📲 Kirim Kode OTP
+          </button>
+        </div>
+
+        <!-- STEP 2: INPUT OTP CODE & VERIFY -->
+        <div id="otp-step-verify" style="display:none">
+          <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem">
+            <div style="font-size:0.82rem; color:#93c5fd">Kode OTP 6 digit telah dikirimkan ke:</div>
+            <strong id="otp-sent-phone-label" style="font-size:0.95rem; color:#fff">08123456789</strong>
+          </div>
+
+          <div class="form-group">
+            <label>Masukkan 6 Digit Kode OTP</label>
+            <input type="text" id="otp-input-code" class="form-control" placeholder="123456" maxlength="6" style="font-size:1.4rem; letter-spacing:0.4rem; text-align:center; font-family:'JetBrains Mono'" required>
+            <div style="display:flex; justify-content:space-between; margin-top:0.4rem; font-size:0.75rem; color:var(--text-muted)">
+              <span>Waktu berlaku: <strong id="otp-timer-label" style="color:var(--shopee-orange)">05:00</strong></span>
+              <span id="otp-attempts-label">Sisa percobaan: 3</span>
+            </div>
+          </div>
+
+          <button type="button" class="btn-checkout" id="btn-submit-verify-otp" onclick="handleVerifyOtp()">
+            ✅ Verifikasi Kode OTP
+          </button>
+
+          <div style="margin-top:1rem; text-align:center">
+            <button type="button" style="background:none; border:none; color:var(--cyan); font-size:0.78rem; cursor:pointer" onclick="handleResendOtp()">
+              🔄 Ganti Nomor / Kirim Ulang OTP
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUYER ADD/EDIT ADDRESS MODAL -->
+  <div class="modal-overlay" id="buyer-address-modal">
+    <div class="modal-content" style="max-width:520px">
+      <div class="modal-header">
+        <h2 id="address-modal-title">📍 Tambah Alamat Pengiriman</h2>
+        <button class="modal-close" onclick="closeBuyerAddressModal()">&times;</button>
+      </div>
+
+      <form id="buyer-address-form" onsubmit="handleSaveBuyerAddress(event)">
+        <input type="hidden" id="addr-id">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem">
+          <div class="form-group">
+            <label>Label Alamat</label>
+            <input type="text" id="addr-label" class="form-control" placeholder="Rumah / Kantor / Apartemen" value="Rumah">
+          </div>
+          <div class="form-group">
+            <label>Nama Penerima *</label>
+            <input type="text" id="addr-recipient-name" class="form-control" placeholder="Nama Lengkap Penerima" required>
+          </div>
+        </div>
+
         <div class="form-group">
-          <label>Email / Nomor HP WhatsApp Pembeli</label>
-          <input type="text" id="buyer-input-login" class="form-control" placeholder="contoh: 08123456789 atau budi@shopee.co.id" required>
+          <label>Nomor HP Penerima *</label>
+          <input type="tel" id="addr-phone" class="form-control" placeholder="08123456789" required>
         </div>
+
         <div class="form-group">
-          <label>Kata Sandi / PIN</label>
-          <input type="password" id="buyer-input-pass" class="form-control" placeholder="••••••••" required>
+          <label>Alamat Jalan & No. Rumah / Gedung *</label>
+          <textarea id="addr-street" class="form-control" rows="2" placeholder="Jl. Jenderal Sudirman Kav. 52-53, Tower B Lt. 12" required></textarea>
         </div>
-        <button type="submit" class="btn-checkout">Masuk Akun Pembeli</button>
-        <div style="display:flex; justify-content:space-between; margin-top:1rem; font-size:0.8rem">
-          <a href="#" style="color:var(--text-muted); text-decoration:none" onclick="quickGuestLoginBuyer()">🚀 Coba Akun Demo Pembeli</a>
-          <a href="#" style="color:var(--shopee-orange); font-weight:600; text-decoration:none" onclick="quickGuestLoginBuyer()">Daftar Akun Baru &rarr;</a>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem">
+          <div class="form-group">
+            <label>Kecamatan (Subdistrict) *</label>
+            <input type="text" id="addr-subdistrict" class="form-control" placeholder="Kebayoran Baru" required>
+          </div>
+          <div class="form-group">
+            <label>Kota / Kabupaten *</label>
+            <input type="text" id="addr-city" class="form-control" placeholder="Jakarta Selatan" required>
+          </div>
         </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem">
+          <div class="form-group">
+            <label>Provinsi *</label>
+            <input type="text" id="addr-province" class="form-control" placeholder="DKI Jakarta" required>
+          </div>
+          <div class="form-group">
+            <label>Kode Pos *</label>
+            <input type="text" id="addr-postal-code" class="form-control" placeholder="12190" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:0.25rem">
+          <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem">
+            <input type="checkbox" id="addr-is-default" checked>
+            <span>Jadikan Alamat Utama / Default</span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn-checkout" style="margin-top:1rem">
+          💾 Simpan Alamat
+        </button>
       </form>
     </div>
   </div>
@@ -148,22 +289,45 @@
         <p style="color:var(--text-muted)">Keranjang Anda kosong.</p>
       </div>
 
-      <form id="checkout-form" style="display: none; margin-top: 1.5rem;">
-        <h3 style="font-size: 1rem; margin-bottom: 0.8rem; color: var(--shopee-orange)">Detail Informasi Pengiriman</h3>
-        <div class="form-group">
-          <label>Nama Lengkap Pembeli</label>
-          <input type="text" id="cust-name" class="form-control" placeholder="Jane Doe" required>
+      <!-- CHECKOUT SECTION WITH IMMUTABLE SHIPPING SNAPSHOT CONFIRMATION -->
+      <div id="checkout-section" style="display:none; margin-top:1.5rem; border-top:1px solid var(--card-border); padding-top:1.2rem">
+        <!-- NOT LOGGED IN PROMPT -->
+        <div id="checkout-unauth-box" style="display:none; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); border-radius:10px; padding:1.2rem; text-align:center">
+          <div style="font-size:1.5rem; margin-bottom:0.4rem">🔐</div>
+          <strong style="color:#fcd34d; font-size:0.95rem">Silakan Masuk untuk Melanjutkan Checkout</strong>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin:0.4rem 0 1rem">
+            Masuk dengan Akun Google untuk memilih alamat pengiriman dan verifikasi penerima pesanan.
+          </p>
+          <button type="button" class="btn-checkout" onclick="openBuyerLoginModal()">Masuk Akun Google</button>
         </div>
-        <div class="form-group">
-          <label>Alamat Email Pembeli</label>
-          <input type="email" id="cust-email" class="form-control" placeholder="jane@example.com" required>
+
+        <!-- UNVERIFIED PHONE PROMPT -->
+        <div id="checkout-unverified-box" style="display:none; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:1.2rem; text-align:center">
+          <div style="font-size:1.5rem; margin-bottom:0.4rem">📱</div>
+          <strong style="color:#fca5a5; font-size:0.95rem">Verifikasi Nomor HP Diperlukan</strong>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin:0.4rem 0 1rem">
+            Nomor WhatsApp/HP Anda belum diverifikasi dengan OTP. Harap verifikasi untuk konfirmasi kurir & tracking pesanan.
+          </p>
+          <button type="button" class="btn-checkout" onclick="openOtpModal()">Verifikasi OTP Sekarang</button>
         </div>
-        <div class="form-group">
-          <label>Alamat Lengkap Pengiriman</label>
-          <input type="text" id="cust-address" class="form-control" placeholder="Jl. Sudirman No. 123, Jakarta Selatan" required>
-        </div>
-        <button type="submit" class="btn-checkout">Proses Checkout Sekarang</button>
-      </form>
+
+        <!-- CONFIRMED SHIPPING ADDRESS & CHECKOUT FORM -->
+        <form id="checkout-confirmed-form" style="display:none" onsubmit="handleProcessCheckout(event)">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem">
+            <h3 style="font-size:0.95rem; margin:0; color:var(--shopee-orange)">📦 Konfirmasi Alamat Pengiriman (Snapshot Permanen)</h3>
+            <button type="button" class="btn-sm-action" onclick="openAddAddressModal()">+ Tambah Alamat</button>
+          </div>
+
+          <!-- ADDRESS SELECTOR CARD -->
+          <div id="confirmed-address-card" class="confirmed-address-card" style="margin-bottom:1rem">
+            <!-- Rendered by store.js -->
+          </div>
+
+          <button type="submit" id="btn-submit-order" class="btn-checkout" style="font-size:1rem; padding:0.85rem">
+            🚀 Konfirmasi & Pesan Sekarang
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 

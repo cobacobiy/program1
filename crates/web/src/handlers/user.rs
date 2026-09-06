@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Json,
+    Extension, Json,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -10,7 +10,8 @@ use uuid::Uuid;
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
-    AuditLogEntry, CreateUserAccountRequest, UpdateUserPermissionsRequest, UserAccountDto,
+    ActivateBreakGlassRequest, AuditLogEntry, BreakGlassStatusDto, CreateUserAccountRequest,
+    DeactivateBreakGlassRequest, JwtClaims, UpdateUserPermissionsRequest, UserAccountDto,
 };
 
 /// List all registered user accounts with RBAC assignments (Admin only)
@@ -56,17 +57,20 @@ pub async fn create_user_account(
 ) -> Result<(StatusCode, Json<UserAccountDto>), ApiError> {
     let acc = state.user_contract.create_account(payload).await?;
 
-    let _ = state.audit_contract.log_action(AuditLogEntry {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
-        actor_id: Some(acc.id),
-        actor_username: acc.username.clone(),
-        action: "USER_CREATED".to_string(),
-        resource_type: "user".to_string(),
-        resource_id: Some(acc.id),
-        details: json!({ "role": acc.role }).to_string(),
-        ip_address: None,
-    }).await;
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(acc.id),
+            actor_username: acc.username.clone(),
+            action: "USER_CREATED".to_string(),
+            resource_type: "user".to_string(),
+            resource_id: Some(acc.id),
+            details: json!({ "role": acc.role }).to_string(),
+            ip_address: None,
+        })
+        .await;
 
     Ok((StatusCode::CREATED, Json(acc)))
 }
@@ -100,17 +104,131 @@ pub async fn update_user_permissions(
         .update_permissions(id, payload.accessible_menus.clone())
         .await?;
 
-    let _ = state.audit_contract.log_action(AuditLogEntry {
-        id: Uuid::new_v4(),
-        timestamp: Utc::now(),
-        actor_id: Some(id),
-        actor_username: acc.username.clone(),
-        action: "PERMISSIONS_UPDATED".to_string(),
-        resource_type: "user".to_string(),
-        resource_id: Some(id),
-        details: json!({ "accessible_menus": payload.accessible_menus }).to_string(),
-        ip_address: None,
-    }).await;
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(id),
+            actor_username: acc.username.clone(),
+            action: "PERMISSIONS_UPDATED".to_string(),
+            resource_type: "user".to_string(),
+            resource_id: Some(id),
+            details: json!({ "accessible_menus": payload.accessible_menus }).to_string(),
+            ip_address: None,
+        })
+        .await;
 
     Ok(Json(acc))
+}
+
+/// Activate temporary emergency break-glass developer access (Admin/Owner only)
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/break-glass/activate",
+    request_body = ActivateBreakGlassRequest,
+    responses(
+        (status = 200, description = "Break-glass developer access activated", body = BreakGlassStatusDto),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Admin Break-Glass"
+)]
+pub async fn activate_break_glass(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    ValidatedJson(payload): ValidatedJson<ActivateBreakGlassRequest>,
+) -> Result<Json<BreakGlassStatusDto>, ApiError> {
+    let status = state
+        .user_contract
+        .activate_break_glass(payload.clone(), &claims.username)
+        .await?;
+
+    state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: claims.username,
+            action: "BREAK_GLASS_ACTIVATED".to_string(),
+            resource_type: "break_glass".to_string(),
+            resource_id: None,
+            details:
+                json!({ "reason": payload.reason, "duration_minutes": payload.duration_minutes })
+                    .to_string(),
+            ip_address: None,
+        })
+        .await?;
+
+    Ok(Json(status))
+}
+
+/// Deactivate emergency break-glass developer access immediately (Admin/Owner only)
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/break-glass/deactivate",
+    responses(
+        (status = 200, description = "Break-glass developer access deactivated", body = BreakGlassStatusDto),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Admin Break-Glass"
+)]
+pub async fn deactivate_break_glass(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    body: Option<Json<DeactivateBreakGlassRequest>>,
+) -> Result<Json<BreakGlassStatusDto>, ApiError> {
+    let reason = body.and_then(|b| b.0.reason);
+    let status = state
+        .user_contract
+        .deactivate_break_glass(&claims.username, reason.clone())
+        .await?;
+
+    state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: claims.username,
+            action: "BREAK_GLASS_DEACTIVATED".to_string(),
+            resource_type: "break_glass".to_string(),
+            resource_id: None,
+            details: json!({ "reason": reason }).to_string(),
+            ip_address: None,
+        })
+        .await?;
+
+    Ok(Json(status))
+}
+
+/// Get current emergency break-glass developer access status (Admin/Owner only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/break-glass/status",
+    responses(
+        (status = 200, description = "Break-glass status", body = BreakGlassStatusDto),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Admin Break-Glass"
+)]
+pub async fn get_break_glass_status(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<JwtClaims>,
+) -> Result<Json<BreakGlassStatusDto>, ApiError> {
+    let status = state.user_contract.get_break_glass_status().await?;
+    Ok(Json(status))
 }

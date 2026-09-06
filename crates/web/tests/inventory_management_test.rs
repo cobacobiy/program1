@@ -20,7 +20,9 @@ use tower::ServiceExt;
 
 async fn setup_test_app() -> (axum::Router, String, String) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
-    let pool = init_database("sqlite::memory:").await.expect("Test DB init failed");
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Test DB init failed");
 
     let user_module = Arc::new(UserModule::new(pool.clone()));
     let auth_module = Arc::new(AuthModule::new(secret, 24));
@@ -39,6 +41,18 @@ async fn setup_test_app() -> (axum::Router, String, String) {
     let audit_module = Arc::new(AuditModule::new(pool.clone()));
     let rate_limiter = Arc::new(IpRateLimiter::new());
 
+    let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
+        client_id: "test".to_string(),
+    });
+    let sms_sender = Arc::new(program1_module_buyer::ConsoleOrProviderSmsSender::default());
+    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new(
+        pool.clone(),
+        auth_module.clone(),
+        google_verifier,
+        sms_sender,
+        audit_module.clone(),
+    ));
+
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
@@ -46,7 +60,10 @@ async fn setup_test_app() -> (axum::Router, String, String) {
     let admin_user = user_module.authenticate("admin", "admin123").await.unwrap();
     let admin_token = auth_module.generate_token(&admin_user).unwrap();
 
-    let staff_user = user_module.authenticate("staff_cs", "admin123").await.unwrap();
+    let staff_user = user_module
+        .authenticate("staff_cs", "admin123")
+        .await
+        .unwrap();
     let staff_token = auth_module.generate_token(&staff_user).unwrap();
 
     let state = AppState {
@@ -60,8 +77,10 @@ async fn setup_test_app() -> (axum::Router, String, String) {
         order_contract: order_module,
         analytics_contract: analytics_module,
         audit_contract: audit_module,
+        buyer_contract: buyer_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
+        google_client_id: "test".to_string(),
     };
 
     (create_app(state), admin_token, staff_token)
@@ -119,11 +138,14 @@ async fn test_update_all_stock_types_and_audit_logs() {
         .uri(format!("/api/v1/inventory/{}/warehouse-stock", product_id))
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "new_warehouse_stock": 2000,
-            "admin_note": "Restock kontainer dari supplier",
-            "updated_by": "Admin Warehouse"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "new_warehouse_stock": 2000,
+                "admin_note": "Restock kontainer dari supplier",
+                "updated_by": "Admin Warehouse"
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_wh = app.clone().oneshot(req_wh).await.unwrap();
     assert_eq!(res_wh.status(), StatusCode::OK);
@@ -134,11 +156,14 @@ async fn test_update_all_stock_types_and_audit_logs() {
         .uri(format!("/api/v1/inventory/{}/safety-stock", product_id))
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "new_safety_stock": 100,
-            "admin_note": "Safety stock 100 unit",
-            "updated_by": "Admin"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "new_safety_stock": 100,
+                "admin_note": "Safety stock 100 unit",
+                "updated_by": "Admin"
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_safety = app.clone().oneshot(req_safety).await.unwrap();
     assert_eq!(res_safety.status(), StatusCode::OK);
@@ -149,11 +174,14 @@ async fn test_update_all_stock_types_and_audit_logs() {
         .uri(format!("/api/v1/inventory/{}/spare-stock", product_id))
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "new_spare_stock": 50,
-            "admin_note": "Alokasi cadangan untuk giveaway",
-            "updated_by": "Admin Marketing"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "new_spare_stock": 50,
+                "admin_note": "Alokasi cadangan untuk giveaway",
+                "updated_by": "Admin Marketing"
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_spare = app.clone().oneshot(req_spare).await.unwrap();
     assert_eq!(res_spare.status(), StatusCode::OK);
@@ -164,11 +192,14 @@ async fn test_update_all_stock_types_and_audit_logs() {
         .uri(format!("/api/v1/inventory/{}/promotion-stock", product_id))
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "new_promotion_stock": 200,
-            "admin_note": "Alokasi Flash Sale Shopee",
-            "updated_by": "Admin Promo"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "new_promotion_stock": 200,
+                "admin_note": "Alokasi Flash Sale Shopee",
+                "updated_by": "Admin Promo"
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_promo = app.clone().oneshot(req_promo).await.unwrap();
     assert_eq!(res_promo.status(), StatusCode::OK);
@@ -188,7 +219,6 @@ async fn test_update_all_stock_types_and_audit_logs() {
     assert!(logs.iter().any(|l| l["updated_by"] == "Admin Marketing"));
     assert!(logs.iter().any(|l| l["updated_by"] == "Admin Promo"));
 }
-
 
 #[tokio::test]
 async fn test_bulk_update_and_low_stock_alerts() {
@@ -212,22 +242,25 @@ async fn test_bulk_update_and_low_stock_alerts() {
         .uri("/api/v1/inventory/bulk-update")
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "adjustments": [
-                {
-                    "product_id": p1,
-                    "stock_type": "safety",
-                    "new_value": 700
-                },
-                {
-                    "product_id": p2,
-                    "stock_type": "spare",
-                    "new_value": 20
-                }
-            ],
-            "admin_note": "Penyesuaian stok massal akhir bulan",
-            "updated_by": "Admin Pusat"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "adjustments": [
+                    {
+                        "product_id": p1,
+                        "stock_type": "safety",
+                        "new_value": 700
+                    },
+                    {
+                        "product_id": p2,
+                        "stock_type": "spare",
+                        "new_value": 20
+                    }
+                ],
+                "admin_note": "Penyesuaian stok massal akhir bulan",
+                "updated_by": "Admin Pusat"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let res_bulk = app.clone().oneshot(req_bulk).await.unwrap();
@@ -276,11 +309,14 @@ async fn test_non_admin_cannot_mutate_stock_forbidden() {
         .uri(format!("/api/v1/inventory/{}/warehouse-stock", product_id))
         .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "new_warehouse_stock": 500,
-            "admin_note": "Staff coba ubah stok",
-            "updated_by": "Staff"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "new_warehouse_stock": 500,
+                "admin_note": "Staff coba ubah stok",
+                "updated_by": "Staff"
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_wh = app.clone().oneshot(req_wh).await.unwrap();
     assert_eq!(res_wh.status(), StatusCode::FORBIDDEN);
