@@ -100,14 +100,22 @@ pub async fn request_otp_handler(
     Extension(claims): Extension<JwtClaims>,
     ValidatedJson(payload): ValidatedJson<OtpRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state
+    let dev_code = state
         .buyer_contract
         .request_phone_otp(claims.sub, &payload.phone_number)
         .await?;
-    Ok(Json(json!({
+
+    let mut resp = json!({
         "status": "success",
         "message": "Kode OTP berhasil dikirim melalui SMS/WhatsApp. Berlaku 5 menit."
-    })))
+    });
+
+    if let Some(code) = dev_code {
+        resp["dev_otp"] = serde_json::Value::String(code);
+        resp["is_simulation"] = serde_json::Value::Bool(true);
+    }
+
+    Ok(Json(resp))
 }
 
 /// Verify phone number OTP code

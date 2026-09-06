@@ -237,10 +237,13 @@
 
         <!-- STEP 2: INPUT OTP CODE & VERIFY -->
         <div id="otp-step-verify" style="display:none">
-          <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem">
+          <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:8px; padding:0.75rem 1rem; margin-bottom:0.75rem">
             <div style="font-size:0.82rem; color:#93c5fd">Kode OTP 6 digit telah dikirimkan ke:</div>
             <strong id="otp-sent-phone-label" style="font-size:0.95rem; color:#fff">08123456789</strong>
           </div>
+
+          <!-- DEV / DEMO NOTICE WHEN NO LIVE WHATSAPP GATEWAY CONFIGURED -->
+          <div id="otp-dev-notice" style="display:none; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.82rem; color:#fde68a; line-height:1.45"></div>
 
           <div class="form-group">
             <label>Masukkan 6 Digit Kode OTP</label>
@@ -255,10 +258,13 @@
             ✅ Verifikasi Kode OTP
           </button>
 
-          <div style="margin-top:1rem; text-align:center">
+          <div style="margin-top:1rem; display:flex; flex-direction:column; gap:0.5rem; align-items:center; text-align:center">
             <button type="button" style="background:none; border:none; color:var(--cyan); font-size:0.78rem; cursor:pointer" onclick="handleResendOtp()">
               🔄 Ganti Nomor / Kirim Ulang OTP
             </button>
+            <a id="otp-wa-admin-link" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:0.35rem; color:#22c55e; font-size:0.76rem; text-decoration:none">
+              💬 Bantuan: Chat WhatsApp Admin Toko
+            </a>
           </div>
         </div>
       </div>

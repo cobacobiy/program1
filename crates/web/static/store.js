@@ -586,13 +586,37 @@ async function handleRequestOtp() {
     });
 
     if (res.ok) {
+      const data = await res.json();
       currentOtpPhone = phone;
       const sentLabel = document.getElementById("otp-sent-phone-label");
       if (sentLabel) sentLabel.innerText = phone;
       document.getElementById("otp-step-phone").style.display = "none";
       document.getElementById("otp-step-verify").style.display = "block";
       startOtpCountdown(300);
-      alert(`📲 Kode OTP telah dikirimkan ke nomor ${phone}.`);
+
+      // Setup WA Admin link
+      const waLink = document.getElementById("otp-wa-admin-link");
+      if (waLink) {
+        const storeWa = window.STORE_WHATSAPP || "6281234567890";
+        const cleanWa = storeWa.replace(/[^0-9]/g, "");
+        const text = encodeURIComponent(`Halo Admin, saya ingin konfirmasi verifikasi nomor toko saya: ${phone}`);
+        waLink.href = `https://wa.me/${cleanWa}?text=${text}`;
+      }
+
+      // Handle simulated/dev OTP
+      const codeInput = document.getElementById("otp-input-code");
+      const devNotice = document.getElementById("otp-dev-notice");
+      if (data && data.dev_otp) {
+        if (codeInput) codeInput.value = data.dev_otp;
+        if (devNotice) {
+          devNotice.style.display = "block";
+          devNotice.innerHTML = `💡 <strong>Mode Demo / Simulasi:</strong> Gateway WhatsApp belum diset token Fonnte. Kode OTP Anda otomatis terisi: <span style="font-family:'JetBrains Mono'; font-size:1.15rem; color:#facc15; font-weight:bold; letter-spacing:2px">${data.dev_otp}</span>.<br>Klik tombol <strong>Verifikasi Kode OTP</strong> di bawah untuk langsung lanjut!`;
+        }
+      } else {
+        if (codeInput) codeInput.value = "";
+        if (devNotice) devNotice.style.display = "none";
+        alert(`📲 Kode OTP telah dikirimkan ke WhatsApp/SMS nomor ${phone}.`);
+      }
     } else {
       const err = await res.json();
       alert(`Gagal mengirim OTP: ${err.message || err.error || JSON.stringify(err)}`);
@@ -680,6 +704,10 @@ function handleResendOtp() {
   if (otpTimerInterval) clearInterval(otpTimerInterval);
   document.getElementById("otp-step-phone").style.display = "block";
   document.getElementById("otp-step-verify").style.display = "none";
+  const codeInput = document.getElementById("otp-input-code");
+  if (codeInput) codeInput.value = "";
+  const devNotice = document.getElementById("otp-dev-notice");
+  if (devNotice) devNotice.style.display = "none";
 }
 
 // --- BUYER ADDRESS BOOK ENGINE ---

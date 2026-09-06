@@ -229,9 +229,12 @@ impl GoogleTokenVerifier for ProductionGoogleVerifier {
 #[async_trait]
 pub trait SmsOtpSender: Send + Sync {
     async fn send_otp(&self, phone_number: &str, otp_code: &str) -> Result<(), ContractError>;
+    fn is_live_provider(&self) -> bool {
+        false
+    }
 }
 
-/// Production SMS OTP Sender (supporting Twilio/Zenziva or Console logging in dev)
+/// Production SMS / WhatsApp OTP Sender (supporting Fonnte, Twilio, Generic HTTP or Console logging in dev)
 #[derive(Debug, Clone)]
 pub struct ConsoleOrProviderSmsSender {
     pub app_env: String,
@@ -264,9 +267,106 @@ impl Default for ConsoleOrProviderSmsSender {
 
 #[async_trait]
 impl SmsOtpSender for ConsoleOrProviderSmsSender {
+    fn is_live_provider(&self) -> bool {
+        let is_prod = self.app_env.to_lowercase() == "production";
+        let has_valid_api_key = !self.sms_provider_api_key.trim().is_empty()
+            && !self.sms_provider_api_key.contains("your-sms-provider");
+        let has_valid_provider = !self.sms_provider.trim().is_empty()
+            && self.sms_provider.trim().to_lowercase() != "console";
+
+        is_prod || (has_valid_provider && has_valid_api_key)
+    }
+
     async fn send_otp(&self, phone_number: &str, otp_code: &str) -> Result<(), ContractError> {
         let masked = mask_phone(phone_number);
         let is_prod = self.app_env.to_lowercase() == "production";
+        let provider_lower = self.sms_provider.trim().to_lowercase();
+        let is_fonnte = provider_lower == "fonnte" || provider_lower.contains("api.fonnte.com");
+
+        if is_fonnte {
+            let token = self.sms_provider_api_key.trim();
+            if token.is_empty() || token.contains("your-sms-provider") {
+                if is_prod {
+                    return Err(ContractError::Internal(
+                        "Fonnte WhatsApp Token belum dikonfigurasi pada server produksi. Pengiriman OTP gagal demi keamanan."
+                            .to_string(),
+                    ));
+                }
+            } else {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .map_err(|e| ContractError::Internal(format!("HTTP client build error: {}", e)))?;
+
+                let resp = client
+                    .post("https://api.fonnte.com/send")
+                    .header("Authorization", token)
+                    .json(&serde_json::json!({
+                        "target": phone_number,
+                        "message": format!("*Kode OTP Program1*\n\nKode verifikasi Anda adalah: *{}*\n\nJangan berikan kode ini kepada siapapun demi keamanan akun Anda. Berlaku selama 5 menit.", otp_code),
+                        "countryCode": "62",
+                    }))
+                    .send()
+                    .await
+                    .map_err(|e| ContractError::Internal(format!("Gagal mengirim WhatsApp OTP via Fonnte: {}", e)))?;
+
+                let status = resp.status();
+                if !status.is_success() {
+                    let err_text = resp.text().await.unwrap_or_default();
+                    tracing::warn!(status = %status, err = %err_text, "Fonnte WhatsApp API error");
+                    if is_prod {
+                        return Err(ContractError::Internal(format!(
+                            "WhatsApp Gateway (Fonnte) mengembalikan status error: {}",
+                            err_text
+                        )));
+                    }
+                } else {
+                    tracing::info!(phone = %masked, "WhatsApp OTP dispatched successfully via Fonnte");
+                    return Ok(());
+                }
+            }
+        }
+
+        if self.sms_provider.starts_with("http://") || self.sms_provider.starts_with("https://") {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .map_err(|e| {
+                    ContractError::Internal(format!("HTTP client build error: {}", e))
+                })?;
+            let resp = client
+                .post(&self.sms_provider)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", self.sms_provider_api_key),
+                )
+                .json(&serde_json::json!({
+                    "phone": phone_number,
+                    "target": phone_number,
+                    "message": format!("Kode OTP Anda: {}", otp_code),
+                }))
+                .send()
+                .await
+                .map_err(|e| {
+                    ContractError::Internal(format!("Gagal mengirim SMS/WA OTP: {}", e))
+                })?;
+
+            if !resp.status().is_success() {
+                if is_prod {
+                    return Err(ContractError::Internal(format!(
+                        "SMS/WA Provider mengembalikan status error: {}",
+                        resp.status()
+                    )));
+                }
+            } else {
+                tracing::info!(
+                    phone = %masked,
+                    provider = %self.sms_provider,
+                    "SMS/WA OTP dispatched via generic HTTP endpoint"
+                );
+                return Ok(());
+            }
+        }
 
         if is_prod {
             // In production, must FAIL CLOSED if SMS provider or API key is not properly configured
@@ -276,45 +376,11 @@ impl SmsOtpSender for ConsoleOrProviderSmsSender {
                 || self.sms_provider_api_key.contains("your-sms-provider")
             {
                 return Err(ContractError::Internal(
-                    "SMS Provider tidak dikonfigurasi pada server produksi. Pengiriman OTP gagal demi keamanan."
+                    "SMS/WhatsApp Provider tidak dikonfigurasi pada server produksi. Pengiriman OTP gagal demi keamanan."
                         .to_string(),
                 ));
             }
 
-            // Real HTTP dispatch if provider is an HTTP/HTTPS endpoint
-            if self.sms_provider.starts_with("http://") || self.sms_provider.starts_with("https://")
-            {
-                let client = reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(10))
-                    .build()
-                    .map_err(|e| {
-                        ContractError::Internal(format!("HTTP client build error: {}", e))
-                    })?;
-                let resp = client
-                    .post(&self.sms_provider)
-                    .header(
-                        "Authorization",
-                        format!("Bearer {}", self.sms_provider_api_key),
-                    )
-                    .json(&serde_json::json!({
-                        "phone": phone_number,
-                        "message": format!("Kode OTP Anda: {}", otp_code),
-                    }))
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        ContractError::Internal(format!("Gagal mengirim SMS OTP: {}", e))
-                    })?;
-
-                if !resp.status().is_success() {
-                    return Err(ContractError::Internal(format!(
-                        "SMS Provider mengembalikan status error: {}",
-                        resp.status()
-                    )));
-                }
-            }
-
-            // Production SMS provider integration: NEVER log raw OTP in production!
             tracing::info!(
                 phone = %masked,
                 provider = %self.sms_provider,
@@ -323,9 +389,9 @@ impl SmsOtpSender for ConsoleOrProviderSmsSender {
             Ok(())
         } else {
             // Development / test environment: NEVER log raw OTP in shared output
-            tracing::debug!(
+            tracing::info!(
                 phone = %masked,
-                "Simulated SMS OTP dispatch for local testing"
+                "Simulated SMS/WA OTP dispatch for local/staging testing"
             );
             Ok(())
         }
@@ -779,7 +845,7 @@ impl BuyerContract for BuyerModule {
         &self,
         buyer_id: Uuid,
         phone_number: &str,
-    ) -> Result<(), ContractError> {
+    ) -> Result<Option<String>, ContractError> {
         let canonical_phone = normalize_indonesian_phone(phone_number)?;
 
         // Rate limit / cooldown check from config
@@ -866,7 +932,13 @@ impl BuyerContract for BuyerModule {
             })
             .await;
 
-        Ok(())
+        let dev_code = if self.sms_sender.is_live_provider() {
+            None
+        } else {
+            Some(otp_code)
+        };
+
+        Ok(dev_code)
     }
 
     async fn verify_phone_otp(

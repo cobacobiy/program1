@@ -859,7 +859,7 @@ pub trait BuyerContract: Send + Sync {
         &self,
         buyer_id: Uuid,
         phone_number: &str,
-    ) -> Result<(), ContractError>;
+    ) -> Result<Option<String>, ContractError>;
     async fn verify_phone_otp(
         &self,
         buyer_id: Uuid,
