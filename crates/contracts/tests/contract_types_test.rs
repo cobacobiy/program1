@@ -1,5 +1,8 @@
 use chrono::Utc;
-use program1_contracts::{BuyerAccountDto, BuyerAddressDto, JwtClaims, ShippingAddressSnapshot};
+use program1_contracts::{
+    BuyerAccountDto, BuyerAddressDto, ChatMessageDto, ChatRoomDto, ChatSenderType, JwtClaims,
+    SendMessageRequest, ShippingAddressSnapshot,
+};
 use uuid::Uuid;
 
 #[test]
@@ -8,7 +11,7 @@ fn test_buyer_contract_types_instantiation() {
     let now = Utc::now();
     let buyer = BuyerAccountDto {
         id: buyer_id,
-        google_sub: "google-123456".to_string(),
+        google_sub: Some("google-123456".to_string()),
         email: "buyer@example.com".to_string(),
         full_name: "Buyer Jane".to_string(),
         avatar_url: Some("https://example.com/avatar.jpg".to_string()),
@@ -253,6 +256,64 @@ fn test_buyer_account_dto_is_active_default() {
 }
 
 #[test]
+fn test_register_buyer_request_validation() {
+    use program1_contracts::RegisterBuyerRequest;
+    use validator::Validate;
+
+    let valid = RegisterBuyerRequest {
+        full_name: "Budi Santoso".to_string(),
+        email: "budi@example.com".to_string(),
+        password: "Password123!".to_string(),
+    };
+    assert!(valid.validate().is_ok());
+
+    let short_name = RegisterBuyerRequest {
+        full_name: "B".to_string(),
+        email: "budi@example.com".to_string(),
+        password: "Password123!".to_string(),
+    };
+    assert!(short_name.validate().is_err());
+
+    let invalid_email = RegisterBuyerRequest {
+        full_name: "Budi Santoso".to_string(),
+        email: "not-an-email".to_string(),
+        password: "Password123!".to_string(),
+    };
+    assert!(invalid_email.validate().is_err());
+
+    let short_password = RegisterBuyerRequest {
+        full_name: "Budi Santoso".to_string(),
+        email: "budi@example.com".to_string(),
+        password: "short".to_string(),
+    };
+    assert!(short_password.validate().is_err());
+}
+
+#[test]
+fn test_buyer_login_request_validation() {
+    use program1_contracts::BuyerLoginRequest;
+    use validator::Validate;
+
+    let valid = BuyerLoginRequest {
+        email: "budi@example.com".to_string(),
+        password: "Password123!".to_string(),
+    };
+    assert!(valid.validate().is_ok());
+
+    let invalid_email = BuyerLoginRequest {
+        email: "invalid-email".to_string(),
+        password: "Password123!".to_string(),
+    };
+    assert!(invalid_email.validate().is_err());
+
+    let empty_password = BuyerLoginRequest {
+        email: "budi@example.com".to_string(),
+        password: "".to_string(),
+    };
+    assert!(empty_password.validate().is_err());
+}
+
+#[test]
 fn test_static_frontend_store_js_contract_parity() {
     let store_js_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -294,3 +355,58 @@ fn test_static_frontend_store_js_contract_parity() {
         "store.js OTP verify must handle BuyerAccountDto directly rather than solely result.buyer"
     );
 }
+
+#[test]
+fn test_chat_contract_types_and_validation() {
+    use validator::Validate;
+
+    let room_id = Uuid::new_v4();
+    let sender_id = Uuid::new_v4();
+    let msg_id = Uuid::new_v4();
+    let now = Utc::now();
+
+    let msg = ChatMessageDto {
+        id: msg_id,
+        room_id,
+        sender_type: ChatSenderType::Buyer,
+        sender_id,
+        sender_name: "Budi Santoso".to_string(),
+        content: "Halo admin, apakah stok produk ini ready?".to_string(),
+        is_read: false,
+        created_at: now,
+    };
+
+    assert_eq!(msg.sender_type, ChatSenderType::Buyer);
+    assert_eq!(msg.sender_name, "Budi Santoso");
+    assert!(!msg.is_read);
+
+    let room = ChatRoomDto {
+        id: room_id,
+        buyer_id: sender_id,
+        buyer_name: "Budi Santoso".to_string(),
+        last_message: Some(msg.content.clone()),
+        unread_count: 1,
+        updated_at: now,
+        created_at: now,
+    };
+
+    assert_eq!(room.unread_count, 1);
+    assert_eq!(room.buyer_name, "Budi Santoso");
+
+    // Validation for SendMessageRequest
+    let valid_req = SendMessageRequest {
+        content: "Tanya produk".to_string(),
+    };
+    assert!(valid_req.validate().is_ok());
+
+    let empty_req = SendMessageRequest {
+        content: "".to_string(),
+    };
+    assert!(empty_req.validate().is_err());
+
+    let too_long_req = SendMessageRequest {
+        content: "a".repeat(2001),
+    };
+    assert!(too_long_req.validate().is_err());
+}
+

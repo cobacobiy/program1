@@ -7,11 +7,12 @@ use crate::error::ApiError;
 use crate::handlers;
 use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, BulkStockAdjustmentItem, BulkStockUpdateRequest,
-    BulkStockUpdateResult, BuyerCheckoutRequest, CatalogItemDto, ChannelRevenueDto,
-    ChannelStatusDto, ChannelType, CreateCatalogItemRequest, CreateUserAccountRequest, ErrorCode,
-    InventoryStockDto, JwtClaims, LoginRequest, LowStockAlertDto, MarketplaceOrderReq,
-    OmniOrderDto, OrderItemDto, RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto,
-    StockAdjustmentLogDto, StorefrontOrderItemRequest, StorefrontOrderRequest,
+    BulkStockUpdateResult, BuyerAccountDto, BuyerCheckoutRequest, BuyerLoginRequest,
+    CatalogItemDto, ChannelRevenueDto, ChannelStatusDto, ChannelType, CreateCatalogItemRequest,
+    CreateUserAccountRequest, ErrorCode, InventoryStockDto, JwtClaims, LoginRequest,
+    LowStockAlertDto, MarketplaceOrderReq, OmniOrderDto, OrderItemDto, RegisterBuyerRequest,
+    RegisterUserRequest, SafetyStockLogDto, SalesAnalyticsDto, StockAdjustmentLogDto,
+    StorefrontOrderItemRequest, StorefrontOrderRequest, UpdateBuyerStatusRequest,
     UpdatePromotionStockRequest, UpdateSafetyStockRequest, UpdateSpareStockRequest,
     UpdateUserPermissionsRequest, UpdateWarehouseStockRequest, UserAccountDto,
 };
@@ -70,6 +71,11 @@ impl Modify for SecurityAddon {
         handlers::get_analytics,
         handlers::list_audit_logs,
         handlers::get_user_audit_logs,
+        handlers::buyer_register_handler,
+        handlers::buyer_login_handler,
+        handlers::admin_list_buyers_handler,
+        handlers::admin_set_buyer_status_handler,
+        handlers::admin_list_buyer_activity_handler,
     ),
     components(
         schemas(
@@ -107,11 +113,17 @@ impl Modify for SecurityAddon {
             SalesAnalyticsDto,
             AuditLogEntry,
             handlers::AuditQueryParam,
+            BuyerAccountDto,
+            RegisterBuyerRequest,
+            BuyerLoginRequest,
+            UpdateBuyerStatusRequest,
         )
     ),
     tags(
         (name = "Health", description = "System health check and metadata"),
         (name = "Auth", description = "Authentication & registration endpoints"),
+        (name = "Buyer Auth", description = "Buyer storefront authentication & profile"),
+        (name = "Admin Buyers", description = "Admin customer directory & CRM"),
         (name = "Catalog", description = "Product catalog management"),
         (name = "Inventory", description = "Ginee OMS multi-warehouse & safety stock"),
         (name = "Channels", description = "Omnichannel marketplace sync"),

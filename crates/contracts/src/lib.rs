@@ -714,7 +714,8 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct BuyerAccountDto {
     pub id: Uuid,
-    pub google_sub: String,
+    #[serde(default)]
+    pub google_sub: Option<String>,
     pub email: String,
     pub full_name: String,
     pub avatar_url: Option<String>,
@@ -724,6 +725,37 @@ pub struct BuyerAccountDto {
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct RegisterBuyerRequest {
+    #[validate(length(
+        min = 2,
+        max = 100,
+        message = "Nama lengkap minimal 2 karakter (maks 100)"
+    ))]
+    pub full_name: String,
+    #[validate(email(message = "Format email tidak valid"))]
+    pub email: String,
+    #[validate(length(
+        min = 8,
+        max = 100,
+        message = "Kata sandi minimal 8 karakter"
+    ))]
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct BuyerLoginRequest {
+    #[validate(email(message = "Format email tidak valid"))]
+    pub email: String,
+    #[validate(length(min = 1, message = "Kata sandi tidak boleh kosong"))]
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateBuyerStatusRequest {
+    pub is_active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -822,8 +854,18 @@ pub struct UpdateBuyerAddressRequest {
 
 #[async_trait]
 pub trait BuyerContract: Send + Sync {
-    async fn authenticate_google(&self, id_token: &str)
-        -> Result<BuyerAuthResponse, ContractError>;
+    async fn register(
+        &self,
+        req: RegisterBuyerRequest,
+    ) -> Result<BuyerAuthResponse, ContractError>;
+    async fn login(
+        &self,
+        req: BuyerLoginRequest,
+    ) -> Result<BuyerAuthResponse, ContractError>;
+    async fn authenticate_google(
+        &self,
+        id_token: &str,
+    ) -> Result<BuyerAuthResponse, ContractError>;
     async fn request_phone_otp(
         &self,
         buyer_id: Uuid,
@@ -859,4 +901,75 @@ pub trait BuyerContract: Send + Sync {
         buyer_id: Uuid,
         address_id: Uuid,
     ) -> Result<BuyerAddressDto, ContractError>;
+    async fn list_all_buyers(&self) -> Result<Vec<BuyerAccountDto>, ContractError>;
+    async fn set_buyer_active_status(
+        &self,
+        buyer_id: Uuid,
+        is_active: bool,
+    ) -> Result<BuyerAccountDto, ContractError>;
 }
+
+// --- LIVE CHAT & MESSAGING CONTRACT (FUTURE-PROOF ARCHITECTURE) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub enum ChatSenderType {
+    Buyer,
+    Seller,
+    System,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ChatMessageDto {
+    pub id: Uuid,
+    pub room_id: Uuid,
+    pub sender_type: ChatSenderType,
+    pub sender_id: Uuid,
+    pub sender_name: String,
+    pub content: String,
+    pub is_read: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ChatRoomDto {
+    pub id: Uuid,
+    pub buyer_id: Uuid,
+    pub buyer_name: String,
+    pub last_message: Option<String>,
+    pub unread_count: i64,
+    pub updated_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct SendMessageRequest {
+    #[validate(length(min = 1, max = 2000, message = "Pesan obrolan harus antara 1 sampai 2000 karakter"))]
+    pub content: String,
+}
+
+#[async_trait]
+pub trait ChatContract: Send + Sync {
+    async fn send_message(
+        &self,
+        room_id: Uuid,
+        sender_type: ChatSenderType,
+        sender_id: Uuid,
+        sender_name: &str,
+        content: &str,
+    ) -> Result<ChatMessageDto, ContractError>;
+
+    async fn get_messages(
+        &self,
+        room_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<ChatMessageDto>, ContractError>;
+
+    async fn get_or_create_buyer_room(
+        &self,
+        buyer_id: Uuid,
+        buyer_name: &str,
+    ) -> Result<ChatRoomDto, ContractError>;
+
+    async fn list_active_rooms(&self) -> Result<Vec<ChatRoomDto>, ContractError>;
+}
+

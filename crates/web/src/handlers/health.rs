@@ -105,6 +105,7 @@ pub async fn get_store_info(State(state): State<AppState>) -> impl IntoResponse 
             "store_name": state.store_name,
             "currency": state.store_currency,
             "google_client_id": state.google_client_id,
+            "whatsapp_number": state.store_whatsapp_number,
         })),
     )
 }

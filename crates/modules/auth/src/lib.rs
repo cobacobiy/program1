@@ -178,7 +178,7 @@ mod tests {
         let buyer_id = Uuid::new_v4();
         let buyer = BuyerAccountDto {
             id: buyer_id,
-            google_sub: "google-sub-999".to_string(),
+            google_sub: Some("google-sub-999".to_string()),
             email: "buyer_test@example.com".to_string(),
             full_name: "Buyer Test".to_string(),
             avatar_url: None,

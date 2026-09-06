@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use program1_contracts::{
     AuditContract, AuditLogEntry, AuthContract, BuyerAccountDto, BuyerAddressDto,
-    BuyerAuthResponse, BuyerContract, ContractError, CreateBuyerAddressRequest,
-    UpdateBuyerAddressRequest,
+    BuyerAuthResponse, BuyerContract, BuyerLoginRequest, ContractError, CreateBuyerAddressRequest,
+    RegisterBuyerRequest, UpdateBuyerAddressRequest,
 };
 use program1_core::database::DbPool;
 use rand::Rng;
@@ -399,7 +399,7 @@ impl BuyerModule {
         let id_str: String = row.get("id");
         let id = Uuid::parse_str(&id_str)
             .map_err(|e| ContractError::Internal(format!("Invalid UUID: {}", e)))?;
-        let google_sub: String = row.get("google_sub");
+        let google_sub: Option<String> = row.try_get("google_sub").unwrap_or(None);
         let email: String = row.get("email");
         let full_name: String = row.get("full_name");
         let avatar_url: Option<String> = row.get("avatar_url");
@@ -467,6 +467,193 @@ impl BuyerModule {
 
 #[async_trait]
 impl BuyerContract for BuyerModule {
+    async fn register(
+        &self,
+        req: RegisterBuyerRequest,
+    ) -> Result<BuyerAuthResponse, ContractError> {
+        let full_name = req.full_name.trim().to_string();
+        if full_name.len() < 2 || full_name.len() > 100 {
+            return Err(ContractError::ValidationError(
+                "Nama lengkap minimal 2 karakter (maks 100)".to_string(),
+            ));
+        }
+
+        let email = req.email.trim().to_lowercase();
+        if email.is_empty() || !email.contains('@') {
+            return Err(ContractError::ValidationError(
+                "Format email tidak valid".to_string(),
+            ));
+        }
+
+        if req.password.len() < 8 || req.password.len() > 100 {
+            return Err(ContractError::ValidationError(
+                "Kata sandi minimal 8 karakter".to_string(),
+            ));
+        }
+
+        let existing = sqlx::query("SELECT id FROM buyer_accounts WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if existing.is_some() {
+            return Err(ContractError::ValidationError(
+                "Email ini sudah terdaftar sebagai member toko. Silakan masuk / login.".to_string(),
+            ));
+        }
+
+        let password_hash = program1_core::auth::hash_password(&req.password)
+            .map_err(|e| ContractError::Internal(format!("Password hashing error: {}", e)))?;
+
+        let new_id = Uuid::new_v4();
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        sqlx::query(
+            "INSERT INTO buyer_accounts (id, google_sub, email, password_hash, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at)
+             VALUES ($1, NULL, $2, $3, $4, NULL, NULL, 0, 1, $5, $6)",
+        )
+        .bind(new_id.to_string())
+        .bind(&email)
+        .bind(&password_hash)
+        .bind(&full_name)
+        .bind(&now_str)
+        .bind(&now_str)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let masked_email = mask_email(&email);
+        let _ = self
+            .audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: now,
+                actor_id: Some(new_id),
+                actor_username: masked_email.clone(),
+                action: "BUYER_REGISTERED_EMAIL".to_string(),
+                resource_type: "buyer".to_string(),
+                resource_id: Some(new_id),
+                details: format!("Buyer registered via email/password: {}", masked_email),
+                ip_address: None,
+            })
+            .await;
+
+        let buyer_dto = BuyerAccountDto {
+            id: new_id,
+            google_sub: None,
+            email,
+            full_name,
+            avatar_url: None,
+            phone_number: None,
+            phone_verified: false,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+        };
+
+        let token = self.auth_contract.generate_buyer_token(&buyer_dto)?;
+
+        Ok(BuyerAuthResponse {
+            access_token: token,
+            token_type: "Bearer".to_string(),
+            expires_in: 86400,
+            buyer: buyer_dto,
+            requires_phone_verification: true,
+        })
+    }
+
+    async fn login(
+        &self,
+        req: BuyerLoginRequest,
+    ) -> Result<BuyerAuthResponse, ContractError> {
+        let email = req.email.trim().to_lowercase();
+        if email.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Email tidak boleh kosong".to_string(),
+            ));
+        }
+
+        if req.password.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Kata sandi tidak boleh kosong".to_string(),
+            ));
+        }
+
+        let row_opt = sqlx::query(
+            "SELECT id, google_sub, email, password_hash, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts WHERE email = $1",
+        )
+        .bind(&email)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let row = match row_opt {
+            Some(r) => r,
+            None => {
+                return Err(ContractError::ValidationError(
+                    "Email atau kata sandi tidak sesuai".to_string(),
+                ));
+            }
+        };
+
+        let is_active: i64 = row.try_get("is_active").unwrap_or(1);
+        if is_active == 0 {
+            return Err(ContractError::ValidationError(
+                "Akun pembeli telah dinonaktifkan".to_string(),
+            ));
+        }
+
+        let password_hash_opt: Option<String> = row.try_get("password_hash").unwrap_or(None);
+        let password_hash = match password_hash_opt {
+            Some(h) if !h.trim().is_empty() => h,
+            _ => {
+                return Err(ContractError::ValidationError(
+                    "Akun ini terdaftar menggunakan Google Sign-In. Silakan masuk menggunakan tombol Google.".to_string(),
+                ));
+            }
+        };
+
+        let is_valid = program1_core::auth::verify_password(&req.password, &password_hash)
+            .unwrap_or(false);
+
+        if !is_valid {
+            return Err(ContractError::ValidationError(
+                "Email atau kata sandi tidak sesuai".to_string(),
+            ));
+        }
+
+        let buyer_dto = Self::row_to_buyer_dto(&row)?;
+
+        let masked_email = mask_email(&buyer_dto.email);
+        let _ = self
+            .audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                actor_id: Some(buyer_dto.id),
+                actor_username: masked_email.clone(),
+                action: "BUYER_LOGIN_EMAIL".to_string(),
+                resource_type: "buyer".to_string(),
+                resource_id: Some(buyer_dto.id),
+                details: format!("Buyer login via email: {}", masked_email),
+                ip_address: None,
+            })
+            .await;
+
+        let token = self.auth_contract.generate_buyer_token(&buyer_dto)?;
+
+        Ok(BuyerAuthResponse {
+            access_token: token,
+            token_type: "Bearer".to_string(),
+            expires_in: 86400,
+            requires_phone_verification: !buyer_dto.phone_verified,
+            buyer: buyer_dto,
+        })
+    }
+
     async fn authenticate_google(
         &self,
         id_token: &str,
@@ -475,9 +662,10 @@ impl BuyerContract for BuyerModule {
 
         let existing_row = sqlx::query(
             "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
-             FROM buyer_accounts WHERE google_sub = $1",
+             FROM buyer_accounts WHERE google_sub = $1 OR email = $2",
         )
         .bind(&claims.sub)
+        .bind(&claims.email)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
@@ -491,11 +679,12 @@ impl BuyerContract for BuyerModule {
                     ));
                 }
 
-                // Update full name and avatar if provided
+                // Update google_sub, full name and avatar if provided
                 let now = Utc::now().to_rfc3339();
                 let _ = sqlx::query(
-                    "UPDATE buyer_accounts SET full_name = $1, avatar_url = $2, updated_at = $3 WHERE id = $4",
+                    "UPDATE buyer_accounts SET google_sub = $1, full_name = $2, avatar_url = $3, updated_at = $4 WHERE id = $5",
                 )
+                .bind(&claims.sub)
                 .bind(&claims.name)
                 .bind(&claims.picture)
                 .bind(&now)
@@ -503,6 +692,7 @@ impl BuyerContract for BuyerModule {
                 .execute(&self.pool)
                 .await;
 
+                b.google_sub = Some(claims.sub);
                 b.full_name = claims.name;
                 b.avatar_url = claims.picture;
                 b
@@ -547,7 +737,7 @@ impl BuyerContract for BuyerModule {
 
                 BuyerAccountDto {
                     id: new_id,
-                    google_sub: claims.sub,
+                    google_sub: Some(claims.sub),
                     email: claims.email,
                     full_name: claims.name,
                     avatar_url: claims.picture,
@@ -1075,6 +1265,74 @@ impl BuyerContract for BuyerModule {
 
         self.get_address(buyer_id, address_id).await
     }
+
+    async fn list_all_buyers(&self) -> Result<Vec<BuyerAccountDto>, ContractError> {
+        let rows = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts
+             ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut buyers = Vec::with_capacity(rows.len());
+        for row in rows {
+            buyers.push(Self::row_to_buyer_dto(&row)?);
+        }
+        Ok(buyers)
+    }
+
+    async fn set_buyer_active_status(
+        &self,
+        buyer_id: Uuid,
+        is_active: bool,
+    ) -> Result<BuyerAccountDto, ContractError> {
+        let now = Utc::now().to_rfc3339();
+        let is_active_int = if is_active { 1 } else { 0 };
+
+        let result = sqlx::query(
+            "UPDATE buyer_accounts SET is_active = $1, updated_at = $2 WHERE id = $3",
+        )
+        .bind(is_active_int)
+        .bind(&now)
+        .bind(buyer_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(ContractError::NotFound(
+                "Akun pembeli tidak ditemukan".to_string(),
+            ));
+        }
+
+        let _ = self
+            .audit_contract
+            .log_action(AuditLogEntry {
+                id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                actor_id: None,
+                actor_username: "admin_seller".to_string(),
+                action: "BUYER_STATUS_TOGGLED".to_string(),
+                resource_type: "buyer".to_string(),
+                resource_id: Some(buyer_id),
+                details: format!("Buyer {} active status set to {}", buyer_id, is_active),
+                ip_address: None,
+            })
+            .await;
+
+        let updated_row = sqlx::query(
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+             FROM buyer_accounts WHERE id = $1",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Self::row_to_buyer_dto(&updated_row)
+    }
 }
 
 #[cfg(test)]
@@ -1149,6 +1407,149 @@ mod tests {
         assert!(res.requires_phone_verification);
         assert_eq!(res.token_type, "Bearer");
         assert!(!res.access_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_buyer_register_and_login_email_password() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        // 1. Register new buyer
+        let reg_req = RegisterBuyerRequest {
+            full_name: "Ahmad Dahlan".to_string(),
+            email: "ahmad@store.com".to_string(),
+            password: "SecurePassword123!".to_string(),
+        };
+        let reg_res = module.register(reg_req).await.expect("Registration should succeed");
+
+        assert_eq!(reg_res.buyer.email, "ahmad@store.com");
+        assert_eq!(reg_res.buyer.full_name, "Ahmad Dahlan");
+        assert_eq!(reg_res.buyer.google_sub, None);
+        assert!(!reg_res.buyer.phone_verified);
+        assert!(reg_res.requires_phone_verification);
+        assert!(!reg_res.access_token.is_empty());
+
+        // 2. Login with correct credentials
+        let login_req = BuyerLoginRequest {
+            email: "ahmad@store.com".to_string(),
+            password: "SecurePassword123!".to_string(),
+        };
+        let login_res = module.login(login_req).await.expect("Login should succeed");
+        assert_eq!(login_res.buyer.id, reg_res.buyer.id);
+        assert_eq!(login_res.buyer.email, "ahmad@store.com");
+        assert!(!login_res.access_token.is_empty());
+
+        // 3. Login with case-insensitive trimmed email
+        let login_upper = BuyerLoginRequest {
+            email: "  AHMAD@store.COM  ".to_string(),
+            password: "SecurePassword123!".to_string(),
+        };
+        let login_upper_res = module.login(login_upper).await;
+        assert!(login_upper_res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_buyer_register_duplicate_email_rejected() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let reg_req1 = RegisterBuyerRequest {
+            full_name: "User One".to_string(),
+            email: "duplicate@store.com".to_string(),
+            password: "Password123!".to_string(),
+        };
+        module.register(reg_req1).await.unwrap();
+
+        let reg_req2 = RegisterBuyerRequest {
+            full_name: "User Two".to_string(),
+            email: "duplicate@store.com".to_string(),
+            password: "DifferentPassword123!".to_string(),
+        };
+        let res2 = module.register(reg_req2).await;
+        assert!(res2.is_err(), "Duplicate email registration must fail");
+    }
+
+    #[tokio::test]
+    async fn test_buyer_login_wrong_password_rejected() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let reg_req = RegisterBuyerRequest {
+            full_name: "Buyer Test".to_string(),
+            email: "test_pass@store.com".to_string(),
+            password: "CorrectPassword123!".to_string(),
+        };
+        module.register(reg_req).await.unwrap();
+
+        let wrong_login = BuyerLoginRequest {
+            email: "test_pass@store.com".to_string(),
+            password: "WrongPassword999!".to_string(),
+        };
+        let res = module.login(wrong_login).await;
+        assert!(res.is_err(), "Login with wrong password must fail");
+    }
+
+    #[tokio::test]
+    async fn test_buyer_google_linking_to_email_registered_account() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        // Register first via email
+        let reg_req = RegisterBuyerRequest {
+            full_name: "Linked Buyer".to_string(),
+            email: "linked@store.com".to_string(),
+            password: "Password123!".to_string(),
+        };
+        let reg_res = module.register(reg_req).await.unwrap();
+        assert_eq!(reg_res.buyer.google_sub, None);
+
+        // Later login with Google using same email
+        let google_res = module
+            .authenticate_google("valid:google_sub_linked_999:linked@store.com:Linked Buyer Google")
+            .await
+            .unwrap();
+
+        assert_eq!(google_res.buyer.id, reg_res.buyer.id);
+        assert_eq!(google_res.buyer.google_sub, Some("google_sub_linked_999".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_admin_list_all_buyers() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let b1 = module.register(RegisterBuyerRequest {
+            full_name: "Buyer Alpha".to_string(),
+            email: "alpha@test.com".to_string(),
+            password: "Password123!".to_string(),
+        }).await.unwrap();
+
+        let b2 = module.register(RegisterBuyerRequest {
+            full_name: "Buyer Beta".to_string(),
+            email: "beta@test.com".to_string(),
+            password: "Password123!".to_string(),
+        }).await.unwrap();
+
+        let list = module.list_all_buyers().await.expect("List all buyers should succeed");
+        assert!(list.len() >= 2);
+        assert_eq!(list[0].id, b2.buyer.id); // Most recent first
+        assert_eq!(list[1].id, b1.buyer.id);
+    }
+
+    #[tokio::test]
+    async fn test_admin_toggle_buyer_active() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let b = module.register(RegisterBuyerRequest {
+            full_name: "Deactivate Me".to_string(),
+            email: "deact@test.com".to_string(),
+            password: "Password123!".to_string(),
+        }).await.unwrap();
+
+        assert!(b.buyer.is_active);
+
+        // Deactivate
+        let updated = module.set_buyer_active_status(b.buyer.id, false).await.unwrap();
+        assert!(!updated.is_active);
+
+        // Reactivate
+        let reactivated = module.set_buyer_active_status(b.buyer.id, true).await.unwrap();
+        assert!(reactivated.is_active);
     }
 
     #[tokio::test]

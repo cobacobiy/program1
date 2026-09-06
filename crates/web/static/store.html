@@ -137,19 +137,74 @@
         <button type="button" class="btn-checkout" style="background:var(--shopee-red); margin-top:0.5rem" onclick="logoutBuyer()">Keluar / Logout Pembeli</button>
       </div>
 
-      <!-- GOOGLE LOGIN VIEW -->
+      <!-- BUYER AUTHENTICATION (LOGIN / REGISTER) VIEW -->
       <div id="buyer-unauthenticated-view">
-        <div style="text-align:center; margin-bottom:1.5rem">
-          <p style="font-size:0.88rem; color:var(--text-muted); line-height:1.5">
-            Masuk dengan Akun Google untuk sinkronisasi riwayat pesanan, verifikasi nomor WhatsApp/HP, dan penyimpanan alamat pengiriman resmi.
+        <!-- TAB NAVIGATION -->
+        <div class="auth-tab-nav">
+          <button type="button" class="auth-tab-btn active" id="tab-btn-login" onclick="switchBuyerAuthTab('login')">Masuk</button>
+          <button type="button" class="auth-tab-btn" id="tab-btn-register" onclick="switchBuyerAuthTab('register')">Daftar Member Baru</button>
+        </div>
+
+        <!-- LOGIN FORM PANEL -->
+        <form id="buyer-login-form" class="auth-form-panel active" onsubmit="handleBuyerLogin(event)">
+          <div id="buyer-login-error" class="auth-error-banner" style="display:none"></div>
+
+          <div class="auth-input-group">
+            <label for="buyer-login-email">Alamat Email</label>
+            <input type="email" id="buyer-login-email" class="auth-input-field" placeholder="nama@email.com" required autocomplete="email">
+          </div>
+
+          <div class="auth-input-group">
+            <label for="buyer-login-password">Kata Sandi</label>
+            <input type="password" id="buyer-login-password" class="auth-input-field" placeholder="Masukkan kata sandi" required autocomplete="current-password">
+          </div>
+
+          <button type="submit" class="btn-checkout" id="btn-submit-buyer-login" style="margin-top:0.3rem">Masuk ke Akun Toko</button>
+        </form>
+
+        <!-- REGISTER FORM PANEL -->
+        <form id="buyer-register-form" class="auth-form-panel" onsubmit="handleBuyerRegister(event)">
+          <div id="buyer-reg-error" class="auth-error-banner" style="display:none"></div>
+
+          <div class="auth-input-group">
+            <label for="buyer-reg-name">Nama Lengkap</label>
+            <input type="text" id="buyer-reg-name" class="auth-input-field" placeholder="Nama Lengkap Anda" required minlength="2" maxlength="100" autocomplete="name">
+          </div>
+
+          <div class="auth-input-group">
+            <label for="buyer-reg-email">Alamat Email</label>
+            <input type="email" id="buyer-reg-email" class="auth-input-field" placeholder="nama@email.com" required autocomplete="email">
+          </div>
+
+          <div class="auth-input-group">
+            <label for="buyer-reg-password">Kata Sandi</label>
+            <input type="password" id="buyer-reg-password" class="auth-input-field" placeholder="Minimal 8 karakter" required minlength="8" autocomplete="new-password">
+          </div>
+
+          <div class="auth-input-group">
+            <label for="buyer-reg-confirm-password">Konfirmasi Kata Sandi</label>
+            <input type="password" id="buyer-reg-confirm-password" class="auth-input-field" placeholder="Ulangi kata sandi" required minlength="8" autocomplete="new-password">
+          </div>
+
+          <button type="submit" class="btn-checkout" id="btn-submit-buyer-reg" style="margin-top:0.3rem">Daftar Member Sekarang</button>
+        </form>
+
+        <!-- DIVIDER -->
+        <div class="auth-divider">
+          <span>ATAU MASUK DENGAN</span>
+        </div>
+
+        <!-- GOOGLE SIGN-IN -->
+        <div id="google-signin-wrapper" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:45px; margin:0.5rem 0">
+          <div id="google-signin-btn"></div>
+          <p id="google-signin-unconfigured" style="display:none; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:0.4rem">
+            Google Sign-In belum dikonfigurasi (GOOGLE_CLIENT_ID belum diatur di server).
           </p>
         </div>
 
-        <div id="google-signin-wrapper" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:50px; margin:1rem 0">
-          <div id="google-signin-btn"></div>
-          <p id="google-signin-unconfigured" style="display:none; font-size:0.8rem; color:var(--text-muted); text-align:center; margin-top:0.5rem">
-            Google Sign-In belum dikonfigurasi (GOOGLE_CLIENT_ID belum diatur di server).
-          </p>
+        <!-- DEV QUICK LOGIN (FOR LOCAL TESTING) -->
+        <div id="dev-quick-login-box" style="margin-top:0.6rem; text-align:center">
+          <button type="button" class="btn-dev-quick-login" onclick="devQuickBuyerLogin()">⚡ Login Instan Demo (Buyer Dev)</button>
         </div>
       </div>
     </div>
@@ -329,6 +384,109 @@
         </form>
       </div>
     </div>
+  </div>
+
+  <!-- FLOATING CHAT WIDGET (WHATSAPP & LIVE CHAT HYBRID - OPTION 3) -->
+  <div id="floating-chat-container" class="floating-chat-container">
+    <!-- POPUP CHAT QUICK MENU -->
+    <div id="chat-popup-card" class="chat-popup-card" style="display: none;">
+      <div class="chat-popup-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <div class="chat-avatar-pulse">
+            <span style="font-size: 1.2rem;">💬</span>
+            <span class="online-indicator"></span>
+          </div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem; color: #fff;" id="chat-store-title">Customer Service</div>
+            <div style="font-size: 0.72rem; color: #34d399;" id="chat-member-status">● CS Online & Siap Membantu</div>
+          </div>
+        </div>
+        <button type="button" class="chat-close-btn" onclick="toggleChatPopup()">✕</button>
+      </div>
+
+      <div class="chat-popup-body">
+        <p style="font-size: 0.82rem; color: #cbd5e1; margin-bottom: 0.75rem; line-height: 1.4;">
+          Butuh bantuan mengenai produk atau pesanan? Tim penjual siap melayani Anda:
+        </p>
+
+        <!-- MEMBER GREETING CARD -->
+        <div id="chat-member-badge" class="chat-member-card" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span style="font-size: 0.9rem;">👑</span>
+            <span style="font-size: 0.78rem; font-weight: 700; color: #fbbf24;">Member Toko Terverifikasi</span>
+          </div>
+          <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;" id="chat-member-name">Nama Member</div>
+        </div>
+
+        <!-- OPTION 1: WHATSAPP DIRECT CONNECT (PRIMARY) -->
+        <button type="button" class="btn-chat-wa" onclick="handleDirectWhatsAppChat()">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.025 3.287l-.711 2.599 2.664-.698c.974.572 1.913.92 2.79.92 3.18 0 5.767-2.587 5.768-5.766 0-3.18-2.587-5.768-5.768-5.768zm0 10.37c-.851 0-1.688-.237-2.42-.686l-.173-.105-1.782.467.476-1.737-.113-.18c-.482-.767-.736-1.666-.735-2.563 0-2.617 2.13-4.746 4.747-4.746 1.267 0 2.458.494 3.354 1.391a4.717 4.717 0 0 1 1.39 3.355c0 2.618-2.129 4.746-4.747 4.746zm6.398-10.749C16.736 4.092 14.472 3 12.031 3 7.078 3 3.056 7.021 3.054 11.974c-.001 1.58.411 3.123 1.196 4.482L3 22l5.704-1.496c1.311.715 2.784 1.092 4.322 1.093h.005c4.953 0 8.975-4.021 8.977-8.974 0-2.399-.934-4.655-2.631-6.353z"/>
+          </svg>
+          <div style="text-align: left;">
+            <div style="font-weight: 700; font-size: 0.85rem;">Chat Langsung via WhatsApp</div>
+            <div style="font-size: 0.7rem; opacity: 0.9;">Respon Cepat ⚡ Terhubung ke Penjual</div>
+          </div>
+        </button>
+
+        <!-- OPTION 2: IN-APP LIVE CHAT (EXPANDABLE) -->
+        <div class="chat-inapp-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <span style="font-size: 0.8rem; font-weight: 600; color: #e2e8f0;">💬 Live Chat Toko (In-App)</span>
+            <span class="badge-chat-standby">Standby</span>
+          </div>
+          <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 0.6rem;">
+            Sistem obrolan internal terhubung ke antrean CS Toko.
+          </div>
+          <button type="button" class="btn-chat-inapp" onclick="openInAppChatWindow()">
+            <span>Mulai Obrolan In-App</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- IN-APP LIVE CHAT WINDOW (EXPANDED CONVERSATION MODAL) -->
+    <div id="inapp-chat-window" class="inapp-chat-window" style="display: none;">
+      <div class="inapp-chat-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <div class="chat-avatar-pulse">
+            <span style="font-size: 1.1rem;">🏪</span>
+          </div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.9rem; color: #fff;">Live Chat Penjual</div>
+            <div style="font-size: 0.7rem; color: #34d399;">● Online Support Engine</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 0.3rem;">
+          <button type="button" class="chat-close-btn" onclick="closeInAppChatWindow()">✕</button>
+        </div>
+      </div>
+
+      <div class="inapp-chat-messages" id="inapp-chat-messages">
+        <!-- Messages will be rendered dynamically -->
+      </div>
+
+      <form id="inapp-chat-form" class="inapp-chat-input-bar" onsubmit="sendInAppChatMessage(event)">
+        <input type="text" id="inapp-chat-input" placeholder="Ketik pesan untuk penjual..." autocomplete="off" />
+        <button type="submit" class="btn-send-chat" aria-label="Kirim Pesan">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
+    </div>
+
+    <!-- FLOATING ACTION BUTTON (TRIGGER) -->
+    <button id="btn-floating-chat" class="btn-floating-chat" onclick="toggleChatPopup()" aria-label="Buka Chat Penjual">
+      <div class="chat-fab-inner">
+        <svg class="wa-fab-icon" width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.025 3.287l-.711 2.599 2.664-.698c.974.572 1.913.92 2.79.92 3.18 0 5.767-2.587 5.768-5.766 0-3.18-2.587-5.768-5.768-5.768zm0 10.37c-.851 0-1.688-.237-2.42-.686l-.173-.105-1.782.467.476-1.737-.113-.18c-.482-.767-.736-1.666-.735-2.563 0-2.617 2.13-4.746 4.747-4.746 1.267 0 2.458.494 3.354 1.391a4.717 4.717 0 0 1 1.39 3.355c0 2.618-2.129 4.746-4.747 4.746zm6.398-10.749C16.736 4.092 14.472 3 12.031 3 7.078 3 3.056 7.021 3.054 11.974c-.001 1.58.411 3.123 1.196 4.482L3 22l5.704-1.496c1.311.715 2.784 1.092 4.322 1.093h.005c4.953 0 8.975-4.021 8.977-8.974 0-2.399-.934-4.655-2.631-6.353z"/>
+        </svg>
+        <span class="chat-fab-label" id="chat-fab-label">Chat Penjual</span>
+      </div>
+      <span class="chat-fab-pulse"></span>
+    </button>
   </div>
 
   <!-- MOBILE STICKY BOTTOM NAVIGATION BAR -->

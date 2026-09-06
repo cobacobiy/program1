@@ -5,6 +5,8 @@ use axum::{
 };
 use std::sync::Arc;
 
+use chrono::Utc;
+use program1_contracts::{AuthContract, UserAccountDto};
 use program1_core::init_database;
 use program1_module_analytics::AnalyticsModule;
 use program1_module_audit::AuditModule;
@@ -112,6 +114,7 @@ async fn setup_buyer_test_app_with_pool() -> (
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
+        store_whatsapp_number: "6281234567890".to_string(),
         user_contract: user_module,
         auth_contract: auth_module.clone(),
         catalog_contract: catalog_module,
@@ -754,6 +757,7 @@ async fn test_public_buyer_auth_config_endpoint() {
         store_info["google_client_id"],
         "test-google-client-id.apps.googleusercontent.com"
     );
+    assert_eq!(store_info["whatsapp_number"], "6281234567890");
 }
 
 #[tokio::test]
@@ -1114,4 +1118,195 @@ async fn test_checkout_negative_scenarios_comprehensive() {
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let err_body: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(err_body["error"], "account_deactivated");
+}
+
+#[tokio::test]
+async fn test_buyer_register_and_login_api_endpoints() {
+    let (app, _sent_otps, _auth_module, _pool) = setup_buyer_test_app_with_pool().await;
+
+    // 1. Register a new buyer
+    let reg_payload = json!({
+        "full_name": "Rina Wijaya",
+        "email": "rina@example.com",
+        "password": "Password123!"
+    });
+    let req = Request::builder()
+        .uri("/api/v1/buyer/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&reg_payload).unwrap()))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let reg_data: Value = serde_json::from_slice(&body).unwrap();
+    let token = reg_data["access_token"].as_str().unwrap();
+    assert!(!token.is_empty());
+    assert_eq!(reg_data["buyer"]["email"], "rina@example.com");
+    assert_eq!(reg_data["buyer"]["full_name"], "Rina Wijaya");
+    assert_eq!(reg_data["requires_phone_verification"], true);
+
+    // 2. Duplicate registration -> 400 Bad Request
+    let req_dup = Request::builder()
+        .uri("/api/v1/buyer/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&reg_payload).unwrap()))
+        .unwrap();
+
+    let res_dup = app.clone().oneshot(req_dup).await.unwrap();
+    assert_eq!(res_dup.status(), StatusCode::BAD_REQUEST);
+
+    // 3. Login with correct credentials
+    let login_payload = json!({
+        "email": "rina@example.com",
+        "password": "Password123!"
+    });
+    let req_login = Request::builder()
+        .uri("/api/v1/buyer/auth/login")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let res_login = app.clone().oneshot(req_login).await.unwrap();
+    assert_eq!(res_login.status(), StatusCode::OK);
+    let body = to_bytes(res_login.into_body(), usize::MAX).await.unwrap();
+    let login_data: Value = serde_json::from_slice(&body).unwrap();
+    let login_token = login_data["access_token"].as_str().unwrap();
+    assert!(!login_token.is_empty());
+
+    // 4. Login with wrong password -> 400 Bad Request
+    let wrong_login_payload = json!({
+        "email": "rina@example.com",
+        "password": "WrongPassword999!"
+    });
+    let req_wrong = Request::builder()
+        .uri("/api/v1/buyer/auth/login")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&wrong_login_payload).unwrap()))
+        .unwrap();
+
+    let res_wrong = app.clone().oneshot(req_wrong).await.unwrap();
+    assert_eq!(res_wrong.status(), StatusCode::BAD_REQUEST);
+
+    // 5. Use token to get buyer profile
+    let req_profile = Request::builder()
+        .uri("/api/v1/buyer/profile")
+        .method("GET")
+        .header(header::AUTHORIZATION, format!("Bearer {}", login_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_profile = app.clone().oneshot(req_profile).await.unwrap();
+    assert_eq!(res_profile.status(), StatusCode::OK);
+    let body = to_bytes(res_profile.into_body(), usize::MAX).await.unwrap();
+    let profile_data: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(profile_data["email"], "rina@example.com");
+    assert_eq!(profile_data["full_name"], "Rina Wijaya");
+}
+
+#[tokio::test]
+async fn test_admin_buyers_management_and_activity() {
+    let (app, _sent_otps, auth_module, _pool) = setup_buyer_test_app_with_pool().await;
+
+    // 1. Register a buyer
+    let reg_payload = json!({
+        "full_name": "Dewi Sartika",
+        "email": "dewi@example.com",
+        "password": "Password123!",
+        "phone_number": "081234567890"
+    });
+    let req_reg = Request::builder()
+        .uri("/api/v1/buyer/auth/register")
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&reg_payload).unwrap()))
+        .unwrap();
+
+    let res_reg = app.clone().oneshot(req_reg).await.unwrap();
+    assert_eq!(res_reg.status(), StatusCode::CREATED);
+    let body = to_bytes(res_reg.into_body(), usize::MAX).await.unwrap();
+    let reg_data: Value = serde_json::from_slice(&body).unwrap();
+    let buyer_id = reg_data["buyer"]["id"].as_str().unwrap();
+    let buyer_token = reg_data["access_token"].as_str().unwrap();
+
+    // 2. Accessing admin endpoints without token -> 401 Unauthorized
+    let req_unauth = Request::builder()
+        .uri("/api/v1/admin/buyers")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let res_unauth = app.clone().oneshot(req_unauth).await.unwrap();
+    assert_eq!(res_unauth.status(), StatusCode::UNAUTHORIZED);
+
+    // 3. Accessing admin endpoints with buyer token -> 403 Forbidden
+    let req_forbidden = Request::builder()
+        .uri("/api/v1/admin/buyers")
+        .method("GET")
+        .header(header::AUTHORIZATION, format!("Bearer {}", buyer_token))
+        .body(Body::empty())
+        .unwrap();
+    let res_forbidden = app.clone().oneshot(req_forbidden).await.unwrap();
+    assert_eq!(res_forbidden.status(), StatusCode::FORBIDDEN);
+
+    // 4. Create seller staff token
+    let staff_claims = UserAccountDto {
+        id: Uuid::new_v4(),
+        username: "admin_seller".to_string(),
+        full_name: "Admin Seller".to_string(),
+        role: "Admin".to_string(),
+        accessible_menus: vec!["customers".to_string()],
+        is_active: true,
+        created_at: Utc::now(),
+    };
+    let staff_token = auth_module.generate_token(&staff_claims).unwrap();
+
+    // 5. Seller staff lists all buyers -> 200 OK
+    let req_list = Request::builder()
+        .uri("/api/v1/admin/buyers")
+        .method("GET")
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .body(Body::empty())
+        .unwrap();
+    let res_list = app.clone().oneshot(req_list).await.unwrap();
+    assert_eq!(res_list.status(), StatusCode::OK);
+    let body = to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
+    let buyers_data: Value = serde_json::from_slice(&body).unwrap();
+    let buyers_array = buyers_data.as_array().unwrap();
+    assert!(buyers_array.iter().any(|b| b["email"] == "dewi@example.com"));
+
+    // 6. Seller updates buyer active status to false -> 200 OK
+    let update_status_payload = json!({
+        "is_active": false
+    });
+    let req_update_status = Request::builder()
+        .uri(format!("/api/v1/admin/buyers/{}/status", buyer_id))
+        .method("PATCH")
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&update_status_payload).unwrap()))
+        .unwrap();
+    let res_update = app.clone().oneshot(req_update_status).await.unwrap();
+    assert_eq!(res_update.status(), StatusCode::OK);
+    let body = to_bytes(res_update.into_body(), usize::MAX).await.unwrap();
+    let updated_data: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(updated_data["is_active"], false);
+
+    // 7. Seller checks buyer activity logs -> 200 OK
+    let req_act = Request::builder()
+        .uri("/api/v1/admin/buyers/activity")
+        .method("GET")
+        .header(header::AUTHORIZATION, format!("Bearer {}", staff_token))
+        .body(Body::empty())
+        .unwrap();
+    let res_act = app.clone().oneshot(req_act).await.unwrap();
+    assert_eq!(res_act.status(), StatusCode::OK);
+    let body = to_bytes(res_act.into_body(), usize::MAX).await.unwrap();
+    let act_data: Value = serde_json::from_slice(&body).unwrap();
+    let act_array = act_data.as_array().unwrap();
+    assert!(act_array.iter().any(|l| l["action"] == "BUYER_REGISTERED_EMAIL"));
 }

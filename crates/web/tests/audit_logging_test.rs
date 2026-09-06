@@ -85,7 +85,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Arc<AuditModule>, St
 
     let buyer_dto = program1_contracts::BuyerAccountDto {
         id: buyer_id,
-        google_sub: "sub_audit".to_string(),
+        google_sub: Some("sub_audit".to_string()),
         email: "audit@buyer.com".to_string(),
         full_name: "Audit Buyer".to_string(),
         avatar_url: None,
@@ -113,6 +113,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Arc<AuditModule>, St
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
+        store_whatsapp_number: "6281234567890".to_string(),
         user_contract: user_module,
         auth_contract: auth_module,
         catalog_contract: catalog_module,

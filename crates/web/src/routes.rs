@@ -4,7 +4,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::{get, post, put},
+    routing::{get, patch, post, put},
     Router,
 };
 use tower_http::catch_panic::CatchPanicLayer;
@@ -42,6 +42,22 @@ pub fn create_app(state: AppState) -> Router {
                 lim,
                 "buyer_auth_google",
                 10,
+                Duration::from_secs(60),
+                req,
+                next,
+            )
+            .await
+        }
+    });
+
+    let buyer_login_limiter = limiter.clone();
+    let buyer_login_limit_layer = axum::middleware::from_fn(move |req, next| {
+        let lim = buyer_login_limiter.clone();
+        async move {
+            rate_limit::rate_limit_layer(
+                lim,
+                "buyer_auth_login",
+                5,
                 Duration::from_secs(60),
                 req,
                 next,
@@ -126,6 +142,14 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/buyer/auth/google",
             post(google_auth_handler).route_layer(buyer_auth_limit_layer),
         )
+        .route(
+            "/api/v1/buyer/auth/register",
+            post(buyer_register_handler).route_layer(register_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/buyer/auth/login",
+            post(buyer_login_handler).route_layer(buyer_login_limit_layer),
+        )
         .route("/api/v1/catalog", get(list_catalog))
         .route("/api/v1/catalog/:id", get(get_catalog_item));
 
@@ -190,6 +214,15 @@ pub fn create_app(state: AppState) -> Router {
             post(create_marketplace_order).route_layer(order_limit_layer),
         )
         .route("/api/v1/users/accounts", get(list_user_accounts))
+        .route("/api/v1/admin/buyers", get(admin_list_buyers_handler))
+        .route(
+            "/api/v1/admin/buyers/:id/status",
+            patch(admin_set_buyer_status_handler),
+        )
+        .route(
+            "/api/v1/admin/buyers/activity",
+            get(admin_list_buyer_activity_handler),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_auth,

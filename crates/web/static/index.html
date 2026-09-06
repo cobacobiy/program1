@@ -389,27 +389,158 @@
         </div>
       </div>
 
-      <!-- VIEW 9: CUSTOMERS -->
+      <!-- VIEW 9: CUSTOMERS & CRM -->
       <div id="view-customers" class="spa-view">
-        <div class="panel-card">
-          <div class="panel-header">
-            <h3 class="panel-title">👥 Customers & CRM Directory</h3>
+        <!-- METRICS -->
+        <div class="metrics-grid" style="margin-bottom: 1.5rem;">
+          <div class="metric-card">
+            <div class="metric-label">Total Pelanggan Terdaftar</div>
+            <div class="metric-value" style="color:var(--cyan)" id="cust-stat-total">0</div>
           </div>
-          <p style="color:var(--text-muted)">Database Pembeli Omnichannel & Loyalty Program.</p>
+          <div class="metric-card">
+            <div class="metric-label">Nomor HP Terverifikasi</div>
+            <div class="metric-value" style="color:var(--emerald)" id="cust-stat-verified">0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Pelanggan Aktif</div>
+            <div class="metric-value" style="color:var(--purple)" id="cust-stat-active">0</div>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3 class="panel-title">👥 Direktori Pelanggan & CRM</h3>
+              <p style="font-size:0.8rem; color:var(--text-muted)">Daftar seluruh akun pembeli (Storefront & Google OAuth), verifikasi nomor HP, dan pemantauan login.</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button class="btn-action" style="background: rgba(59,130,246,0.15); color: var(--blue); border: 1px solid rgba(59,130,246,0.3);" onclick="loadCustomersDirectory()">🔄 Refresh Data</button>
+            </div>
+          </div>
+
+          <!-- TABS -->
+          <div class="tabs-bar">
+            <button class="tab-btn active" id="tab-btn-cust-list" onclick="switchCustomerTab('list', this)">👥 Daftar Member</button>
+            <button class="tab-btn" id="tab-btn-cust-activity" onclick="switchCustomerTab('activity', this)">📋 Log Aktivitas & Login</button>
+          </div>
+
+          <!-- SUB-VIEW 1: CUSTOMERS DIRECTORY LIST -->
+          <div id="cust-subview-list">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.75rem;">
+              <input type="text" id="cust-search-input" placeholder="🔍 Cari nama, email, atau nomor HP..." oninput="filterCustomersList()" style="padding:0.6rem 1rem; border-radius:8px; border:1px solid var(--card-border); background:rgba(255,255,255,0.03); color:var(--text-main); font-size:0.85rem; min-width:280px; flex:1; max-width:400px;" />
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <label style="font-size:0.8rem; color:var(--text-muted);">Status:</label>
+                <select id="cust-filter-status" onchange="filterCustomersList()" style="padding:0.55rem 0.8rem; border-radius:8px; border:1px solid var(--card-border); background:rgba(255,255,255,0.05); color:var(--text-main); font-size:0.85rem;">
+                  <option value="all">Semua Status</option>
+                  <option value="active">Aktif Saja</option>
+                  <option value="inactive">Nonaktif</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="overflow-x: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pelanggan</th>
+                    <th>Email</th>
+                    <th>No. Telepon</th>
+                    <th>Metode Daftar</th>
+                    <th>Terdaftar</th>
+                    <th>Status</th>
+                    <th style="text-align:center;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="cust-table-tbody">
+                  <tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted)">Memuat data pelanggan...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SUB-VIEW 2: BUYER ACTIVITY LOGS -->
+          <div id="cust-subview-activity" style="display:none;">
+            <div style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.85rem;">
+              Menampilkan riwayat aktivitas registrasi, login, dan aksi terkait pelanggan terbaru dari audit log.
+            </div>
+            <div style="overflow-x: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Waktu (UTC)</th>
+                    <th>Aktor / Email</th>
+                    <th>Aksi</th>
+                    <th>Detail / Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody id="cust-activity-tbody">
+                  <tr><td colspan="4" style="text-align:center; padding:2rem; color:var(--text-muted)">Memuat log aktivitas...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- VIEW 10: GINEE CHAT -->
+      <!-- VIEW 10: GINEE CHAT & WHATSAPP HUB -->
       <div id="view-chat" class="spa-view">
-        <div class="panel-card">
-          <div class="panel-header">
-            <h3 class="panel-title">💬 Ginee Chat Auto-Reply Hub</h3>
-            <span class="channel-badge badge-tiktok">TikTok / Shopee Live</span>
+        <div class="metrics-grid" style="margin-bottom: 1.5rem;">
+          <div class="metric-card">
+            <div class="metric-label">WhatsApp CS Toko</div>
+            <div class="metric-value" style="color:var(--emerald); font-size:1.3rem;">6281234567890</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.3rem;">Terkoneksi ke Storefront AURA</div>
           </div>
-          <p style="color:var(--text-muted); margin-bottom:1rem">Bot Auto-Reply Ginee Chat terhubung ke AI Engine Server 226.</p>
-          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:1.2rem; border-radius:12px">
-            <div style="color:var(--emerald); font-weight:600">⚡ Status Bot: STANDBY (Semua Pesanan + Belum Dibalas)</div>
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem">DRY_RUN Safety Mode enabled. Listening to chat.ginee.com streams.</div>
+          <div class="metric-card">
+            <div class="metric-label">Status Bot Auto-Reply</div>
+            <div class="metric-value" style="color:var(--cyan); font-size:1.3rem;">STANDBY</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.3rem;">AI Response Engine v1.0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">In-App Live Chat Status</div>
+            <div class="metric-value" style="color:var(--purple); font-size:1.3rem;">ONLINE</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.3rem;">ChatContract Ready</div>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header" style="flex-wrap:wrap; gap:0.8rem;">
+            <div>
+              <h3 class="panel-title">💬 Live Chat & WhatsApp CS Command Center</h3>
+              <p style="font-size:0.8rem; color:var(--text-muted)">Pusat kendali pesan multi-channel (WhatsApp Storefront, Live Chat, Shopee & TikTok Stream).</p>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <a href="https://web.whatsapp.com" target="_blank" class="btn-action" style="background:rgba(37,211,102,0.18); color:#34d399; border:1px solid rgba(37,211,102,0.4); text-decoration:none;">
+                📱 Buka WhatsApp Web
+              </a>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1rem; margin-top:0.5rem;">
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:1.2rem; border-radius:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                <span style="font-weight:700; color:#fff;">🟢 WhatsApp Direct CS</span>
+                <span class="channel-badge badge-shopee">Aktif di Storefront</span>
+              </div>
+              <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4;">
+                Pembeli di storefront yang telah login otomatis disambungkan ke WhatsApp CS dengan pesan salam pembuka berisi identitas nama dan nomor member.
+              </p>
+              <div style="margin-top:0.8rem; font-size:0.75rem; color:var(--emerald); background:rgba(16,185,129,0.1); padding:0.5rem 0.8rem; border-radius:6px;">
+                ✔ Nomor CS: +62 812-3456-7890 (Dikonfigurasi via <code>STORE_WHATSAPP_NUMBER</code>)
+              </div>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:1.2rem; border-radius:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                <span style="font-weight:700; color:#fff;">🤖 Bot Auto-Reply & Ginee Chat</span>
+                <span class="channel-badge badge-tiktok">TikTok / Shopee Live</span>
+              </div>
+              <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4;">
+                Bot Auto-Reply Ginee Chat terhubung ke AI Engine Server 226 untuk menjawab pertanyaan stok dan resi pengiriman secara otomatis.
+              </p>
+              <div style="margin-top:0.8rem; font-size:0.75rem; color:var(--cyan); background:rgba(56,189,248,0.1); padding:0.5rem 0.8rem; border-radius:6px;">
+                ⚡ DRY_RUN Safety Mode enabled. Listening to chat streams.
+              </div>
+            </div>
           </div>
         </div>
       </div>

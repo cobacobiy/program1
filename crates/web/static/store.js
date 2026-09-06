@@ -16,6 +16,9 @@ let otpSecondsRemaining = 300;
 let currentOtpPhone = "";
 let googleClientId = null;
 let gisRenderAttempts = 0;
+let storeInfo = null;
+let storeWhatsAppNumber = "6281234567890";
+let inAppChatMessages = [];
 
 // --- THEME ENGINE (DARK / LIGHT) ---
 function initStoreTheme() {
@@ -52,12 +55,15 @@ async function initStore() {
     // 2. Fetch Store Information
     const infoRes = await fetch('/api/v1/store/info');
     if (infoRes.ok) {
-      const info = await infoRes.json();
+      storeInfo = await infoRes.json();
+      storeWhatsAppNumber = storeInfo.whatsapp_number || "6281234567890";
       const nameEl = document.getElementById('header-store-name');
-      if (nameEl) nameEl.innerText = info.store_name || "AURA Storefront";
+      if (nameEl) nameEl.innerText = storeInfo.store_name || "AURA Storefront";
       
       const titleEl = document.getElementById('page-title');
-      if (titleEl) titleEl.innerText = `${info.store_name || "AURA Storefront"} — Shopee Official Store`;
+      if (titleEl) titleEl.innerText = `${storeInfo.store_name || "AURA Storefront"} — Shopee Official Store`;
+
+      updateFloatingChatWidget();
     }
 
     // 3. Fetch Catalog Products
@@ -141,6 +147,7 @@ function renderBuyerHeaderState() {
     if (btnLogin) btnLogin.style.display = "block";
     if (badgeProfile) badgeProfile.style.display = "none";
   }
+  updateFloatingChatWidget();
 }
 
 function openBuyerLoginModal() {
@@ -200,14 +207,243 @@ async function fetchBuyerAuthConfig() {
   }
 }
 
+function switchBuyerAuthTab(tab) {
+  const loginTabBtn = document.getElementById("tab-btn-login");
+  const regTabBtn = document.getElementById("tab-btn-register");
+  const loginForm = document.getElementById("buyer-login-form");
+  const regForm = document.getElementById("buyer-register-form");
+  const loginErr = document.getElementById("buyer-login-error");
+  const regErr = document.getElementById("buyer-reg-error");
+
+  if (loginErr) loginErr.style.display = "none";
+  if (regErr) regErr.style.display = "none";
+
+  if (tab === "register") {
+    if (loginTabBtn) loginTabBtn.classList.remove("active");
+    if (regTabBtn) regTabBtn.classList.add("active");
+    if (loginForm) loginForm.classList.remove("active");
+    if (regForm) regForm.classList.add("active");
+  } else {
+    if (regTabBtn) regTabBtn.classList.remove("active");
+    if (loginTabBtn) loginTabBtn.classList.add("active");
+    if (regForm) regForm.classList.remove("active");
+    if (loginForm) loginForm.classList.add("active");
+  }
+}
+
+async function handleBuyerLogin(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const emailInput = document.getElementById("buyer-login-email");
+  const passwordInput = document.getElementById("buyer-login-password");
+  const submitBtn = document.getElementById("btn-submit-buyer-login");
+  const errorBox = document.getElementById("buyer-login-error");
+
+  if (errorBox) errorBox.style.display = "none";
+
+  const email = emailInput ? emailInput.value.trim() : "";
+  const password = passwordInput ? passwordInput.value : "";
+
+  if (!email || !password) {
+    if (errorBox) {
+      errorBox.innerText = "Email dan kata sandi harus diisi";
+      errorBox.style.display = "block";
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Memproses Masuk...";
+  }
+
+  try {
+    const res = await fetch("/api/v1/buyer/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = (data && (data.message || data.error)) || "Gagal masuk. Periksa email atau kata sandi Anda.";
+      if (errorBox) {
+        errorBox.innerText = msg;
+        errorBox.style.display = "block";
+      }
+      return;
+    }
+
+    // Success
+    buyerToken = data.access_token || data.token;
+    activeBuyer = data.buyer;
+    localStorage.setItem("program1_buyer_token", buyerToken);
+    localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
+    renderBuyerHeaderState();
+    closeBuyerLoginModal();
+
+    alert(`🎉 Selamat datang kembali, ${activeBuyer.full_name}!`);
+
+    if (data.requires_phone_verification || !activeBuyer.phone_verified) {
+      openOtpModal();
+    } else {
+      await fetchBuyerAddresses();
+      updateCartUI();
+    }
+  } catch (err) {
+    if (errorBox) {
+      errorBox.innerText = "Terjadi gangguan koneksi ke server: " + (err.message || err);
+      errorBox.style.display = "block";
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Masuk ke Akun Toko";
+    }
+  }
+}
+
+async function handleBuyerRegister(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const nameInput = document.getElementById("buyer-reg-name");
+  const emailInput = document.getElementById("buyer-reg-email");
+  const passwordInput = document.getElementById("buyer-reg-password");
+  const confirmPasswordInput = document.getElementById("buyer-reg-confirm-password");
+  const submitBtn = document.getElementById("btn-submit-buyer-reg");
+  const errorBox = document.getElementById("buyer-reg-error");
+
+  if (errorBox) errorBox.style.display = "none";
+
+  const full_name = nameInput ? nameInput.value.trim() : "";
+  const email = emailInput ? emailInput.value.trim() : "";
+  const password = passwordInput ? passwordInput.value : "";
+  const confirmPassword = confirmPasswordInput ? confirmPasswordInput.value : "";
+
+  if (!full_name || full_name.length < 2) {
+    if (errorBox) {
+      errorBox.innerText = "Nama lengkap minimal 2 karakter";
+      errorBox.style.display = "block";
+    }
+    return;
+  }
+
+  if (!email || !email.includes("@")) {
+    if (errorBox) {
+      errorBox.innerText = "Format email tidak valid";
+      errorBox.style.display = "block";
+    }
+    return;
+  }
+
+  if (!password || password.length < 8) {
+    if (errorBox) {
+      errorBox.innerText = "Kata sandi minimal 8 karakter";
+      errorBox.style.display = "block";
+    }
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    if (errorBox) {
+      errorBox.innerText = "Konfirmasi kata sandi tidak cocok dengan kata sandi";
+      errorBox.style.display = "block";
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Mendaftarkan Member...";
+  }
+
+  try {
+    const res = await fetch("/api/v1/buyer/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name, email, password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = (data && (data.message || data.error)) || "Pendaftaran gagal. Pastikan email belum terdaftar.";
+      if (errorBox) {
+        errorBox.innerText = msg;
+        errorBox.style.display = "block";
+      }
+      return;
+    }
+
+    // Success
+    buyerToken = data.access_token || data.token;
+    activeBuyer = data.buyer;
+    localStorage.setItem("program1_buyer_token", buyerToken);
+    localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
+    renderBuyerHeaderState();
+    closeBuyerLoginModal();
+
+    alert(`🎉 Pendaftaran berhasil! Selamat bergabung, ${activeBuyer.full_name}.`);
+
+    if (data.requires_phone_verification || !activeBuyer.phone_verified) {
+      openOtpModal();
+    } else {
+      await fetchBuyerAddresses();
+      updateCartUI();
+    }
+  } catch (err) {
+    if (errorBox) {
+      errorBox.innerText = "Terjadi gangguan koneksi ke server: " + (err.message || err);
+      errorBox.style.display = "block";
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Daftar Member Sekarang";
+    }
+  }
+}
+
+async function devQuickBuyerLogin() {
+  const timestamp = Date.now().toString().slice(-4);
+  const demoEmail = `demo.buyer${timestamp}@store.local`;
+  const demoPass = "Demo12345!";
+
+  try {
+    const res = await fetch("/api/v1/buyer/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        full_name: `Buyer Demo #${timestamp}`,
+        email: demoEmail,
+        password: demoPass,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      buyerToken = data.access_token || data.token;
+      activeBuyer = data.buyer;
+      localStorage.setItem("program1_buyer_token", buyerToken);
+      localStorage.setItem("program1_buyer_user", JSON.stringify(activeBuyer));
+      renderBuyerHeaderState();
+      closeBuyerLoginModal();
+      alert(`⚡ Berhasil login instan demo sebagai: ${activeBuyer.full_name}`);
+      openOtpModal();
+    } else {
+      const err = await res.json();
+      alert(`Gagal login demo: ${err.message || err.error}`);
+    }
+  } catch (e) {
+    alert(`Error: ${e.message}`);
+  }
+}
+
 function renderGoogleSignInButton() {
   const btnContainer = document.getElementById("google-signin-btn");
   const unconfiguredMsg = document.getElementById("google-signin-unconfigured");
   if (!btnContainer) return;
 
-  if (!googleClientId || googleClientId.trim() === "") {
+  if (!googleClientId || googleClientId.trim() === "" || googleClientId.includes("your-google-client-id")) {
     if (unconfiguredMsg) {
-      unconfiguredMsg.innerText = "Google Sign-In belum dikonfigurasi (GOOGLE_CLIENT_ID belum diatur di server).";
+      unconfiguredMsg.innerText = "Google Sign-In belum dikonfigurasi resmi di server. Silakan daftar / masuk menggunakan form email di atas.";
       unconfiguredMsg.style.display = "block";
     }
     return;
@@ -904,6 +1140,157 @@ function closeCart() {
   if (modal) modal.style.display = 'none';
 }
 
+// --- HYBRID CUSTOMER SUPPORT & CHAT MODULE (WHATSAPP + IN-APP LIVE CHAT - OPTION 3) ---
+
+function toggleChatPopup(forceState) {
+  const card = document.getElementById("chat-popup-card");
+  if (!card) return;
+  
+  if (typeof forceState === "boolean") {
+    card.style.display = forceState ? "block" : "none";
+  } else {
+    card.style.display = card.style.display === "block" ? "none" : "block";
+  }
+
+  if (card.style.display === "none") {
+    closeInAppChatWindow();
+  }
+}
+
+function updateFloatingChatWidget() {
+  const storeTitle = document.getElementById("chat-store-title");
+  if (storeTitle && storeInfo) {
+    storeTitle.innerText = `${storeInfo.store_name || "CS Toko"}`;
+  }
+
+  const memberBadge = document.getElementById("chat-member-badge");
+  const memberName = document.getElementById("chat-member-name");
+  const memberStatus = document.getElementById("chat-member-status");
+  const fabLabel = document.getElementById("chat-fab-label");
+  const fabBtn = document.getElementById("btn-floating-chat");
+
+  if (activeBuyer && buyerToken) {
+    if (memberBadge) memberBadge.style.display = "block";
+    if (memberName) memberName.innerText = `${activeBuyer.full_name} (${activeBuyer.email})`;
+    if (memberStatus) memberStatus.innerHTML = `● Sapaan Member: <strong style="color:#fff">${activeBuyer.full_name}</strong>`;
+    if (fabLabel) fabLabel.innerText = "💬 Chat Penjual";
+    if (fabBtn) fabBtn.classList.add("fab-member-active");
+  } else {
+    if (memberBadge) memberBadge.style.display = "none";
+    if (memberStatus) memberStatus.innerText = "● CS Online & Siap Membantu";
+    if (fabLabel) fabLabel.innerText = "Chat Penjual";
+    if (fabBtn) fabBtn.classList.remove("fab-member-active");
+  }
+}
+
+function handleDirectWhatsAppChat() {
+  const rawNum = storeWhatsAppNumber || (storeInfo && storeInfo.whatsapp_number) || "6281234567890";
+  let cleanNum = rawNum.replace(/[^0-9]/g, "");
+  if (cleanNum.startsWith("08")) {
+    cleanNum = "628" + cleanNum.substring(2);
+  }
+  if (!cleanNum) cleanNum = "6281234567890";
+
+  const storeName = (storeInfo && storeInfo.store_name) || "AURA Storefront";
+  let message = "";
+
+  if (activeBuyer && buyerToken) {
+    const buyerIdSnippet = activeBuyer.id ? activeBuyer.id.substring(0, 8) : "-";
+    const phoneStr = activeBuyer.phone_number ? ` (HP: ${activeBuyer.phone_number})` : "";
+    message = `Halo Admin ${storeName}, saya ${activeBuyer.full_name}${phoneStr} (Member ID: ${buyerIdSnippet}).\n\nSaya adalah pembeli terdaftar dan ingin berkonsultasi mengenai produk / pesanan saya di toko.`;
+  } else {
+    message = `Halo Admin ${storeName}, saya pengunjung toko online Anda dan ingin bertanya seputar ketersediaan produk / informasi pemesanan.`;
+  }
+
+  toggleChatPopup(false);
+
+  const waUrl = `https://wa.me/${cleanNum}?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, "_blank");
+}
+
+function openInAppChatWindow() {
+  if (!activeBuyer || !buyerToken) {
+    alert("ℹ️ Silakan masuk / daftar sebagai member terlebih dahulu untuk memulai sesi obrolan internal, atau gunakan tombol WhatsApp untuk respon instan.");
+    toggleChatPopup(false);
+    openBuyerLoginModal();
+    return;
+  }
+
+  toggleChatPopup(false);
+  const win = document.getElementById("inapp-chat-window");
+  if (win) win.style.display = "flex";
+
+  if (inAppChatMessages.length === 0) {
+    inAppChatMessages.push({
+      sender: "system",
+      text: "Sesi Live Chat dimulai. Terhubung ke Customer Service Toko.",
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    });
+    inAppChatMessages.push({
+      sender: "seller",
+      text: `Halo ${activeBuyer.full_name}! 👋 Terima kasih telah menghubungi kami. Ada produk atau pesanan yang bisa kami bantu?`,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    });
+  }
+
+  renderInAppChatMessages();
+}
+
+function closeInAppChatWindow() {
+  const win = document.getElementById("inapp-chat-window");
+  if (win) win.style.display = "none";
+}
+
+function renderInAppChatMessages() {
+  const container = document.getElementById("inapp-chat-messages");
+  if (!container) return;
+
+  container.innerHTML = inAppChatMessages.map(m => {
+    const senderClass = m.sender; // 'buyer', 'seller', 'system'
+    if (senderClass === "system") {
+      return `<div class="chat-bubble system">${m.text}</div>`;
+    }
+    return `
+      <div class="chat-bubble ${senderClass}">
+        <div>${m.text}</div>
+        <div class="chat-bubble-time">${m.time}</div>
+      </div>
+    `;
+  }).join("");
+
+  container.scrollTop = container.scrollHeight;
+}
+
+function sendInAppChatMessage(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById("inapp-chat-input");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  inAppChatMessages.push({
+    sender: "buyer",
+    text: text,
+    time: nowTime
+  });
+
+  input.value = "";
+  renderInAppChatMessages();
+
+  // Simulate seller response via Live Chat engine
+  setTimeout(() => {
+    const buyerName = (activeBuyer && activeBuyer.full_name) || "Kak";
+    inAppChatMessages.push({
+      sender: "seller",
+      text: `Baik ${buyerName}, pesan Anda telah tercatat di antrean live chat kami. Untuk bantuan darurat atau checkout cepat, Anda juga dapat menekan opsi WhatsApp.`,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    });
+    renderInAppChatMessages();
+  }, 1200);
+}
+
 // Window Exports
 window.openBuyerLoginModal = openBuyerLoginModal;
 window.closeBuyerLoginModal = closeBuyerLoginModal;
@@ -924,6 +1311,12 @@ window.switchCheckoutAddress = switchCheckoutAddress;
 window.handleProcessCheckout = handleProcessCheckout;
 window.openCart = openCart;
 window.closeCart = closeCart;
+window.toggleChatPopup = toggleChatPopup;
+window.handleDirectWhatsAppChat = handleDirectWhatsAppChat;
+window.openInAppChatWindow = openInAppChatWindow;
+window.closeInAppChatWindow = closeInAppChatWindow;
+window.sendInAppChatMessage = sendInAppChatMessage;
+window.updateFloatingChatWidget = updateFloatingChatWidget;
 
 document.addEventListener("DOMContentLoaded", () => {
   initStore();

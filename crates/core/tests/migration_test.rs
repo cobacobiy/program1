@@ -86,3 +86,28 @@ async fn test_migration_008_partial_unique_index_enforces_single_default_address
         .await;
     assert!(res3.is_ok());
 }
+
+#[tokio::test]
+async fn test_migration_008_supports_email_password_buyer_with_null_google_sub() {
+    let pool = init_database("sqlite::memory:")
+        .await
+        .expect("Failed to initialize database");
+
+    // Insert buyer without google_sub (NULL) and with password_hash
+    let res = sqlx::query(
+        "INSERT INTO buyer_accounts (id, google_sub, email, password_hash, full_name)
+         VALUES ('b_email1', NULL, 'buyer_email@test.com', 'argon2_hash_dummy', 'Buyer Email 1')",
+    )
+    .execute(&pool)
+    .await;
+    assert!(res.is_ok(), "Inserting buyer with NULL google_sub and password_hash must succeed");
+
+    // Multiple buyers with NULL google_sub should succeed (NULL is distinct in UNIQUE constraint)
+    let res2 = sqlx::query(
+        "INSERT INTO buyer_accounts (id, google_sub, email, password_hash, full_name)
+         VALUES ('b_email2', NULL, 'buyer_email2@test.com', 'argon2_hash_dummy_2', 'Buyer Email 2')",
+    )
+    .execute(&pool)
+    .await;
+    assert!(res2.is_ok(), "Multiple buyers with NULL google_sub must succeed without violating UNIQUE index");
+}

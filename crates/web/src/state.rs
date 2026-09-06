@@ -19,6 +19,7 @@ use program1_contracts::{
 pub struct AppState {
     pub store_name: String,
     pub store_currency: String,
+    pub store_whatsapp_number: String,
     pub user_contract: Arc<dyn UserContract>,
     pub auth_contract: Arc<dyn AuthContract>,
     pub catalog_contract: Arc<dyn CatalogContract>,

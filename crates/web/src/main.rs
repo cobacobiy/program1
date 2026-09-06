@@ -93,6 +93,7 @@ async fn main() {
     let state = AppState {
         store_name: config.store_name.clone(),
         store_currency: config.store_currency.clone(),
+        store_whatsapp_number: config.store_whatsapp_number.clone(),
         user_contract: user_module,
         auth_contract: auth_module,
         catalog_contract: catalog_module,

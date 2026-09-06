@@ -4,14 +4,57 @@ use axum::{
     Extension, Json,
 };
 use program1_contracts::{
-    BuyerAccountDto, BuyerAddressDto, BuyerAuthResponse, CreateBuyerAddressRequest,
-    GoogleAuthRequest, JwtClaims, OtpRequest, OtpVerifyRequest, UpdateBuyerAddressRequest,
+    AuditLogEntry, BuyerAccountDto, BuyerAddressDto, BuyerAuthResponse, BuyerLoginRequest,
+    CreateBuyerAddressRequest, ErrorCode, GoogleAuthRequest, JwtClaims, OtpRequest,
+    OtpVerifyRequest, RegisterBuyerRequest, UpdateBuyerAddressRequest, UpdateBuyerStatusRequest,
 };
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
+
+/// Register a new Buyer account with Email & Password
+#[utoipa::path(
+    post,
+    path = "/api/v1/buyer/auth/register",
+    request_body = RegisterBuyerRequest,
+    responses(
+        (status = 201, description = "Buyer registration successful", body = BuyerAuthResponse),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 409, description = "Email already registered", body = ApiError),
+        (status = 429, description = "Rate limit exceeded")
+    ),
+    tag = "Buyer Auth"
+)]
+pub async fn buyer_register_handler(
+    State(state): State<AppState>,
+    ValidatedJson(payload): ValidatedJson<RegisterBuyerRequest>,
+) -> Result<(StatusCode, Json<BuyerAuthResponse>), ApiError> {
+    let auth_resp = state.buyer_contract.register(payload).await?;
+    Ok((StatusCode::CREATED, Json(auth_resp)))
+}
+
+/// Login Buyer account with Email & Password
+#[utoipa::path(
+    post,
+    path = "/api/v1/buyer/auth/login",
+    request_body = BuyerLoginRequest,
+    responses(
+        (status = 200, description = "Buyer login successful", body = BuyerAuthResponse),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 401, description = "Invalid email or password", body = ApiError),
+        (status = 429, description = "Rate limit exceeded")
+    ),
+    tag = "Buyer Auth"
+)]
+pub async fn buyer_login_handler(
+    State(state): State<AppState>,
+    ValidatedJson(payload): ValidatedJson<BuyerLoginRequest>,
+) -> Result<Json<BuyerAuthResponse>, ApiError> {
+    let auth_resp = state.buyer_contract.login(payload).await?;
+    Ok(Json(auth_resp))
+}
 
 /// Authenticate Buyer using Google OAuth/OIDC ID token
 #[utoipa::path(
@@ -268,4 +311,104 @@ pub async fn get_buyer_auth_config_handler(
             "google_client_id": state.google_client_id,
         })),
     )
+}
+
+/// List all registered buyers (Admin only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/buyers",
+    responses(
+        (status = 200, description = "List of all buyers", body = Vec<BuyerAccountDto>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Admin Buyers"
+)]
+pub async fn admin_list_buyers_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<Vec<BuyerAccountDto>>, ApiError> {
+    if !claims.is_seller_staff() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Hanya staf/penjual yang dapat mengakses direktori pelanggan",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+    let buyers = state.buyer_contract.list_all_buyers().await?;
+    Ok(Json(buyers))
+}
+
+/// Set buyer active status (Admin only)
+#[utoipa::path(
+    patch,
+    path = "/api/v1/admin/buyers/{id}/status",
+    request_body = UpdateBuyerStatusRequest,
+    params(
+        ("id" = Uuid, Path, description = "Buyer ID")
+    ),
+    responses(
+        (status = 200, description = "Buyer status updated", body = BuyerAccountDto),
+        (status = 404, description = "Buyer not found"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Admin Buyers"
+)]
+pub async fn admin_set_buyer_status_handler(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    ValidatedJson(payload): ValidatedJson<UpdateBuyerStatusRequest>,
+) -> Result<Json<BuyerAccountDto>, ApiError> {
+    if !claims.is_seller_staff() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Hanya staf/penjual yang dapat mengubah status akun pelanggan",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+    let buyer = state
+        .buyer_contract
+        .set_buyer_active_status(id, payload.is_active)
+        .await?;
+    Ok(Json(buyer))
+}
+
+/// List recent buyer activities (Admin only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/buyers/activity",
+    responses(
+        (status = 200, description = "List of buyer activity logs", body = Vec<AuditLogEntry>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Admin Buyers"
+)]
+pub async fn admin_list_buyer_activity_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<Vec<AuditLogEntry>>, ApiError> {
+    if !claims.is_seller_staff() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Hanya staf/penjual yang dapat melihat log aktivitas pelanggan",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+    let logs = state
+        .audit_contract
+        .get_logs(Some("buyer"), 100, 0)
+        .await?;
+    Ok(Json(logs))
 }
