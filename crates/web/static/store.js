@@ -17,7 +17,7 @@ let currentOtpPhone = "";
 let googleClientId = null;
 let gisRenderAttempts = 0;
 let storeInfo = null;
-let storeWhatsAppNumber = "6281234567890";
+let storeWhatsAppNumber = "085810007735";
 let inAppChatMessages = [];
 
 // --- THEME ENGINE (DARK / LIGHT) ---
@@ -56,7 +56,7 @@ async function initStore() {
     const infoRes = await fetch('/api/v1/store/info');
     if (infoRes.ok) {
       storeInfo = await infoRes.json();
-      storeWhatsAppNumber = storeInfo.whatsapp_number || "6281234567890";
+      storeWhatsAppNumber = storeInfo.whatsapp_number || "085810007735";
       const nameEl = document.getElementById('header-store-name');
       if (nameEl) nameEl.innerText = storeInfo.store_name || "AURA Storefront";
       
@@ -597,8 +597,12 @@ async function handleRequestOtp() {
       // Setup WA Admin link
       const waLink = document.getElementById("otp-wa-admin-link");
       if (waLink) {
-        const storeWa = window.STORE_WHATSAPP || "6281234567890";
-        const cleanWa = storeWa.replace(/[^0-9]/g, "");
+        const storeWa = window.STORE_WHATSAPP || storeWhatsAppNumber || "085810007735";
+        let cleanWa = storeWa.replace(/[^0-9]/g, "");
+        if (cleanWa.startsWith("08")) {
+          cleanWa = "628" + cleanWa.substring(2);
+        }
+        if (!cleanWa) cleanWa = "6285810007735";
         const text = encodeURIComponent(`Halo Admin, saya ingin konfirmasi verifikasi nomor toko saya: ${phone}`);
         waLink.href = `https://wa.me/${cleanWa}?text=${text}`;
       }
@@ -1212,12 +1216,12 @@ function updateFloatingChatWidget() {
 }
 
 function handleDirectWhatsAppChat() {
-  const rawNum = storeWhatsAppNumber || (storeInfo && storeInfo.whatsapp_number) || "6281234567890";
+  const rawNum = storeWhatsAppNumber || (storeInfo && storeInfo.whatsapp_number) || "085810007735";
   let cleanNum = rawNum.replace(/[^0-9]/g, "");
   if (cleanNum.startsWith("08")) {
     cleanNum = "628" + cleanNum.substring(2);
   }
-  if (!cleanNum) cleanNum = "6281234567890";
+  if (!cleanNum) cleanNum = "6285810007735";
 
   const storeName = (storeInfo && storeInfo.store_name) || "AURA Storefront";
   let message = "";

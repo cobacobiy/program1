@@ -61,7 +61,7 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
-        store_whatsapp_number: "6281234567890".to_string(),
+        store_whatsapp_number: "085810007735".to_string(),
         user_contract: user_module,
         auth_contract: auth_module.clone(),
         catalog_contract: catalog_module,

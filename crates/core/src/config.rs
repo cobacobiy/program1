@@ -84,7 +84,7 @@ impl AppConfig {
             app_port: env_or("APP_PORT", "8080").parse().unwrap_or(8080),
             store_name: env_or("STORE_NAME", "AURA Storefront"),
             store_currency: env_or("STORE_CURRENCY", "IDR"),
-            store_whatsapp_number: env_or("STORE_WHATSAPP_NUMBER", "6281234567890"),
+            store_whatsapp_number: env_or("STORE_WHATSAPP_NUMBER", "085810007735"),
             database_url: env_or("DATABASE_URL", "sqlite://./data/program1.db?mode=rwc"),
             admin_default_password,
             dev_support_password,

@@ -114,7 +114,7 @@ async fn setup_buyer_test_app_with_pool() -> (
     let state = AppState {
         store_name: "Test Store".to_string(),
         store_currency: "IDR".to_string(),
-        store_whatsapp_number: "6281234567890".to_string(),
+        store_whatsapp_number: "085810007735".to_string(),
         user_contract: user_module,
         auth_contract: auth_module.clone(),
         catalog_contract: catalog_module,
@@ -757,7 +757,7 @@ async fn test_public_buyer_auth_config_endpoint() {
         store_info["google_client_id"],
         "test-google-client-id.apps.googleusercontent.com"
     );
-    assert_eq!(store_info["whatsapp_number"], "6281234567890");
+    assert_eq!(store_info["whatsapp_number"], "085810007735");
 }
 
 #[tokio::test]
