@@ -198,7 +198,10 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/buyer/otp/verify",
             post(verify_otp_handler).route_layer(otp_limit_layer),
         )
-        .route("/api/v1/buyer/profile", get(get_buyer_profile_handler))
+        .route(
+            "/api/v1/buyer/profile",
+            get(get_buyer_profile_handler).put(update_buyer_profile_handler),
+        )
         .route(
             "/api/v1/buyer/addresses",
             get(list_addresses_handler).post(create_address_handler),
@@ -218,6 +221,10 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/buyer/orders",
             get(list_buyer_orders_handler),
+        )
+        .route(
+            "/api/v1/buyer/orders/:id",
+            get(get_buyer_order_handler),
         )
         .route(
             "/api/v1/orders/:id/cancel",

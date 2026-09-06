@@ -585,3 +585,116 @@ async fn test_audit_logging_on_status_change() {
     .unwrap();
     assert_eq!(audit_count, 1);
 }
+
+#[tokio::test]
+async fn test_get_buyer_order_detail_and_isolation() {
+    let ctx = setup_test_context().await;
+    let o1 = create_order(&ctx.app, &ctx.buyer1_token, ctx.buyer1_addr_id, ctx.product_id).await;
+    let o2 = create_order(&ctx.app, &ctx.buyer2_token, ctx.buyer2_addr_id, ctx.product_id).await;
+
+    // 1. Unauthenticated -> 401
+    let unauth_req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/v1/buyer/orders/{}", o1))
+        .body(Body::empty())
+        .unwrap();
+    let res = ctx.app.clone().oneshot(unauth_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // 2. Buyer 1 gets own order -> 200 OK
+    let req1 = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/v1/buyer/orders/{}", o1))
+        .header(header::AUTHORIZATION, format!("Bearer {}", ctx.buyer1_token))
+        .body(Body::empty())
+        .unwrap();
+    let res1 = ctx.app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+    let bytes1 = to_bytes(res1.into_body(), usize::MAX).await.unwrap();
+    let order_data: Value = serde_json::from_slice(&bytes1).unwrap();
+    assert_eq!(order_data["id"].as_str().unwrap(), o1);
+    assert_eq!(order_data["buyer_id"].as_str().unwrap(), ctx.buyer1_id.to_string());
+    assert_eq!(order_data["status"].as_str().unwrap(), "pending");
+
+    // 3. Buyer 1 attempts to access Buyer 2's order -> 404 NOT_FOUND (ownership check)
+    let forbidden_req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/v1/buyer/orders/{}", o2))
+        .header(header::AUTHORIZATION, format!("Bearer {}", ctx.buyer1_token))
+        .body(Body::empty())
+        .unwrap();
+    let forbidden_res = ctx.app.clone().oneshot(forbidden_req).await.unwrap();
+    assert_eq!(forbidden_res.status(), StatusCode::NOT_FOUND);
+
+    // 4. Non-existent order -> 404 NOT_FOUND
+    let not_found_req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/v1/buyer/orders/{}", Uuid::new_v4()))
+        .header(header::AUTHORIZATION, format!("Bearer {}", ctx.buyer1_token))
+        .body(Body::empty())
+        .unwrap();
+    let not_found_res = ctx.app.clone().oneshot(not_found_req).await.unwrap();
+    assert_eq!(not_found_res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_update_buyer_profile_endpoint() {
+    let ctx = setup_test_context().await;
+
+    // 1. Unauthenticated PUT -> 401
+    let unauth_req = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/v1/buyer/profile")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&json!({
+            "full_name": "Budi Santoso Baru"
+        })).unwrap()))
+        .unwrap();
+    let unauth_res = ctx.app.clone().oneshot(unauth_req).await.unwrap();
+    assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
+
+    // 2. Buyer updates full_name and avatar_url -> 200 OK
+    let update_req = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/v1/buyer/profile")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {}", ctx.buyer1_token))
+        .body(Body::from(serde_json::to_vec(&json!({
+            "full_name": "Budi Santoso Baru",
+            "avatar_url": "https://example.com/avatar.jpg"
+        })).unwrap()))
+        .unwrap();
+    let update_res = ctx.app.clone().oneshot(update_req).await.unwrap();
+    assert_eq!(update_res.status(), StatusCode::OK);
+    let bytes = to_bytes(update_res.into_body(), usize::MAX).await.unwrap();
+    let profile: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(profile["full_name"].as_str().unwrap(), "Budi Santoso Baru");
+    assert_eq!(profile["avatar_url"].as_str().unwrap(), "https://example.com/avatar.jpg");
+
+    // 3. GET /api/v1/buyer/profile reflects updated profile
+    let get_req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/v1/buyer/profile")
+        .header(header::AUTHORIZATION, format!("Bearer {}", ctx.buyer1_token))
+        .body(Body::empty())
+        .unwrap();
+    let get_res = ctx.app.clone().oneshot(get_req).await.unwrap();
+    assert_eq!(get_res.status(), StatusCode::OK);
+    let get_bytes = to_bytes(get_res.into_body(), usize::MAX).await.unwrap();
+    let get_profile: Value = serde_json::from_slice(&get_bytes).unwrap();
+    assert_eq!(get_profile["full_name"].as_str().unwrap(), "Budi Santoso Baru");
+
+    // 4. Invalid validation (name too short) -> 422 Unprocessable Entity
+    let invalid_req = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/v1/buyer/profile")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {}", ctx.buyer1_token))
+        .body(Body::from(serde_json::to_vec(&json!({
+            "full_name": "x"
+        })).unwrap()))
+        .unwrap();
+    let invalid_res = ctx.app.clone().oneshot(invalid_req).await.unwrap();
+    assert_eq!(invalid_res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
