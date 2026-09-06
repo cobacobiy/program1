@@ -46,6 +46,7 @@ validator = { version = "0.18", features = ["derive"] }
 regex = "1.10"
 utoipa = { version = "4", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { version = "7", features = ["axum", "reqwest"] }
+lettre = { version = "0.11", default-features = false, features = ["tokio1-native-tls", "builder", "smtp-transport", "hostname"] }
 
 
 

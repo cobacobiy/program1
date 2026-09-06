@@ -423,6 +423,8 @@ pub struct BuyerModule {
     sms_sender: Arc<dyn SmsOtpSender>,
     audit_contract: Arc<dyn AuditContract>,
     config: BuyerModuleConfig,
+    email_sender: Option<Arc<dyn program1_core::EmailSender>>,
+    store_name: String,
 }
 
 impl BuyerModule {
@@ -458,7 +460,19 @@ impl BuyerModule {
             sms_sender,
             audit_contract,
             config,
+            email_sender: None,
+            store_name: "AURA Storefront".to_string(),
         }
+    }
+
+    pub fn with_email_sender(
+        mut self,
+        email_sender: Arc<dyn program1_core::EmailSender>,
+        store_name: impl Into<String>,
+    ) -> Self {
+        self.email_sender = Some(email_sender);
+        self.store_name = store_name.into();
+        self
     }
 
     fn row_to_buyer_dto(row: &sqlx::sqlite::SqliteRow) -> Result<BuyerAccountDto, ContractError> {
@@ -609,8 +623,8 @@ impl BuyerContract for BuyerModule {
         let buyer_dto = BuyerAccountDto {
             id: new_id,
             google_sub: None,
-            email,
-            full_name,
+            email: email.clone(),
+            full_name: full_name.clone(),
             avatar_url: None,
             phone_number: None,
             phone_verified: false,
@@ -618,6 +632,21 @@ impl BuyerContract for BuyerModule {
             created_at: now,
             updated_at: now,
         };
+
+        if let Some(ref email_sender) = self.email_sender {
+            let sender = email_sender.clone();
+            let recipient = email.clone();
+            let name = full_name.clone();
+            let s_name = self.store_name.clone();
+            tokio::spawn(async move {
+                let (subject, body) = program1_core::welcome_email(&name, &s_name, "/");
+                if let Err(err) = sender.send_email(&recipient, &subject, &body).await {
+                    tracing::error!(target: "email", "Failed to send welcome email to {}: {}", recipient, err);
+                } else {
+                    tracing::info!(target: "email", "Welcome email sent successfully to {}", recipient);
+                }
+            });
+        }
 
         let token = self.auth_contract.generate_buyer_token(&buyer_dto)?;
 

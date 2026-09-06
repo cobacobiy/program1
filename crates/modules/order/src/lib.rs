@@ -15,6 +15,8 @@ pub struct OrderModule {
     pool: DbPool,
     catalog_contract: Arc<dyn CatalogContract>,
     inventory_contract: Arc<dyn InventoryContract>,
+    email_sender: Option<Arc<dyn program1_core::EmailSender>>,
+    store_name: String,
 }
 
 impl OrderModule {
@@ -27,7 +29,19 @@ impl OrderModule {
             pool,
             catalog_contract,
             inventory_contract,
+            email_sender: None,
+            store_name: "AURA Storefront".to_string(),
         }
+    }
+
+    pub fn with_email_sender(
+        mut self,
+        email_sender: Arc<dyn program1_core::EmailSender>,
+        store_name: impl Into<String>,
+    ) -> Self {
+        self.email_sender = Some(email_sender);
+        self.store_name = store_name.into();
+        self
     }
 
     fn channel_from_str(s: &str) -> ChannelType {
@@ -270,6 +284,41 @@ impl OrderContract for OrderModule {
         }
 
         tracing::info!(order_id = %order_id, total = %total_amount, "Storefront Order Created in database with immutable snapshot");
+
+        if let Some(ref email_sender) = self.email_sender {
+            let email_to = req.customer_email.trim().to_string();
+            if !email_to.is_empty() && email_to.contains('@') {
+                let sender = email_sender.clone();
+                let oid_str = order_id.to_string();
+                let c_name = req.customer_name.trim().to_string();
+                let s_addr = req.shipping_address.trim().to_string();
+                let s_name = self.store_name.clone();
+                let email_items: Vec<program1_core::OrderEmailItem> = order_items
+                    .iter()
+                    .map(|it| program1_core::OrderEmailItem {
+                        name: it.product_name.clone(),
+                        quantity: it.quantity,
+                        price: it.unit_price,
+                    })
+                    .collect();
+
+                tokio::spawn(async move {
+                    let (subject, body) = program1_core::order_confirmation_email(
+                        &oid_str,
+                        &c_name,
+                        total_amount,
+                        &email_items,
+                        &s_addr,
+                        &s_name,
+                    );
+                    if let Err(err) = sender.send_email(&email_to, &subject, &body).await {
+                        tracing::error!(target: "email", "Failed to send order confirmation email to {}: {}", email_to, err);
+                    } else {
+                        tracing::info!(target: "email", "Order confirmation email sent successfully to {}", email_to);
+                    }
+                });
+            }
+        }
 
         Ok(OmniOrderDto {
             id: order_id,
@@ -542,7 +591,57 @@ impl OrderContract for OrderModule {
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        self.get_order(order_id).await
+        let updated_order = self.get_order(order_id).await?;
+
+        if let Some(ref email_sender) = self.email_sender {
+            let email_to = updated_order.customer_email.trim().to_string();
+            if !email_to.is_empty() && email_to.contains('@') {
+                let sender = email_sender.clone();
+                let oid_str = order_id.to_string();
+                let c_name = updated_order.customer_name.clone();
+                let s_name = self.store_name.clone();
+
+                match new_status {
+                    OrderStatus::Paid => {
+                        let amt = updated_order.total_amount;
+                        tokio::spawn(async move {
+                            let (subject, body) = program1_core::payment_success_email(
+                                &oid_str,
+                                &c_name,
+                                "Pembayaran Terkonfirmasi",
+                                amt,
+                                &s_name,
+                            );
+                            if let Err(err) = sender.send_email(&email_to, &subject, &body).await {
+                                tracing::error!(target: "email", "Failed to send payment success email to {}: {}", email_to, err);
+                            } else {
+                                tracing::info!(target: "email", "Payment success email sent to {}", email_to);
+                            }
+                        });
+                    }
+                    OrderStatus::Shipped => {
+                        let t_num = updated_order.tracking_number.clone();
+                        tokio::spawn(async move {
+                            let (subject, body) = program1_core::shipping_notification_email(
+                                &oid_str,
+                                &c_name,
+                                t_num.as_deref(),
+                                Some("Kurir Ekspedisi"),
+                                &s_name,
+                            );
+                            if let Err(err) = sender.send_email(&email_to, &subject, &body).await {
+                                tracing::error!(target: "email", "Failed to send shipping notification email to {}: {}", email_to, err);
+                            } else {
+                                tracing::info!(target: "email", "Shipping notification email sent to {}", email_to);
+                            }
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(updated_order)
     }
 
     async fn list_buyer_orders(&self, buyer_id: Uuid) -> Result<Vec<OmniOrderDto>, ContractError> {

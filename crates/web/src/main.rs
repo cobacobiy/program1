@@ -57,11 +57,34 @@ async fn main() {
         catalog_module.clone(),
     ));
     let channel_module = Arc::new(ChannelSyncModule::new(db_pool.clone()));
-    let order_module = Arc::new(OrderModule::new(
-        db_pool.clone(),
-        catalog_module.clone(),
-        inventory_module.clone(),
-    ));
+    let email_sender: Arc<dyn program1_core::EmailSender> = if config.email_provider.eq_ignore_ascii_case("smtp") {
+        tracing::info!(
+            host = %config.smtp_host,
+            port = %config.smtp_port,
+            user = %config.smtp_username,
+            "Initializing SmtpEmailSender"
+        );
+        Arc::new(program1_core::SmtpEmailSender::new(program1_core::SmtpEmailConfig {
+            host: config.smtp_host.clone(),
+            port: config.smtp_port,
+            username: config.smtp_username.clone(),
+            password: config.smtp_password.clone(),
+            from_name: config.smtp_from_name.clone(),
+            from_email: config.smtp_from_email.clone(),
+        }))
+    } else {
+        tracing::info!("Initializing ConsoleEmailSender for development/test environment");
+        Arc::new(program1_core::ConsoleEmailSender::new())
+    };
+
+    let order_module = Arc::new(
+        OrderModule::new(
+            db_pool.clone(),
+            catalog_module.clone(),
+            inventory_module.clone(),
+        )
+        .with_email_sender(email_sender.clone(), config.store_name.clone()),
+    );
     let analytics_module = Arc::new(AnalyticsModule::new(
         catalog_module.clone(),
         order_module.clone(),
@@ -81,14 +104,17 @@ async fn main() {
         otp_max_attempts: config.otp_max_attempts as u32,
         otp_resend_cooldown_seconds: config.otp_resend_cooldown_seconds as u64,
     };
-    let buyer_module = Arc::new(program1_module_buyer::BuyerModule::new_with_config(
-        db_pool.clone(),
-        auth_module.clone(),
-        google_verifier,
-        sms_sender,
-        audit_module.clone(),
-        buyer_config,
-    ));
+    let buyer_module = Arc::new(
+        program1_module_buyer::BuyerModule::new_with_config(
+            db_pool.clone(),
+            auth_module.clone(),
+            google_verifier,
+            sms_sender,
+            audit_module.clone(),
+            buyer_config,
+        )
+        .with_email_sender(email_sender.clone(), config.store_name.clone()),
+    );
     let chat_module = Arc::new(ChatModule::new(db_pool.clone()));
     let payment_module = Arc::new(PaymentModule::new(
         db_pool.clone(),
