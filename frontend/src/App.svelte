@@ -11,9 +11,10 @@
   import CheckoutModal from './lib/CheckoutModal.svelte';
   import BuyerOrdersModal from './lib/BuyerOrdersModal.svelte';
   import LiveChat from './lib/LiveChat.svelte';
+  import AdminHub from './lib/AdminHub.svelte';
 
   // Navigation & Modals state
-  let activeTab = $state<'store' | 'diagnostic'>('store');
+  let activeTab = $state<'store' | 'admin' | 'diagnostic'>('store');
   let isCheckoutOpen = $state(false);
   let isOrdersOpen = $state(false);
 
@@ -113,6 +114,9 @@
       <nav class="nav-tabs">
         <button class:active={activeTab === 'store'} onclick={() => activeTab = 'store'}>
           🏪 Katalog Toko
+        </button>
+        <button class:active={activeTab === 'admin'} onclick={() => activeTab = 'admin'}>
+          ⚙️ Admin Hub
         </button>
         <button class:active={activeTab === 'diagnostic'} onclick={() => activeTab = 'diagnostic'}>
           🔍 Server Health
@@ -263,6 +267,9 @@
           {/if}
         </div>
       </section>
+
+    {:else if activeTab === 'admin'}
+      <AdminHub />
     {/if}
   </main>
 
