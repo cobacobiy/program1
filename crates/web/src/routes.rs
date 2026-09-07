@@ -383,12 +383,23 @@ pub fn create_app(state: AppState) -> Router {
         .unwrap_or_else(|_| "<h1>Storefront</h1>".to_string());
     let store_page_alt = store_page.clone();
 
-    let static_routes = Router::new()
+    // Svelte SPA page support (if built)
+    let svelte_page = std::fs::read_to_string("crates/web/static/dist/index.html").ok();
+    let root_page = svelte_page.clone().unwrap_or(store_page);
+
+    let assets_service = ServeDir::new("crates/web/static/dist/assets")
+        .fallback(ServeDir::new("crates/web/static"));
+
+    let mut static_routes = Router::new()
         .route("/admin", get(move || async move { Html(admin_page) }))
         .route("/store", get(move || async move { Html(store_page_alt) }))
-        .route("/", get(move || async move { Html(store_page) }))
-        .nest_service("/assets", ServeDir::new("crates/web/static"))
+        .route("/", get(move || async move { Html(root_page) }))
+        .nest_service("/assets", assets_service)
         .nest_service("/uploads", ServeDir::new("data/uploads"));
+
+    if let Some(sp) = svelte_page {
+        static_routes = static_routes.route("/svelte", get(move || async move { Html(sp) }));
+    }
 
     // Swagger UI & OpenAPI Specification routes
     let doc_routes = SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi());

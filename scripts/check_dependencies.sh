@@ -48,6 +48,37 @@ else
     echo "[WARN] GitHub CLI (gh) not found."
 fi
 
+# 6. Check Bun & Node.js
+if ! command -v bun &> /dev/null && [ ! -f "$HOME/.bun/bin/bun" ]; then
+    echo "[INFO] Bun not found. Installing Bun via official script..."
+    curl -fsSL https://bun.sh/install | bash || true
+fi
+
+export PATH="$HOME/.bun/bin:$PATH"
+
+if command -v bun &> /dev/null; then
+    echo "[OK] Bun found: $(bun --version) at $(which bun)"
+elif command -v npm &> /dev/null; then
+    echo "[OK] Node/npm found: $(node --version 2>/dev/null || true), npm $(npm --version 2>/dev/null || true)"
+else
+    echo "[WARN] Neither Bun nor Node/npm found. Required for Svelte frontend development."
+fi
+
+# 7. Setup frontend workspace
+if [ ! -f "frontend/package.json" ]; then
+    echo "[INFO] Initializing frontend workspace with Vite + Svelte (TypeScript)..."
+    "$HOME/.bun/bin/bun" create vite frontend --template svelte-ts --no-interactive
+fi
+
+if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
+    echo "[INFO] Installing frontend dependencies via Bun..."
+    cd frontend
+    "$HOME/.bun/bin/bun" install
+    echo "[INFO] Building Svelte frontend to crates/web/static/dist..."
+    "$HOME/.bun/bin/bun" run build
+    cd ..
+fi
+
 echo "----------------------------------------------"
-echo " All dependency checks complete."
+echo " All dependency checks & setup complete."
 echo "=============================================="

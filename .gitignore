@@ -8,3 +8,10 @@
 *.db-*
 data/
 
+# Frontend dependencies & build artifacts
+frontend/node_modules/
+frontend/dist/
+crates/web/static/dist/
+.bun/
+
+
