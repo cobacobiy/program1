@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
-    CatalogContract, CatalogItemDto, ContractError, CreateCatalogItemRequest, PaginatedResponse,
+    CatalogContract, CatalogItemDto, ContractError, CreateCatalogItemRequest, CreateVariantRequest,
+    PaginatedResponse, ProductVariantDto, UpdateVariantRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -111,6 +112,47 @@ impl CatalogModule {
             image_url,
             description,
             created_at,
+        })
+    }
+
+    fn variant_row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<ProductVariantDto, ContractError> {
+        let id_str: String = row.get("id");
+        let id = Uuid::parse_str(&id_str)
+            .map_err(|e| ContractError::Internal(format!("Corrupt UUID in variant id: {}", e)))?;
+
+        let product_id_str: String = row.get("product_id");
+        let product_id = Uuid::parse_str(&product_id_str)
+            .map_err(|e| ContractError::Internal(format!("Corrupt UUID in variant product_id: {}", e)))?;
+
+        let variant_name: String = row.get("variant_name");
+        let variant_value: String = row.get("variant_value");
+        let sku: Option<String> = row.get("sku");
+        let price_override: Option<f64> = row.get("price_override");
+        let stock_quantity: i64 = row.get("stock_quantity");
+        let is_active_int: i64 = row.get("is_active");
+        let is_active = is_active_int != 0;
+
+        let created_at_str: String = row.get("created_at");
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        let updated_at_str: String = row.get("updated_at");
+        let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
+
+        Ok(ProductVariantDto {
+            id,
+            product_id,
+            variant_name,
+            variant_value,
+            sku,
+            price_override,
+            stock_quantity: stock_quantity as u32,
+            is_active,
+            created_at,
+            updated_at,
         })
     }
 }
@@ -282,6 +324,230 @@ impl CatalogContract for CatalogModule {
             created_at: now,
         })
     }
+
+    async fn list_variants(&self, product_id: Uuid) -> Result<Vec<ProductVariantDto>, ContractError> {
+        let rows = sqlx::query(
+            "SELECT id, product_id, variant_name, variant_value, sku, price_override, stock_quantity, is_active, created_at, updated_at
+             FROM product_variants
+             WHERE product_id = $1 AND is_active = 1
+             ORDER BY variant_name ASC, variant_value ASC",
+        )
+        .bind(product_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        rows.iter().map(Self::variant_row_to_dto).collect()
+    }
+
+    async fn get_variant(&self, variant_id: Uuid) -> Result<ProductVariantDto, ContractError> {
+        let row = sqlx::query(
+            "SELECT id, product_id, variant_name, variant_value, sku, price_override, stock_quantity, is_active, created_at, updated_at
+             FROM product_variants
+             WHERE id = $1",
+        )
+        .bind(variant_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        match row {
+            Some(r) => Self::variant_row_to_dto(&r),
+            None => Err(ContractError::NotFound(format!("Product Variant {}", variant_id))),
+        }
+    }
+
+    async fn create_variant(
+        &self,
+        product_id: Uuid,
+        req: CreateVariantRequest,
+    ) -> Result<ProductVariantDto, ContractError> {
+        let variant_name = req.variant_name.trim().to_string();
+        let variant_value = req.variant_value.trim().to_string();
+
+        if variant_name.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Variant name cannot be empty".to_string(),
+            ));
+        }
+        if variant_value.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Variant value cannot be empty".to_string(),
+            ));
+        }
+        if let Some(price) = req.price_override {
+            if price < 0.0 {
+                return Err(ContractError::ValidationError(
+                    "Price override cannot be negative".to_string(),
+                ));
+            }
+        }
+
+        // Check parent item exists
+        let prod = sqlx::query("SELECT id FROM catalog_items WHERE id = $1")
+            .bind(product_id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if prod.is_none() {
+            return Err(ContractError::NotFound(format!("Catalog item {}", product_id)));
+        }
+
+        // Check duplicate
+        let duplicate = sqlx::query(
+            "SELECT id FROM product_variants WHERE product_id = $1 AND LOWER(variant_name) = LOWER($2) AND LOWER(variant_value) = LOWER($3)",
+        )
+        .bind(product_id.to_string())
+        .bind(&variant_name)
+        .bind(&variant_value)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if duplicate.is_some() {
+            return Err(ContractError::ValidationError(format!(
+                "Variant with name '{}' and value '{}' already exists for this product",
+                variant_name, variant_value
+            )));
+        }
+
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+        let sku = req.sku.map(|s| s.trim().to_uppercase()).filter(|s| !s.is_empty());
+
+        sqlx::query(
+            "INSERT INTO product_variants (id, product_id, variant_name, variant_value, sku, price_override, stock_quantity, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)",
+        )
+        .bind(id.to_string())
+        .bind(product_id.to_string())
+        .bind(&variant_name)
+        .bind(&variant_value)
+        .bind(&sku)
+        .bind(req.price_override)
+        .bind(req.stock_quantity as i64)
+        .bind(now.to_rfc3339())
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        tracing::info!(id = %id, product_id = %product_id, name = %variant_name, value = %variant_value, "Product variant created");
+
+        Ok(ProductVariantDto {
+            id,
+            product_id,
+            variant_name,
+            variant_value,
+            sku,
+            price_override: req.price_override,
+            stock_quantity: req.stock_quantity,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    async fn update_variant(
+        &self,
+        variant_id: Uuid,
+        req: UpdateVariantRequest,
+    ) -> Result<ProductVariantDto, ContractError> {
+        let existing = self.get_variant(variant_id).await?;
+
+        let variant_name = req.variant_name.trim().to_string();
+        let variant_value = req.variant_value.trim().to_string();
+
+        if variant_name.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Variant name cannot be empty".to_string(),
+            ));
+        }
+        if variant_value.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Variant value cannot be empty".to_string(),
+            ));
+        }
+        if let Some(price) = req.price_override {
+            if price < 0.0 {
+                return Err(ContractError::ValidationError(
+                    "Price override cannot be negative".to_string(),
+                ));
+            }
+        }
+
+        // Check duplicate if name or value changed
+        if variant_name.to_lowercase() != existing.variant_name.to_lowercase()
+            || variant_value.to_lowercase() != existing.variant_value.to_lowercase()
+        {
+            let duplicate = sqlx::query(
+                "SELECT id FROM product_variants WHERE product_id = $1 AND LOWER(variant_name) = LOWER($2) AND LOWER(variant_value) = LOWER($3) AND id != $4",
+            )
+            .bind(existing.product_id.to_string())
+            .bind(&variant_name)
+            .bind(&variant_value)
+            .bind(variant_id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+            if duplicate.is_some() {
+                return Err(ContractError::ValidationError(format!(
+                    "Variant with name '{}' and value '{}' already exists for this product",
+                    variant_name, variant_value
+                )));
+            }
+        }
+
+        let now = Utc::now();
+        let sku = req.sku.map(|s| s.trim().to_uppercase()).filter(|s| !s.is_empty());
+        let is_active = req.is_active.unwrap_or(existing.is_active);
+
+        sqlx::query(
+            "UPDATE product_variants
+             SET variant_name = $1, variant_value = $2, sku = $3, price_override = $4, stock_quantity = $5, is_active = $6, updated_at = $7
+             WHERE id = $8",
+        )
+        .bind(&variant_name)
+        .bind(&variant_value)
+        .bind(&sku)
+        .bind(req.price_override)
+        .bind(req.stock_quantity as i64)
+        .bind(if is_active { 1 } else { 0 })
+        .bind(now.to_rfc3339())
+        .bind(variant_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(ProductVariantDto {
+            id: variant_id,
+            product_id: existing.product_id,
+            variant_name,
+            variant_value,
+            sku,
+            price_override: req.price_override,
+            stock_quantity: req.stock_quantity,
+            is_active,
+            created_at: existing.created_at,
+            updated_at: now,
+        })
+    }
+
+    async fn delete_variant(&self, variant_id: Uuid) -> Result<(), ContractError> {
+        let res = sqlx::query("DELETE FROM product_variants WHERE id = $1")
+            .bind(variant_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if res.rows_affected() == 0 {
+            return Err(ContractError::NotFound(format!("Product Variant {}", variant_id)));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -321,4 +587,143 @@ mod tests {
         let fetched = module.get_item(created.id).await.unwrap();
         assert_eq!(fetched.sku, "SKU-MAT-99");
     }
+
+    #[tokio::test]
+    async fn test_variant_crud() {
+        let module = create_test_catalog_module().await;
+        let items = module.list_items().await.unwrap();
+        let product_id = items[0].id;
+
+        // 1. Create 3 variants (S, M, L)
+        let v1 = module
+            .create_variant(
+                product_id,
+                CreateVariantRequest {
+                    variant_name: "Ukuran".to_string(),
+                    variant_value: "S".to_string(),
+                    sku: Some("SKU-VAR-S".to_string()),
+                    price_override: None,
+                    stock_quantity: 10,
+                },
+            )
+            .await
+            .unwrap();
+
+        let v2 = module
+            .create_variant(
+                product_id,
+                CreateVariantRequest {
+                    variant_name: "Ukuran".to_string(),
+                    variant_value: "M".to_string(),
+                    sku: Some("SKU-VAR-M".to_string()),
+                    price_override: Some(1500000.0),
+                    stock_quantity: 15,
+                },
+            )
+            .await
+            .unwrap();
+
+        let _v3 = module
+            .create_variant(
+                product_id,
+                CreateVariantRequest {
+                    variant_name: "Ukuran".to_string(),
+                    variant_value: "L".to_string(),
+                    sku: Some("SKU-VAR-L".to_string()),
+                    price_override: Some(1600000.0),
+                    stock_quantity: 20,
+                },
+            )
+            .await
+            .unwrap();
+
+        // 2. List variants -> should have 3
+        let list = module.list_variants(product_id).await.unwrap();
+        assert_eq!(list.len(), 3);
+
+        // 3. Update variant v2
+        let updated = module
+            .update_variant(
+                v2.id,
+                UpdateVariantRequest {
+                    variant_name: "Ukuran".to_string(),
+                    variant_value: "Medium-Updated".to_string(),
+                    sku: Some("SKU-VAR-M-UPD".to_string()),
+                    price_override: Some(1550000.0),
+                    stock_quantity: 25,
+                    is_active: Some(true),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.variant_value, "Medium-Updated");
+        assert_eq!(updated.stock_quantity, 25);
+
+        // 4. Delete 1 variant -> should have 2 left
+        module.delete_variant(v1.id).await.unwrap();
+        let list_after = module.list_variants(product_id).await.unwrap();
+        assert_eq!(list_after.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_variant_price_override() {
+        let module = create_test_catalog_module().await;
+        let items = module.list_items().await.unwrap();
+        let product_id = items[0].id;
+
+        let v = module
+            .create_variant(
+                product_id,
+                CreateVariantRequest {
+                    variant_name: "Warna".to_string(),
+                    variant_value: "Matte Black".to_string(),
+                    sku: Some("SKU-VAR-BLK".to_string()),
+                    price_override: Some(1750000.0),
+                    stock_quantity: 5,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(v.price_override, Some(1750000.0));
+        let fetched = module.get_variant(v.id).await.unwrap();
+        assert_eq!(fetched.price_override, Some(1750000.0));
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_variant_rejected() {
+        let module = create_test_catalog_module().await;
+        let items = module.list_items().await.unwrap();
+        let product_id = items[0].id;
+
+        module
+            .create_variant(
+                product_id,
+                CreateVariantRequest {
+                    variant_name: "Ukuran".to_string(),
+                    variant_value: "XL".to_string(),
+                    sku: None,
+                    price_override: None,
+                    stock_quantity: 5,
+                },
+            )
+            .await
+            .unwrap();
+
+        let dup = module
+            .create_variant(
+                product_id,
+                CreateVariantRequest {
+                    variant_name: "Ukuran".to_string(),
+                    variant_value: "XL".to_string(),
+                    sku: None,
+                    price_override: None,
+                    stock_quantity: 10,
+                },
+            )
+            .await;
+
+        assert!(dup.is_err());
+    }
 }
+

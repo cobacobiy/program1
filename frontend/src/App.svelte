@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { HealthResponse, Product, CatalogPageResponse } from './lib/types';
+  import type { HealthResponse, Product, CatalogPageResponse, ProductVariant } from './lib/types';
   import { formatRupiah } from './lib/currency';
   import { auth } from './lib/auth.svelte';
   import { cart } from './lib/cart.svelte';
@@ -17,6 +17,36 @@
   let activeTab = $state<'store' | 'admin' | 'diagnostic'>('store');
   let isCheckoutOpen = $state(false);
   let isOrdersOpen = $state(false);
+
+  // Quick Variant Picker Modal State
+  let variantPickerProduct = $state<Product | null>(null);
+  let availableVariants = $state<ProductVariant[]>([]);
+  let selectedVariant = $state<ProductVariant | null>(null);
+  let variantLoading = $state(false);
+
+  async function handleAddToCartClick(product: Product) {
+    variantLoading = true;
+    try {
+      const vars = await apiFetch<ProductVariant[]>(`/catalog/${product.id}/variants`);
+      if (vars && vars.length > 0) {
+        variantPickerProduct = product;
+        availableVariants = vars;
+        selectedVariant = vars[0];
+        return;
+      }
+    } catch {
+      // Fallback to base product if fetch fails or no variants exist
+    } finally {
+      variantLoading = false;
+    }
+    cart.addItem(product);
+  }
+
+  function confirmAddVariantToCart() {
+    if (!variantPickerProduct) return;
+    cart.addItem(variantPickerProduct, 1, selectedVariant || undefined);
+    variantPickerProduct = null;
+  }
 
   // Health state
   let healthData = $state<HealthResponse | null>(null);
@@ -224,7 +254,7 @@
                   <button
                     class="btn-add"
                     disabled={product.stock <= 0}
-                    onclick={() => cart.addItem(product)}
+                    onclick={() => handleAddToCartClick(product)}
                   >
                     {product.stock <= 0 ? 'Stok Habis' : '+ Keranjang'}
                   </button>
@@ -296,16 +326,19 @@
             </div>
           {:else}
             <div class="cart-lines">
-              {#each cart.items as item (item.product.id)}
+              {#each cart.items as item (`${item.product.id}_${item.variant?.id || 'base'}`)}
                 <div class="line-item">
                   <div class="line-info">
                     <h4>{item.product.name}</h4>
-                    <span class="line-price">{formatRupiah(item.product.price_cents)}</span>
+                    {#if item.variant}
+                      <span class="variant-tag">{item.variant.variant_name}: {item.variant.variant_value}</span>
+                    {/if}
+                    <span class="line-price">{formatRupiah(item.variant?.price_override && item.variant.price_override > 0 ? item.variant.price_override : item.product.price_cents)}</span>
                   </div>
                   <div class="line-actions">
-                    <button class="qty-btn" onclick={() => cart.updateQuantity(item.product.id, -1)}>-</button>
+                    <button class="qty-btn" onclick={() => cart.updateQuantity(item.product.id, -1, item.variant?.id)}>-</button>
                     <span class="qty-num">{item.quantity}</span>
-                    <button class="qty-btn" onclick={() => cart.updateQuantity(item.product.id, 1)}>+</button>
+                    <button class="qty-btn" onclick={() => cart.updateQuantity(item.product.id, 1, item.variant?.id)}>+</button>
                   </div>
                 </div>
               {/each}
@@ -324,6 +357,61 @@
             </button>
           </div>
         {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal Pemilihan Varian Toko -->
+  {#if variantPickerProduct}
+    <div class="drawer-backdrop" onclick={() => variantPickerProduct = null} role="presentation">
+      <div class="modal-card variant-picker-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+        <div class="modal-header">
+          <div>
+            <h3>Pilih Varian Produk</h3>
+            <p class="picker-prod-name">{variantPickerProduct.name}</p>
+          </div>
+          <button class="close-btn" onclick={() => variantPickerProduct = null}>&times;</button>
+        </div>
+
+        <div class="picker-body">
+          <label class="picker-label">Pilihan Varian ({variantPickerProduct.name}):</label>
+          <div class="variant-chips">
+            {#each availableVariants as v (v.id)}
+              <button
+                class="v-chip"
+                class:selected={selectedVariant?.id === v.id}
+                onclick={() => selectedVariant = v}
+              >
+                <strong>{v.variant_value}</strong>
+                {#if v.price_override && v.price_override > 0}
+                  <small class="v-price">{formatRupiah(v.price_override)}</small>
+                {/if}
+                <small class="v-stock">Stok: {v.stock_quantity}</small>
+              </button>
+            {/each}
+          </div>
+
+          <div class="picker-summary">
+            <div class="summary-line">
+              <span>Harga:</span>
+              <strong class="picker-price">
+                {formatRupiah(selectedVariant?.price_override && selectedVariant.price_override > 0 ? selectedVariant.price_override : variantPickerProduct.price_cents)}
+              </strong>
+            </div>
+            <div class="summary-line">
+              <span>Stok Varian:</span>
+              <span>{selectedVariant ? selectedVariant.stock_quantity : variantPickerProduct.stock} unit</span>
+            </div>
+          </div>
+
+          <button
+            class="btn-confirm-var"
+            disabled={selectedVariant ? selectedVariant.stock_quantity <= 0 : false}
+            onclick={confirmAddVariantToCart}
+          >
+            + Masukkan ke Keranjang
+          </button>
+        </div>
       </div>
     </div>
   {/if}
@@ -558,4 +646,42 @@
     from { transform: translateX(100%); }
     to { transform: translateX(0); }
   }
+
+  /* Variant Picker & Tags */
+  .variant-tag {
+    display: inline-block; background: #0284c7; color: #fff;
+    font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 4px;
+    margin-bottom: 0.25rem; font-weight: 500;
+  }
+  .variant-picker-modal {
+    background: #0f172a; border: 1px solid #334155; border-radius: 12px;
+    width: 90%; max-width: 440px; padding: 1.5rem; color: #f8fafc;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  }
+  .picker-prod-name { font-size: 0.85rem; color: #38bdf8; margin: 0.25rem 0 0; }
+  .picker-body { margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+  .picker-label { font-size: 0.85rem; color: #94a3b8; }
+  .variant-chips { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .v-chip {
+    background: #1e293b; border: 1px solid #334155; color: #f1f5f9;
+    padding: 0.5rem 0.85rem; border-radius: 8px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
+    transition: all 0.2s;
+  }
+  .v-chip:hover { border-color: #38bdf8; }
+  .v-chip.selected { border-color: #38bdf8; background: rgba(56, 189, 248, 0.15); box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); }
+  .v-price { color: #38bdf8; font-weight: bold; font-size: 0.75rem; }
+  .v-stock { color: #64748b; font-size: 0.7rem; }
+  .picker-summary {
+    background: #1e293b; padding: 0.85rem 1rem; border-radius: 8px;
+    display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem;
+  }
+  .summary-line { display: flex; justify-content: space-between; }
+  .picker-price { color: #38bdf8; font-size: 1.1rem; }
+  .btn-confirm-var {
+    background: #0284c7; color: #fff; border: none; padding: 0.8rem;
+    border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer;
+  }
+  .btn-confirm-var:hover { background: #0369a1; }
+  .btn-confirm-var:disabled { background: #475569; cursor: not-allowed; }
 </style>

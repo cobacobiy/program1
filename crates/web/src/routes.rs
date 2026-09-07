@@ -186,7 +186,9 @@ pub fn create_app(state: AppState) -> Router {
             post(buyer_login_handler).route_layer(buyer_login_limit_layer),
         )
         .route("/api/v1/catalog", get(list_catalog))
-        .route("/api/v1/catalog/:id", get(get_catalog_item));
+        .route("/api/v1/catalog/:id", get(get_catalog_item))
+        .route("/api/v1/catalog/:id/variants", get(list_variants_handler))
+        .route("/api/v1/catalog/:id/variants/:vid", get(get_variant_handler));
 
     // 2. Buyer protected routes (valid Buyer JWT required)
     let buyer_routes = Router::new()
@@ -264,7 +266,17 @@ pub fn create_app(state: AppState) -> Router {
         )
         .route(
             "/api/v1/catalog",
-            post(create_catalog_item).route_layer(catalog_limit_layer),
+            post(create_catalog_item).route_layer(catalog_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/catalog/:id/variants",
+            post(create_variant_handler).route_layer(catalog_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/catalog/:id/variants/:vid",
+            put(update_variant_handler)
+                .delete(delete_variant_handler)
+                .route_layer(catalog_limit_layer),
         )
         .route("/api/v1/inventory", get(list_all_inventory))
         .route(

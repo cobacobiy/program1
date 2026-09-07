@@ -3,7 +3,7 @@
   import { adminAuth } from './adminAuth.svelte';
   import { toast } from './toast.svelte';
   import { formatRupiah } from './currency';
-  import type { Product } from './types';
+  import type { Product, ProductVariant, CreateVariantPayload } from './types';
 
   interface AdminOrder {
     id: string;
@@ -51,6 +51,85 @@
   let newCategory = $state('Umum');
   let selectedFile = $state<File | null>(null);
   let isUploading = $state(false);
+
+  // Variant Modal State
+  let selectedProductForVariants = $state<Product | null>(null);
+  let variants = $state<ProductVariant[]>([]);
+  let variantsLoading = $state(false);
+  let varName = $state('Ukuran');
+  let varValue = $state('');
+  let varSku = $state('');
+  let varPriceOverride = $state<number | null>(null);
+  let varStock = $state(10);
+  let varSaving = $state(false);
+
+  async function openVariantModal(prod: Product) {
+    selectedProductForVariants = prod;
+    varValue = '';
+    varSku = '';
+    varPriceOverride = null;
+    await fetchVariants(prod.id);
+  }
+
+  async function fetchVariants(productId: string) {
+    variantsLoading = true;
+    try {
+      variants = await fetchAdmin<ProductVariant[]>(`/api/v1/catalog/${productId}/variants`);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mengambil daftar varian');
+    } finally {
+      variantsLoading = false;
+    }
+  }
+
+  async function handleAddVariant() {
+    if (!selectedProductForVariants) return;
+    if (!varName.trim() || !varValue.trim()) {
+      toast.error('Nama dan Nilai varian wajib diisi!');
+      return;
+    }
+
+    varSaving = true;
+    try {
+      const payload: CreateVariantPayload = {
+        variant_name: varName.trim(),
+        variant_value: varValue.trim(),
+        sku: varSku.trim() || null,
+        price_override: varPriceOverride && varPriceOverride > 0 ? varPriceOverride : null,
+        stock_quantity: Number(varStock) || 0,
+      };
+
+      await fetchAdmin(`/api/v1/catalog/${selectedProductForVariants.id}/variants`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      toast.success('Varian berhasil ditambahkan!');
+      varValue = '';
+      varSku = '';
+      varPriceOverride = null;
+      await fetchVariants(selectedProductForVariants.id);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal menambahkan varian');
+    } finally {
+      varSaving = false;
+    }
+  }
+
+  async function handleDeleteVariant(variantId: string) {
+    if (!selectedProductForVariants) return;
+    if (!confirm('Hapus varian ini?')) return;
+
+    try {
+      await fetchAdmin(`/api/v1/catalog/${selectedProductForVariants.id}/variants/${variantId}`, {
+        method: 'DELETE',
+      });
+      toast.success('Varian berhasil dihapus!');
+      await fetchVariants(selectedProductForVariants.id);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal menghapus varian');
+    }
+  }
 
   async function fetchAdmin<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const headers = new Headers(options.headers || {});
@@ -284,6 +363,7 @@
                     <th>Kategori</th>
                     <th>Harga</th>
                     <th>Stok</th>
+                    <th>Varian</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -300,6 +380,11 @@
                       <td><span class="badge-tag">{p.category || 'Umum'}</span></td>
                       <td>{formatRupiah(p.price_cents)}</td>
                       <td><span class="badge-stock" class:empty={p.stock <= 0}>{p.stock} unit</span></td>
+                      <td>
+                        <button class="btn-action primary" onclick={() => openVariantModal(p)}>
+                          ⚙️ Kelola Varian
+                        </button>
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -463,6 +548,93 @@
       </div>
     </div>
   {/if}
+
+  <!-- Modal Kelola Varian Produk -->
+  {#if selectedProductForVariants}
+    <div class="modal-overlay" onclick={() => selectedProductForVariants = null} role="presentation">
+      <div class="modal-card modal-variant-card" onclick={(e) => e.stopPropagation()} role="dialog">
+        <div class="modal-header">
+          <div>
+            <h3>⚙️ Kelola Varian Produk</h3>
+            <p class="var-prod-subtitle">{selectedProductForVariants.name} ({formatRupiah(selectedProductForVariants.price_cents)})</p>
+          </div>
+          <button class="close-btn" onclick={() => selectedProductForVariants = null}>&times;</button>
+        </div>
+
+        <!-- Daftar Varian Saat Ini -->
+        <div class="var-list-section">
+          <h4>Daftar Varian Aktif</h4>
+          {#if variantsLoading}
+            <p class="empty-text">Memuat varian...</p>
+          {:else if variants.length === 0}
+            <p class="empty-text">Belum ada varian untuk produk ini. Tambahkan di bawah.</p>
+          {:else}
+            <table class="table-custom var-table">
+              <thead>
+                <tr>
+                  <th>Varian</th>
+                  <th>Nilai</th>
+                  <th>SKU</th>
+                  <th>Harga Override</th>
+                  <th>Stok</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each variants as v (v.id)}
+                  <tr>
+                    <td><strong>{v.variant_name}</strong></td>
+                    <td><span class="badge-tag">{v.variant_value}</span></td>
+                    <td><code>{v.sku || '-'}</code></td>
+                    <td>{v.price_override ? formatRupiah(v.price_override) : '(Standar)'}</td>
+                    <td>{v.stock_quantity} unit</td>
+                    <td>
+                      <button class="btn-var-del" onclick={() => handleDeleteVariant(v.id)}>Hapus</button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+
+        <!-- Form Tambah Varian Baru -->
+        <form class="var-add-form" onsubmit={(e) => { e.preventDefault(); handleAddVariant(); }}>
+          <h4>+ Tambah Varian Baru</h4>
+          <div class="row-fields">
+            <label>
+              Nama Varian
+              <input type="text" bind:value={varName} placeholder="Ukuran, Warna, dll" required />
+            </label>
+            <label>
+              Nilai Varian
+              <input type="text" bind:value={varValue} placeholder="XL, Merah, 256GB" required />
+            </label>
+          </div>
+          <div class="row-fields">
+            <label>
+              SKU Varian (Opsional)
+              <input type="text" bind:value={varSku} placeholder="SKU-PROD-VAR" />
+            </label>
+            <label>
+              Harga Khusus (Rp)
+              <input type="number" bind:value={varPriceOverride} placeholder="Kosongkan jika harga standar" min="0" />
+            </label>
+            <label>
+              Stok Varian
+              <input type="number" bind:value={varStock} min="0" required />
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" onclick={() => selectedProductForVariants = null}>Tutup</button>
+            <button type="submit" class="btn-save" disabled={varSaving}>
+              {varSaving ? 'Menyimpan...' : '+ Tambah Varian'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -571,4 +743,17 @@
   .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.75rem; }
   .btn-cancel { background: #334155; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
   .btn-save { background: #059669; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+  /* Variant Management Modal */
+  .modal-variant-card { max-width: 680px; }
+  .var-prod-subtitle { font-size: 0.85rem; color: #38bdf8; margin: 0.25rem 0 0; }
+  .var-list-section { margin-top: 1rem; max-height: 220px; overflow-y: auto; }
+  .var-list-section h4 { margin: 0 0 0.5rem; font-size: 0.95rem; color: #94a3b8; }
+  .var-table th, .var-table td { padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+  .btn-var-del { background: #7f1d1d; color: #fecaca; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
+  .btn-var-del:hover { background: #991b1b; }
+  .var-add-form { margin-top: 1.5rem; border-top: 1px solid #334155; padding-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+  .var-add-form h4 { margin: 0 0 0.25rem; font-size: 0.95rem; color: #38bdf8; }
+  .var-add-form label { font-size: 0.8rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.2rem; }
+  .var-add-form input { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 0.55rem; color: #fff; }
 </style>

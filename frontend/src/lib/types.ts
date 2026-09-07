@@ -39,9 +39,31 @@ export interface CatalogPageResponse {
   total_pages: number;
 }
 
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  variant_name: string;
+  variant_value: string;
+  sku?: string | null;
+  price_override?: number | null;
+  stock_quantity: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateVariantPayload {
+  variant_name: string;
+  variant_value: string;
+  sku?: string | null;
+  price_override?: number | null;
+  stock_quantity: number;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;
+  variant?: ProductVariant;
 }
 
 export interface CreateOrderPayload {

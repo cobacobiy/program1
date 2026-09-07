@@ -416,7 +416,77 @@ pub trait CatalogContract: Send + Sync {
         &self,
         req: CreateCatalogItemRequest,
     ) -> Result<CatalogItemDto, ContractError>;
+
+    // --- Variant Management ---
+    async fn list_variants(&self, product_id: Uuid) -> Result<Vec<ProductVariantDto>, ContractError>;
+    async fn get_variant(&self, variant_id: Uuid) -> Result<ProductVariantDto, ContractError>;
+    async fn create_variant(
+        &self,
+        product_id: Uuid,
+        req: CreateVariantRequest,
+    ) -> Result<ProductVariantDto, ContractError>;
+    async fn update_variant(
+        &self,
+        variant_id: Uuid,
+        req: UpdateVariantRequest,
+    ) -> Result<ProductVariantDto, ContractError>;
+    async fn delete_variant(&self, variant_id: Uuid) -> Result<(), ContractError>;
 }
+
+/// Represents a product variant (e.g. Size, Color)
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ProductVariantDto {
+    pub id: Uuid,
+    pub product_id: Uuid,
+    pub variant_name: String,
+    pub variant_value: String,
+    pub sku: Option<String>,
+    pub price_override: Option<f64>,
+    pub stock_quantity: u32,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub type ProductVariant = ProductVariantDto;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateVariantRequest {
+    #[validate(length(min = 1, max = 50, message = "Variant name must be 1-50 characters"))]
+    pub variant_name: String,
+    #[validate(length(min = 1, max = 100, message = "Variant value must be 1-100 characters"))]
+    pub variant_value: String,
+    #[validate(length(max = 50, message = "SKU max 50 characters"))]
+    pub sku: Option<String>,
+    #[validate(range(
+        min = 0.0,
+        max = 999999999.0,
+        message = "Price override must be between 0 and 999,999,999"
+    ))]
+    pub price_override: Option<f64>,
+    #[validate(range(max = 999999, message = "Stock quantity cannot exceed 999,999"))]
+    pub stock_quantity: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateVariantRequest {
+    #[validate(length(min = 1, max = 50, message = "Variant name must be 1-50 characters"))]
+    pub variant_name: String,
+    #[validate(length(min = 1, max = 100, message = "Variant value must be 1-100 characters"))]
+    pub variant_value: String,
+    #[validate(length(max = 50, message = "SKU max 50 characters"))]
+    pub sku: Option<String>,
+    #[validate(range(
+        min = 0.0,
+        max = 999999999.0,
+        message = "Price override must be between 0 and 999,999,999"
+    ))]
+    pub price_override: Option<f64>,
+    #[validate(range(max = 999999, message = "Stock quantity cannot exceed 999,999"))]
+    pub stock_quantity: u32,
+    pub is_active: Option<bool>,
+}
+
 
 // --- INVENTORY CONTRACT (Ginee OMS Multi-Stock) ---
 
