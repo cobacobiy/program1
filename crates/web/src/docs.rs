@@ -17,7 +17,8 @@ use program1_contracts::{
     StorefrontOrderItemRequest, StorefrontOrderRequest, UpdateBuyerProfileRequest, UpdateBuyerStatusRequest,
     UpdateOrderStatusRequest, UpdatePromotionStockRequest, UpdateSafetyStockRequest,
     UpdateSpareStockRequest, UpdateUserPermissionsRequest, UpdateVariantRequest, UpdateWarehouseStockRequest,
-    UserAccountDto, PaginationParams, ProductVariantDto,
+    UserAccountDto, PaginationParams, ProductVariantDto, CouponDto, CreateCouponRequest,
+    ValidateCouponRequest, CouponValidationResult, DiscountType,
 };
 
 struct SecurityAddon;
@@ -102,6 +103,11 @@ impl Modify for SecurityAddon {
         handlers::get_payment_by_order_handler,
         handlers::get_payment_config_handler,
         handlers::upload_image_handler,
+        handlers::list_coupons_handler,
+        handlers::create_coupon_handler,
+        handlers::toggle_coupon_handler,
+        handlers::delete_coupon_handler,
+        handlers::validate_coupon_handler,
     ),
     components(
         schemas(
@@ -159,6 +165,12 @@ impl Modify for SecurityAddon {
             PaymentConfigDto,
             handlers::UploadResponse,
             PaginationParams,
+            CouponDto,
+            CreateCouponRequest,
+            handlers::ToggleCouponStatusRequest,
+            ValidateCouponRequest,
+            CouponValidationResult,
+            DiscountType,
         )
     ),
     tags(
@@ -177,6 +189,7 @@ impl Modify for SecurityAddon {
         (name = "Audit", description = "System audit logs & compliance activity trail"),
         (name = "Buyer Live Chat", description = "Buyer in-app chat messaging"),
         (name = "Admin Live Chat", description = "Merchant live chat support inbox"),
+        (name = "Coupons", description = "Coupon management and promo code validation"),
     ),
     modifiers(&SecurityAddon),
     info(

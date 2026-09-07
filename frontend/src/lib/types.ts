@@ -101,3 +101,45 @@ export interface ChatMessage {
   content: string;
   created_at: string;
 }
+
+export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discount_type: DiscountType;
+  discount_value: number;
+  min_order_amount: number;
+  max_discount_amount?: number | null;
+  usage_limit?: number | null;
+  usage_count: number;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CreateCouponPayload {
+  code: string;
+  discount_type: DiscountType;
+  discount_value: number;
+  min_order_amount?: number;
+  max_discount_amount?: number;
+  usage_limit?: number;
+  start_date: string;
+  end_date: string;
+}
+
+export interface ValidateCouponPayload {
+  code: string;
+  order_amount: number;
+}
+
+export interface CouponValidationResult {
+  is_valid: boolean;
+  discount_amount: number;
+  final_amount: number;
+  coupon?: Coupon | null;
+  message: string;
+}
+

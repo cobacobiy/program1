@@ -13,5 +13,6 @@ frontend/node_modules/
 frontend/dist/
 crates/web/static/dist/
 .bun/
+comment.md
 
 

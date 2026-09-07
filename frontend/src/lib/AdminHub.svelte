@@ -3,7 +3,7 @@
   import { adminAuth } from './adminAuth.svelte';
   import { toast } from './toast.svelte';
   import { formatRupiah } from './currency';
-  import type { Product, ProductVariant, CreateVariantPayload } from './types';
+  import type { Product, ProductVariant, CreateVariantPayload, Coupon, CreateCouponPayload, DiscountType } from './types';
 
   interface AdminOrder {
     id: string;
@@ -29,7 +29,7 @@
   }
 
   // Active sub-tab
-  let subTab = $state<'kpi' | 'catalog' | 'inventory' | 'orders' | 'audit'>('kpi');
+  let subTab = $state<'kpi' | 'catalog' | 'inventory' | 'orders' | 'audit' | 'coupons'>('kpi');
 
   // Login form state
   let loginUser = $state('admin');
@@ -40,7 +40,20 @@
   let orders = $state<AdminOrder[]>([]);
   let inventory = $state<InventoryRecord[]>([]);
   let auditLogs = $state<AuditLogRecord[]>([]);
+  let coupons = $state<Coupon[]>([]);
   let loading = $state(false);
+
+  // New coupon modal state
+  let isAddCouponOpen = $state(false);
+  let newCouponCode = $state('');
+  let newCouponDiscountType = $state<DiscountType>('PERCENTAGE');
+  let newCouponDiscountVal = $state(10);
+  let newCouponMinOrder = $state(0);
+  let newCouponMaxCap = $state<number | null>(null);
+  let newCouponLimit = $state<number | null>(null);
+  let newCouponStartDate = $state(new Date().toISOString().slice(0, 16));
+  let newCouponEndDate = $state(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 16));
+  let isCreatingCoupon = $state(false);
 
   // New product modal state
   let isAddProductOpen = $state(false);
@@ -131,6 +144,70 @@
     }
   }
 
+  async function handleToggleCoupon(couponId: string) {
+    try {
+      const updated = await fetchAdmin<Coupon>(`/api/v1/admin/coupons/${couponId}/toggle`, {
+        method: 'PUT',
+      });
+      coupons = coupons.map(c => c.id === couponId ? updated : c);
+      toast.success(`Status kupon ${updated.code} diubah!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mengubah status kupon');
+    }
+  }
+
+  async function handleDeleteCoupon(couponId: string, code: string) {
+    if (!confirm(`Hapus kupon "${code}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+    try {
+      await fetchAdmin(`/api/v1/admin/coupons/${couponId}`, {
+        method: 'DELETE',
+      });
+      coupons = coupons.filter(c => c.id !== couponId);
+      toast.success(`Kupon "${code}" berhasil dihapus.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal menghapus kupon');
+    }
+  }
+
+  async function handleCreateCoupon(e: Event) {
+    e.preventDefault();
+    if (!newCouponCode.trim()) {
+      toast.error('Kode kupon wajib diisi!');
+      return;
+    }
+
+    isCreatingCoupon = true;
+    try {
+      const payload: CreateCouponPayload = {
+        code: newCouponCode.trim().toUpperCase(),
+        discount_type: newCouponDiscountType,
+        discount_value: Number(newCouponDiscountVal),
+        min_order_amount: newCouponMinOrder ? Number(newCouponMinOrder) : 0,
+        max_discount_amount: newCouponMaxCap && newCouponMaxCap > 0 ? Number(newCouponMaxCap) : undefined,
+        usage_limit: newCouponLimit && newCouponLimit > 0 ? Number(newCouponLimit) : undefined,
+        start_date: new Date(newCouponStartDate).toISOString(),
+        end_date: new Date(newCouponEndDate).toISOString(),
+      };
+
+      const created = await fetchAdmin<Coupon>('/api/v1/admin/coupons', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      coupons = [created, ...coupons];
+      toast.success(`Kupon "${created.code}" berhasil dibuat!`);
+      isAddCouponOpen = false;
+      newCouponCode = '';
+      newCouponDiscountVal = 10;
+      newCouponMaxCap = null;
+      newCouponLimit = null;
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal membuat kupon.');
+    } finally {
+      isCreatingCoupon = false;
+    }
+  }
+
   async function fetchAdmin<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const headers = new Headers(options.headers || {});
     if (adminAuth.token) {
@@ -171,6 +248,10 @@
       if (subTab === 'audit') {
         const aud = await fetchAdmin<AuditLogRecord[]>('/audit/logs').catch(() => []);
         auditLogs = aud || [];
+      }
+      if (subTab === 'kpi' || subTab === 'coupons') {
+        const coup = await fetchAdmin<Coupon[]>('/api/v1/admin/coupons').catch(() => []);
+        coupons = coup || [];
       }
     } catch (err: any) {
       toast.error(err.message || 'Gagal memuat data admin');
@@ -314,6 +395,7 @@
           <button class:active={subTab === 'catalog'} onclick={() => subTab = 'catalog'}>📦 Katalog Produk ({products.length})</button>
           <button class:active={subTab === 'inventory'} onclick={() => subTab = 'inventory'}>🏭 Stok & Inventori</button>
           <button class:active={subTab === 'orders'} onclick={() => subTab = 'orders'}>🛒 Pesanan Masuk ({orders.length})</button>
+          <button class:active={subTab === 'coupons'} onclick={() => subTab = 'coupons'}>🏷️ Kupon Diskon ({coupons.length})</button>
           <button class:active={subTab === 'audit'} onclick={() => subTab = 'audit'}>📜 Audit Logs</button>
         </nav>
 
@@ -341,6 +423,11 @@
                   {formatRupiah(orders.reduce((sum, o) => sum + o.total_amount_cents, 0))}
                 </strong>
                 <small class="kpi-hint">Akumulasi nilai pesanan</small>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Kupon Promo Aktif</span>
+                <strong class="kpi-val">{coupons.filter(c => c.is_active).length}</strong>
+                <small class="kpi-hint">Dari total {coupons.length} voucher</small>
               </div>
             </div>
           </div>
@@ -492,6 +579,70 @@
               </table>
             {/if}
           </div>
+
+        {:else if subTab === 'coupons'}
+          <div class="section-panel">
+            <div class="panel-top">
+              <h2>🏷️ Manajemen Kupon & Kode Promo</h2>
+              <button class="btn-add-prod" onclick={() => isAddCouponOpen = true}>+ Buat Kupon Baru</button>
+            </div>
+
+            {#if loading}
+              <p>Memuat daftar kupon...</p>
+            {:else if coupons.length === 0}
+              <p class="empty-text">Belum ada kupon diskon. Klik tombol di atas untuk membuat kupon promo pertama!</p>
+            {:else}
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Kode</th>
+                    <th>Tipe & Diskon</th>
+                    <th>Min. Belanja</th>
+                    <th>Maks. Potongan</th>
+                    <th>Pemakaian</th>
+                    <th>Periode Berlaku</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each coupons as c (c.id)}
+                    <tr>
+                      <td><strong class="coupon-code-badge">{c.code}</strong></td>
+                      <td>
+                        {#if c.discount_type === 'PERCENTAGE'}
+                          <span class="badge-tag discount-pct">{c.discount_value}% OFF</span>
+                        {:else}
+                          <span class="badge-tag discount-fix">{formatRupiah(c.discount_value)} OFF</span>
+                        {/if}
+                      </td>
+                      <td>{c.min_order_amount > 0 ? formatRupiah(c.min_order_amount) : 'Tanpa Min.'}</td>
+                      <td>{c.max_discount_amount ? formatRupiah(c.max_discount_amount) : '-'}</td>
+                      <td>
+                        <span class="usage-count">{c.usage_count}</span>
+                        <span class="usage-limit">/ {c.usage_limit != null ? c.usage_limit : '∞'}</span>
+                      </td>
+                      <td>
+                        <small>{new Date(c.start_date).toLocaleDateString('id-ID')} - {new Date(c.end_date).toLocaleDateString('id-ID')}</small>
+                      </td>
+                      <td>
+                        <button
+                          class="btn-toggle"
+                          class:active={c.is_active}
+                          onclick={() => handleToggleCoupon(c.id)}
+                        >
+                          {c.is_active ? '✓ Aktif' : '✕ Nonaktif'}
+                        </button>
+                      </td>
+                      <td>
+                        <button class="btn-var-del" onclick={() => handleDeleteCoupon(c.id, c.code)}>Hapus</button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
         {/if}
       </section>
     </div>
@@ -635,6 +786,82 @@
       </div>
     </div>
   {/if}
+
+  <!-- Modal Buat Kupon Diskon -->
+  {#if isAddCouponOpen}
+    <div class="modal-overlay" onclick={() => isAddCouponOpen = false} role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (isAddCouponOpen = false)}>
+      <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>🏷️ Buat Kupon Diskon Baru</h3>
+          <button class="close-btn" onclick={() => isAddCouponOpen = false}>&times;</button>
+        </div>
+
+        <form onsubmit={handleCreateCoupon} class="prod-form">
+          <div class="row-fields">
+            <label>
+              Kode Kupon (Otomatis Kapital):
+              <input type="text" bind:value={newCouponCode} required placeholder="Contoh: HEMAT20" style="text-transform: uppercase;" />
+            </label>
+            <label>
+              Tipe Diskon:
+              <select bind:value={newCouponDiscountType} class="select-custom">
+                <option value="PERCENTAGE">Persentase (%)</option>
+                <option value="FIXED_AMOUNT">Nominal Tetap (Rp)</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="row-fields">
+            <label>
+              Nilai Diskon:
+              <input
+                type="number"
+                bind:value={newCouponDiscountVal}
+                min="1"
+                max={newCouponDiscountType === 'PERCENTAGE' ? 100 : undefined}
+                required
+              />
+            </label>
+            {#if newCouponDiscountType === 'PERCENTAGE'}
+              <label>
+                Maksimal Potongan (Rp, Opsional):
+                <input type="number" bind:value={newCouponMaxCap} placeholder="Kosongkan jika tanpa batas" min="0" />
+              </label>
+            {/if}
+          </div>
+
+          <div class="row-fields">
+            <label>
+              Min. Nilai Pesanan (Rp):
+              <input type="number" bind:value={newCouponMinOrder} min="0" placeholder="0 = tanpa minimum" />
+            </label>
+            <label>
+              Batas Total Pemakaian (Opsional):
+              <input type="number" bind:value={newCouponLimit} min="1" placeholder="Kosongkan = tanpa batas" />
+            </label>
+          </div>
+
+          <div class="row-fields">
+            <label>
+              Tanggal Mulai Berlaku:
+              <input type="datetime-local" bind:value={newCouponStartDate} required />
+            </label>
+            <label>
+              Tanggal Kedaluwarsa:
+              <input type="datetime-local" bind:value={newCouponEndDate} required />
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" onclick={() => isAddCouponOpen = false}>Batal</button>
+            <button type="submit" class="btn-save" disabled={isCreatingCoupon}>
+              {isCreatingCoupon ? 'Membuat Kupon...' : 'Simpan Kupon 🚀'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -756,4 +983,24 @@
   .var-add-form h4 { margin: 0 0 0.25rem; font-size: 0.95rem; color: #38bdf8; }
   .var-add-form label { font-size: 0.8rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.2rem; }
   .var-add-form input { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 0.55rem; color: #fff; }
+
+  /* Coupon Specific Styles */
+  .coupon-code-badge {
+    background: #1e3a8a; color: #93c5fd; padding: 0.2rem 0.5rem;
+    border-radius: 4px; font-family: monospace; font-size: 0.85rem; letter-spacing: 0.5px;
+  }
+  .discount-pct { background: #065f46; color: #6ee7b7; font-weight: bold; }
+  .discount-fix { background: #7c2d12; color: #fdba74; font-weight: bold; }
+  .usage-count { color: #38bdf8; font-weight: bold; }
+  .usage-limit { color: #64748b; font-size: 0.8rem; }
+  .btn-toggle {
+    border: none; padding: 0.25rem 0.6rem; border-radius: 4px;
+    font-size: 0.75rem; font-weight: bold; cursor: pointer;
+    background: #334155; color: #94a3b8; transition: all 0.2s;
+  }
+  .btn-toggle.active { background: #059669; color: #ecfdf5; }
+  .select-custom {
+    background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+    padding: 0.6rem; color: #fff; font-family: inherit;
+  }
 </style>

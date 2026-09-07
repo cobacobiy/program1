@@ -487,6 +487,107 @@ pub struct UpdateVariantRequest {
     pub is_active: Option<bool>,
 }
 
+// --- COUPON CONTRACT ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscountType {
+    Percentage,
+    Fixed,
+}
+
+impl DiscountType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Percentage => "percentage",
+            Self::Fixed => "fixed",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "percentage" => Some(Self::Percentage),
+            "fixed" => Some(Self::Fixed),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CouponDto {
+    pub id: Uuid,
+    pub code: String,
+    pub description: Option<String>,
+    pub discount_type: DiscountType,
+    pub discount_value: f64,
+    pub min_order_amount: f64,
+    pub max_discount_amount: Option<f64>,
+    pub usage_limit: Option<u32>,
+    pub usage_count: u32,
+    pub valid_from: DateTime<Utc>,
+    pub valid_until: DateTime<Utc>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub type Coupon = CouponDto;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateCouponRequest {
+    #[validate(length(min = 3, max = 30, message = "Coupon code must be 3-30 characters"))]
+    pub code: String,
+    #[validate(length(max = 200, message = "Description max 200 characters"))]
+    pub description: Option<String>,
+    pub discount_type: DiscountType,
+    #[validate(range(min = 0.01, max = 999999999.0, message = "Discount value must be positive"))]
+    pub discount_value: f64,
+    #[validate(range(min = 0.0, message = "Min order amount must be non-negative"))]
+    pub min_order_amount: Option<f64>,
+    #[validate(range(min = 0.0, message = "Max discount amount must be non-negative"))]
+    pub max_discount_amount: Option<f64>,
+    pub usage_limit: Option<u32>,
+    pub valid_from: Option<DateTime<Utc>>,
+    pub valid_until: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ValidateCouponRequest {
+    #[validate(length(min = 1, max = 50, message = "Code must not be empty"))]
+    pub code: String,
+    #[validate(range(min = 0.0, message = "Order amount must be non-negative"))]
+    pub order_amount: f64,
+    pub buyer_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CouponValidationResult {
+    pub is_valid: bool,
+    pub coupon: Option<CouponDto>,
+    pub discount_amount: f64,
+    pub final_amount: f64,
+    pub error_message: Option<String>,
+}
+
+#[async_trait]
+pub trait CouponContract: Send + Sync {
+    async fn list_coupons(&self) -> Result<Vec<CouponDto>, ContractError>;
+    async fn get_coupon(&self, id: Uuid) -> Result<CouponDto, ContractError>;
+    async fn get_coupon_by_code(&self, code: &str) -> Result<CouponDto, ContractError>;
+    async fn create_coupon(&self, req: CreateCouponRequest) -> Result<CouponDto, ContractError>;
+    async fn toggle_coupon_active(&self, id: Uuid, is_active: bool) -> Result<CouponDto, ContractError>;
+    async fn delete_coupon(&self, id: Uuid) -> Result<(), ContractError>;
+    async fn validate_coupon(&self, req: ValidateCouponRequest) -> Result<CouponValidationResult, ContractError>;
+    async fn record_usage(
+        &self,
+        coupon_id: Uuid,
+        buyer_id: Option<Uuid>,
+        order_id: Option<Uuid>,
+        discount_amount: f64,
+    ) -> Result<(), ContractError>;
+}
+
+
 
 // --- INVENTORY CONTRACT (Ginee OMS Multi-Stock) ---
 

@@ -9,6 +9,7 @@ pub mod health;
 pub mod inventory;
 pub mod order;
 pub mod payment;
+pub mod coupon;
 pub mod upload;
 pub mod user;
 
@@ -19,6 +20,7 @@ pub use buyer::*;
 pub use catalog::*;
 pub use channel::*;
 pub use chat::*;
+pub use coupon::*;
 pub use health::*;
 pub use inventory::*;
 pub use order::*;

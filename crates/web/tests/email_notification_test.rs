@@ -242,6 +242,7 @@ async fn test_full_http_storefront_checkout_email_flow() {
         "test-client-key".to_string(),
         false,
     ));
+    let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -265,6 +266,7 @@ async fn test_full_http_storefront_checkout_email_flow() {
         buyer_contract: buyer_module,
         chat_contract: chat_module,
         payment_contract: payment_module,
+        coupon_contract: coupon_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

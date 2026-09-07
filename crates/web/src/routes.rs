@@ -4,7 +4,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use tower_http::catch_panic::CatchPanicLayer;
@@ -188,7 +188,8 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/catalog", get(list_catalog))
         .route("/api/v1/catalog/:id", get(get_catalog_item))
         .route("/api/v1/catalog/:id/variants", get(list_variants_handler))
-        .route("/api/v1/catalog/:id/variants/:vid", get(get_variant_handler));
+        .route("/api/v1/catalog/:id/variants/:vid", get(get_variant_handler))
+        .route("/api/v1/coupons/validate", post(validate_coupon_handler));
 
     // 2. Buyer protected routes (valid Buyer JWT required)
     let buyer_routes = Router::new()
@@ -320,6 +321,18 @@ pub fn create_app(state: AppState) -> Router {
             get(admin_get_messages_handler)
                 .post(admin_send_message_handler)
                 .route_layer(chat_limit_layer),
+        )
+        .route(
+            "/api/v1/admin/coupons",
+            get(list_coupons_handler).post(create_coupon_handler),
+        )
+        .route(
+            "/api/v1/admin/coupons/:id/status",
+            patch(toggle_coupon_handler),
+        )
+        .route(
+            "/api/v1/admin/coupons/:id",
+            delete(delete_coupon_handler),
         )
         .route(
             "/api/v1/admin/payments/order/:order_id",

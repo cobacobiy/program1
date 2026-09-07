@@ -25,6 +25,7 @@ program1-module-audit = { path = "../modules/audit" }
 program1-module-buyer = { path = "../modules/buyer" }
 program1-module-chat = { path = "../modules/chat" }
 program1-module-payment = { path = "../modules/payment" }
+program1-module-coupon = { path = "../modules/coupon" }
 
 
 async-trait.workspace = true

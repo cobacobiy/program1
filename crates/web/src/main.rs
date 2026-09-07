@@ -11,6 +11,7 @@ use program1_module_chat::ChatModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_payment::PaymentModule;
+use program1_module_coupon::CouponModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
 
@@ -122,6 +123,7 @@ async fn main() {
         config.midtrans_client_key.clone(),
         config.midtrans_is_production,
     ));
+    let coupon_module = Arc::new(CouponModule::new(db_pool.clone()));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -146,6 +148,7 @@ async fn main() {
         buyer_contract: buyer_module,
         chat_contract: chat_module,
         payment_contract: payment_module,
+        coupon_contract: coupon_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

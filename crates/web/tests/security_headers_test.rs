@@ -55,6 +55,7 @@ async fn setup_test_app() -> axum::Router {
         "test-client-key".to_string(),
         false,
     ));
+    let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -71,6 +72,7 @@ async fn setup_test_app() -> axum::Router {
         buyer_contract: buyer_module,
         chat_contract: chat_module,
         payment_contract: payment_module,
+        coupon_contract: coupon_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
