@@ -164,7 +164,7 @@ graph TD
 | B | #36, #39, #41 | 6-8 hari | ✅ DONE |
 | **Total Phase 1** | **9 issues** | **~19-25 hari** | ✅ **SELESAI** |
 
-### Phase 2 (NEW 🆕)
+### Phase 2 (IN PROGRESS ⏳)
 
 | Batch | Issues | Estimasi Total | Bisa Parallel |
 |-------|--------|----------------|---------------|
@@ -172,6 +172,46 @@ graph TD
 | B | Issue 4, 5, 6, 10 | 13-17 hari | ⚠️ Sebagian |
 | **Total Phase 2** | **10 issues** | **~29-38 hari** | — |
 
-> Jika dikerjakan oleh 3-5 junior developer / AI agents secara parallel:
-> **Estimasi selesai Phase 2: ~2-4 minggu**
+---
+
+### ⚡ Phase 3 — Frontend Modernization (Svelte 5 + Bun + Vite)
+
+> Mengubah antarmuka web dari file statis HTML/JS lama menjadi **Svelte 5 SPA modern** yang di-bundle dengan **Bun + Vite**, berkomunikasi murni via REST JSON API dengan backend **Rust Axum**, dan tetap mematuhi prinsip **Single Binary Deployment**.
+
+| # | Issue Guide | Prioritas | Estimasi | Dependency |
+|---|-------------|-----------|----------|------------|
+| 11 | [Setup Workspace Svelte 5 + Bun & Dev Proxy](issue11-setup-svelte-bun-workspace.md) | 🔴 CRITICAL | 2-3 hari | Fondasi Frontend |
+| 12 | [Universal API Client, Auth Store & Toast](issue12-svelte-api-client-and-auth.md) | 🔴 CRITICAL | 3-4 hari | Issue 11 |
+| 13 | [Katalog Produk, Search & Dynamic Filter](issue13-svelte-catalog-search-filter.md) | 🟡 HIGH | 3-4 hari | Issue 11, 12 |
+| 14 | [Shopping Cart, Checkout & Midtrans Snap](issue14-svelte-cart-checkout-midtrans.md) | 🔴 CRITICAL | 4-5 hari | Issue 12, 13 |
+| 15 | [Buyer Dashboard, Riwayat Order & Live Chat](issue15-svelte-buyer-dashboard-chat.md) | 🟡 HIGH | 3-4 hari | Issue 12, 14 |
+| 16 | [Admin Hub SPA (Dashboard, Inventori, Orders)](issue16-svelte-admin-dashboard.md) | 🟡 HIGH | 4-5 hari | Issue 11, 12 |
+| 17 | [Production Multi-stage Docker & Axum SPA Serving](issue17-production-build-and-docker.md) | 🔴 CRITICAL | 3-4 hari | Issue 11 s/d 16 |
+
+### 📐 Urutan Pengerjaan Phase 3:
+
+```mermaid
+graph TD
+    I11["#11: Setup Bun + Svelte + Proxy"] --> I12["#12: API Client & Auth Store"]
+    I12 --> I13["#13: Katalog, Search & Filter"]
+    I13 --> I14["#14: Cart, Checkout & Midtrans"]
+    I14 --> I15["#15: Buyer Dashboard & Chat"]
+    I12 --> I16["#16: Admin Hub SPA"]
+    I15 --> I17["#17: Production Docker & Axum Serving"]
+    I16 --> I17
+
+    style I11 fill:#ff4444,color:#fff
+    style I12 fill:#ff4444,color:#fff
+    style I14 fill:#ff4444,color:#fff
+    style I17 fill:#ff4444,color:#fff
+    style I13 fill:#ffaa00,color:#000
+    style I15 fill:#ffaa00,color:#000
+    style I16 fill:#ffaa00,color:#000
+```
+
+### Estimasi Phase 3 (Frontend Modernization):
+- **Total Issues:** 7 issues (#11 s/d #17)
+- **Total Estimasi:** ~22-29 hari pengerjaan
+- **Jika dikerjakan 2-3 frontend dev / AI agents secara bertahap: ~2-3 minggu selesai**
+
 
