@@ -178,15 +178,15 @@ graph TD
 
 > Mengubah antarmuka web dari file statis HTML/JS lama menjadi **Svelte 5 SPA modern** yang di-bundle dengan **Bun + Vite**, berkomunikasi murni via REST JSON API dengan backend **Rust Axum**, dan tetap mematuhi prinsip **Single Binary Deployment**.
 
-| # | Issue Guide | Prioritas | Estimasi | Dependency |
-|---|-------------|-----------|----------|------------|
-| 11 | [Setup Workspace Svelte 5 + Bun & Dev Proxy](issue11-setup-svelte-bun-workspace.md) | 🔴 CRITICAL | 2-3 hari | Fondasi Frontend |
-| 12 | [Universal API Client, Auth Store & Toast](issue12-svelte-api-client-and-auth.md) | 🔴 CRITICAL | 3-4 hari | Issue 11 |
-| 13 | [Katalog Produk, Search & Dynamic Filter](issue13-svelte-catalog-search-filter.md) | 🟡 HIGH | 3-4 hari | Issue 11, 12 |
-| 14 | [Shopping Cart, Checkout & Midtrans Snap](issue14-svelte-cart-checkout-midtrans.md) | 🔴 CRITICAL | 4-5 hari | Issue 12, 13 |
-| 15 | [Buyer Dashboard, Riwayat Order & Live Chat](issue15-svelte-buyer-dashboard-chat.md) | 🟡 HIGH | 3-4 hari | Issue 12, 14 |
-| 16 | [Admin Hub SPA (Dashboard, Inventori, Orders)](issue16-svelte-admin-dashboard.md) | 🟡 HIGH | 4-5 hari | Issue 11, 12 |
-| 17 | [Production Multi-stage Docker & Axum SPA Serving](issue17-production-build-and-docker.md) | 🔴 CRITICAL | 3-4 hari | Issue 11 s/d 16 |
+| # | Issue Guide | GitHub Issue | Prioritas | Estimasi | Dependency |
+|---|-------------|--------------|-----------|----------|------------|
+| 11 | [Setup Workspace Svelte 5 + Bun & Dev Proxy](issue11-setup-svelte-bun-workspace.md) | [#62 Setup Svelte 5 + Bun Workspace](https://github.com/cobacobiy/program1/issues/62) | 🔴 CRITICAL | 2-3 hari | Fondasi Frontend |
+| 12 | [Universal API Client, Auth Store & Toast](issue12-svelte-api-client-and-auth.md) | [#63 Universal API Client & Auth Store](https://github.com/cobacobiy/program1/issues/63) | 🔴 CRITICAL | 3-4 hari | Issue 11 |
+| 13 | [Katalog Produk, Search & Dynamic Filter](issue13-svelte-catalog-search-filter.md) | [#64 Katalog Produk & Filter](https://github.com/cobacobiy/program1/issues/64) | 🟡 HIGH | 3-4 hari | Issue 11, 12 |
+| 14 | [Shopping Cart, Checkout & Midtrans Snap](issue14-svelte-cart-checkout-midtrans.md) | [#65 Shopping Cart & Midtrans](https://github.com/cobacobiy/program1/issues/65) | 🔴 CRITICAL | 4-5 hari | Issue 12, 13 |
+| 15 | [Buyer Dashboard, Riwayat Order & Live Chat](issue15-svelte-buyer-dashboard-chat.md) | [#66 Buyer Dashboard & Live Chat](https://github.com/cobacobiy/program1/issues/66) | 🟡 HIGH | 3-4 hari | Issue 12, 14 |
+| 16 | [Admin Hub SPA (Dashboard, Inventori, Orders)](issue16-svelte-admin-dashboard.md) | [#67 Admin Hub Svelte SPA](https://github.com/cobacobiy/program1/issues/67) | 🟡 HIGH | 4-5 hari | Issue 11, 12 |
+| 17 | [Production Multi-stage Docker & Axum SPA Serving](issue17-production-build-and-docker.md) | [#68 Production Docker & Axum Serving](https://github.com/cobacobiy/program1/issues/68) | 🔴 CRITICAL | 3-4 hari | Issue 11 s/d 16 |
 
 ### 📐 Urutan Pengerjaan Phase 3:
 
