@@ -1,48 +1,54 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { HealthResponse, Product, CatalogPageResponse, CartItem } from './lib/types';
+  import type { HealthResponse, Product, CatalogPageResponse } from './lib/types';
   import { formatRupiah } from './lib/currency';
+  import { auth } from './lib/auth.svelte';
+  import { cart } from './lib/cart.svelte';
+  import { toast } from './lib/toast.svelte';
+  import { apiFetch } from './lib/api';
 
-  // Svelte 5 Runes state
+  import AuthModal from './lib/AuthModal.svelte';
+  import CheckoutModal from './lib/CheckoutModal.svelte';
+  import BuyerOrdersModal from './lib/BuyerOrdersModal.svelte';
+  import LiveChat from './lib/LiveChat.svelte';
+
+  // Navigation & Modals state
   let activeTab = $state<'store' | 'diagnostic'>('store');
+  let isCheckoutOpen = $state(false);
+  let isOrdersOpen = $state(false);
+
+  // Health state
   let healthData = $state<HealthResponse | null>(null);
   let healthLoading = $state(false);
   let healthError = $state<string | null>(null);
 
+  // Catalog state
   let products = $state<Product[]>([]);
   let catalogLoading = $state(false);
   let catalogError = $state<string | null>(null);
   let searchQuery = $state('');
-  let sortBy = $state('default');
+  let selectedCategory = $state<string>('all');
 
-  let cart = $state<CartItem[]>([]);
-  let isCartOpen = $state(false);
-  let toastMsg = $state<string | null>(null);
-
-  // Derived calculations
-  const totalCartItems = $derived(cart.reduce((sum, item) => sum + item.quantity, 0));
-  const totalCartPrice = $derived(cart.reduce((sum, item) => sum + (item.product.price_cents * item.quantity), 0));
-
-  const filteredProducts = $derived(
-    products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const categories = $derived(
+    ['all', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))] as string[]
   );
 
-  function showToast(msg: string) {
-    toastMsg = msg;
-    setTimeout(() => {
-      toastMsg = null;
-    }, 3000);
-  }
+  const filteredProducts = $derived(
+    products.filter(p => {
+      const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          p.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      return matchSearch && matchCategory;
+    })
+  );
 
   async function checkHealth() {
     healthLoading = true;
     healthError = null;
     try {
-      const res = await fetch('/health');
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      healthData = await res.json();
+      healthData = await apiFetch<HealthResponse>('/health');
     } catch (err: any) {
-      healthError = err.message || 'Gagal terhubung ke backend Axum';
+      healthError = err.message || 'Gagal terhubung ke server backend';
     } finally {
       healthLoading = false;
     }
@@ -52,10 +58,8 @@
     catalogLoading = true;
     catalogError = null;
     try {
-      const res = await fetch('/catalog?page=1&page_size=20');
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      const data: CatalogPageResponse = await res.json();
-      products = data.items || [];
+      const res = await apiFetch<CatalogPageResponse>('/catalog?page=1&page_size=30');
+      products = res.items || [];
     } catch (err: any) {
       catalogError = err.message || 'Gagal memuat katalog produk';
     } finally {
@@ -63,37 +67,14 @@
     }
   }
 
-  function addToCart(product: Product) {
-    if (product.stock <= 0) {
-      showToast('⚠️ Stok produk ini sudah habis!');
+  function handleStartCheckout() {
+    cart.isOpen = false;
+    if (!auth.user) {
+      toast.info('Silakan masuk terlebih dahulu untuk melanjutkan pembayaran.');
+      auth.isModalOpen = true;
       return;
     }
-
-    const idx = cart.findIndex(c => c.product.id === product.id);
-    if (idx > -1) {
-      if (cart[idx].quantity >= product.stock) {
-        showToast(`⚠️ Maksimal stok tersedia ${product.stock} unit.`);
-        return;
-      }
-      cart[idx].quantity += 1;
-    } else {
-      cart = [...cart, { product, quantity: 1 }];
-    }
-    showToast(`✅ ${product.name} dimasukkan ke keranjang!`);
-  }
-
-  function updateQuantity(productId: string, delta: number) {
-    const item = cart.find(c => c.product.id === productId);
-    if (!item) return;
-
-    const next = item.quantity + delta;
-    if (next <= 0) {
-      cart = cart.filter(c => c.product.id !== productId);
-    } else if (next > item.product.stock) {
-      showToast(`⚠️ Maksimal stok tersedia ${item.product.stock} unit.`);
-    } else {
-      item.quantity = next;
-    }
+    isCheckoutOpen = true;
   }
 
   onMount(() => {
@@ -102,28 +83,36 @@
   });
 </script>
 
-<div class="app-wrapper">
-  <!-- Toast Notification -->
-  {#if toastMsg}
-    <div class="toast-popup">
-      {toastMsg}
-    </div>
-  {/if}
+<div class="app-layout">
+  <!-- Toast Notification System -->
+  <div class="toast-stack">
+    {#each toast.toasts as t (t.id)}
+      <div class="toast-card {t.type}">
+        <span>{t.message}</span>
+        <button class="t-close" onclick={() => toast.remove(t.id)}>&times;</button>
+      </div>
+    {/each}
+  </div>
 
-  <!-- Header -->
+  <!-- Global Modals -->
+  <AuthModal />
+  <CheckoutModal isOpen={isCheckoutOpen} onClose={() => isCheckoutOpen = false} />
+  <BuyerOrdersModal isOpen={isOrdersOpen} onClose={() => isOrdersOpen = false} />
+
+  <!-- Navbar -->
   <header class="navbar">
-    <div class="nav-container">
+    <div class="nav-inner">
       <div class="brand">
-        <span class="logo-icon">⚡</span>
+        <span class="logo-emoji">⚡</span>
         <div>
-          <h1>Program1</h1>
-          <span class="brand-tag">Svelte 5 + Bun SPA</span>
+          <h2>Program1</h2>
+          <span class="subtext">Svelte 5 + Rust Axum</span>
         </div>
       </div>
 
-      <nav class="nav-links">
+      <nav class="nav-tabs">
         <button class:active={activeTab === 'store'} onclick={() => activeTab = 'store'}>
-          🏪 Katalog Produk
+          🏪 Katalog Toko
         </button>
         <button class:active={activeTab === 'diagnostic'} onclick={() => activeTab = 'diagnostic'}>
           🔍 Server Health
@@ -135,77 +124,105 @@
         </button>
       </nav>
 
-      <div class="nav-actions">
-        <button class="cart-btn" onclick={() => isCartOpen = true}>
+      <div class="nav-user-actions">
+        {#if auth.user}
+          <button class="btn-orders" onclick={() => isOrdersOpen = true}>
+            📦 Pesanan Saya
+          </button>
+          <div class="user-pill">
+            <span class="uname">👤 {auth.user.name}</span>
+            <button class="btn-logout" onclick={() => auth.logout()}>Keluar</button>
+          </div>
+        {:else}
+          <button class="btn-login" onclick={() => auth.isModalOpen = true}>
+            Masuk / Daftar
+          </button>
+        {/if}
+
+        <button class="cart-trigger" onclick={() => cart.isOpen = true}>
           🛒 Keranjang
-          {#if totalCartItems > 0}
-            <span class="badge-count">{totalCartItems}</span>
+          {#if cart.totalItems > 0}
+            <span class="cart-count">{cart.totalItems}</span>
           {/if}
         </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Container -->
-  <main class="main-body">
+  <!-- Body Content -->
+  <main class="page-body">
     {#if activeTab === 'store'}
-      <section class="store-section">
-        <div class="toolbar">
-          <div class="search-box">
-            <span class="search-icon">🔍</span>
+      <section class="store-view">
+        <div class="catalog-filters">
+          <div class="search-field">
+            <span class="s-icon">🔍</span>
             <input
               type="text"
-              placeholder="Cari produk di katalog..."
+              placeholder="Cari produk impianmu..."
               bind:value={searchQuery}
             />
           </div>
-          <button class="btn-refresh" onclick={fetchCatalog} disabled={catalogLoading}>
-            {catalogLoading ? 'Memuat...' : 'Muat Ulang'}
-          </button>
+
+          {#if categories.length > 1}
+            <div class="category-pills">
+              {#each categories as cat}
+                <button
+                  class="pill-btn"
+                  class:active={selectedCategory === cat}
+                  onclick={() => selectedCategory = cat}
+                >
+                  {cat === 'all' ? 'Semua Kategori' : cat}
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
 
         {#if catalogLoading}
-          <div class="loading-grid">
+          <div class="grid-skeleton">
             {#each Array(6) as _}
-              <div class="skeleton-card"></div>
+              <div class="card-skeleton"></div>
             {/each}
           </div>
         {:else if catalogError}
           <div class="alert-box error">
-            <p><strong>Gagal Memuat Katalog:</strong> {catalogError}</p>
-            <p class="hint">Pastikan backend Rust Axum berjalan di port 8080 (<code>cargo run -p program1-web</code>).</p>
+            <p><strong>Gagal Memuat Produk:</strong> {catalogError}</p>
+            <button class="btn-retry" onclick={fetchCatalog}>Coba Lagi</button>
           </div>
         {:else if filteredProducts.length === 0}
-          <div class="empty-state">
-            <p>Tidak ada produk yang cocok dengan pencarian "{searchQuery}".</p>
+          <div class="empty-box">
+            <p>Produk tidak ditemukan untuk pencarian "{searchQuery}".</p>
           </div>
         {:else}
-          <div class="product-grid">
+          <div class="catalog-grid">
             {#each filteredProducts as product (product.id)}
-              <div class="product-card">
-                <div class="img-box">
+              <div class="product-item">
+                <div class="img-container">
                   {#if product.image_url}
-                    <img src={product.image_url} alt={product.name} />
+                    <img src={product.image_url} alt={product.name} loading="lazy" />
                   {:else}
-                    <span class="placeholder-icon">📦</span>
+                    <span class="placeholder-emoji">📦</span>
                   {/if}
                   {#if product.stock <= 0}
-                    <span class="out-badge">Habis</span>
+                    <span class="badge-habis">Habis</span>
                   {/if}
                 </div>
-                <div class="card-body">
-                  <h3 class="product-name">{product.name}</h3>
-                  <p class="product-desc">{product.description || 'Produk berkualitas tinggi'}</p>
-                  <div class="card-foot">
-                    <span class="price-tag">{formatRupiah(product.price_cents)}</span>
-                    <small class="stock-text">Stok: {product.stock}</small>
+
+                <div class="item-details">
+                  <h3 class="p-title">{product.name}</h3>
+                  <p class="p-desc">{product.description || 'Produk kualitas terjamin dari katalog.'}</p>
+                  
+                  <div class="item-meta">
+                    <span class="price-value">{formatRupiah(product.price_cents)}</span>
+                    <small class="stock-value">Stok: {product.stock}</small>
                   </div>
+
                   <button
-                    class="btn-buy"
+                    class="btn-add"
                     disabled={product.stock <= 0}
-                    onclick={() => addToCart(product)}
+                    onclick={() => cart.addItem(product)}
                   >
-                    {product.stock <= 0 ? 'Habis' : '+ Keranjang'}
+                    {product.stock <= 0 ? 'Stok Habis' : '+ Keranjang'}
                   </button>
                 </div>
               </div>
@@ -215,40 +232,33 @@
       </section>
 
     {:else if activeTab === 'diagnostic'}
-      <section class="diagnostic-section">
-        <h2>🛠️ Backend Connection & Diagnostics</h2>
-        <p class="section-desc">
-          Frontend Svelte 5 ini berkomunikasi langsung dengan Modular Monolith Rust Axum via JSON REST API.
-        </p>
-
-        <div class="diag-card">
-          <div class="diag-header">
-            <h3>Pemeriksaan Endpoint <code>GET /health</code></h3>
-            <button class="btn-primary" onclick={checkHealth} disabled={healthLoading}>
-              {healthLoading ? 'Memeriksa...' : 'Ping Ulang'}
+      <section class="diagnostic-view">
+        <div class="card-panel">
+          <div class="panel-header">
+            <h3>⚡ Status Backend Axum (<code>GET /health</code>)</h3>
+            <button class="btn-refresh" onclick={checkHealth} disabled={healthLoading}>
+              {healthLoading ? 'Memeriksa...' : 'Ping Server'}
             </button>
           </div>
 
           {#if healthLoading}
-            <p class="text-muted">Menghubungi server Axum...</p>
+            <p class="info-text">Menghubungi endpoint backend...</p>
           {:else if healthError}
             <div class="alert-box error">
-              <h4>❌ Koneksi Gagal</h4>
+              <h4>❌ Sambungan Terputus</h4>
               <p>{healthError}</p>
-              <small>Vite dev server mencoba proxy ke <code>http://127.0.0.1:8080/health</code></small>
             </div>
           {:else if healthData}
             <div class="alert-box success">
-              <h4>✅ Server Rust Axum Terhubung & Aktif!</h4>
-              <ul class="diag-list">
-                <li><strong>Status Server:</strong> <code>{healthData.status}</code></li>
-                <li><strong>Versi Monolith:</strong> <code>{healthData.version}</code></li>
-                {#if healthData.subsystems}
-                  <li><strong>Subsystem Status:</strong>
-                    <pre>{JSON.stringify(healthData.subsystems, null, 2)}</pre>
-                  </li>
-                {/if}
-              </ul>
+              <h4>✅ Server Rust Axum Berjalan Normal!</h4>
+              <p><strong>Status API:</strong> <code>{healthData.status}</code></p>
+              <p><strong>Versi Binary:</strong> <code>{healthData.version}</code></p>
+              {#if healthData.subsystems}
+                <div class="subsystems-dump">
+                  <strong>Subsystem Diagnostic:</strong>
+                  <pre>{JSON.stringify(healthData.subsystems, null, 2)}</pre>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -256,33 +266,39 @@
     {/if}
   </main>
 
-  <!-- Cart Drawer -->
-  {#if isCartOpen}
-    <div class="drawer-backdrop" onclick={() => isCartOpen = false}>
-      <div class="drawer" onclick={(e) => e.stopPropagation()}>
-        <div class="drawer-head">
-          <h3>🛒 Keranjang Belanja ({totalCartItems})</h3>
-          <button class="btn-close" onclick={() => isCartOpen = false}>&times;</button>
+  <!-- Slide-Over Cart Drawer -->
+  {#if cart.isOpen}
+    <div
+      class="drawer-backdrop"
+      onclick={() => cart.isOpen = false}
+      role="button"
+      tabindex="0"
+      onkeydown={(e) => e.key === 'Escape' && (cart.isOpen = false)}
+    >
+      <div class="cart-drawer" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div class="drawer-header">
+          <h3>🛒 Keranjang ({cart.totalItems})</h3>
+          <button class="close-drawer" onclick={() => cart.isOpen = false}>&times;</button>
         </div>
 
-        <div class="drawer-content">
-          {#if cart.length === 0}
-            <div class="empty-cart">
-              <p>Keranjang belanja kosong.</p>
-              <button class="btn-secondary" onclick={() => isCartOpen = false}>Lihat Produk</button>
+        <div class="drawer-body">
+          {#if cart.items.length === 0}
+            <div class="empty-cart-state">
+              <p>Keranjang Anda masih kosong.</p>
+              <button class="btn-explore" onclick={() => cart.isOpen = false}>Mulai Belanja</button>
             </div>
           {:else}
-            <div class="cart-items-list">
-              {#each cart as item (item.product.id)}
-                <div class="cart-card">
-                  <div class="cart-info">
+            <div class="cart-lines">
+              {#each cart.items as item (item.product.id)}
+                <div class="line-item">
+                  <div class="line-info">
                     <h4>{item.product.name}</h4>
-                    <span class="cart-price">{formatRupiah(item.product.price_cents)}</span>
+                    <span class="line-price">{formatRupiah(item.product.price_cents)}</span>
                   </div>
-                  <div class="cart-ctrls">
-                    <button class="btn-step" onclick={() => updateQuantity(item.product.id, -1)}>-</button>
-                    <span class="cart-qty">{item.quantity}</span>
-                    <button class="btn-step" onclick={() => updateQuantity(item.product.id, 1)}>+</button>
+                  <div class="line-actions">
+                    <button class="qty-btn" onclick={() => cart.updateQuantity(item.product.id, -1)}>-</button>
+                    <span class="qty-num">{item.quantity}</span>
+                    <button class="qty-btn" onclick={() => cart.updateQuantity(item.product.id, 1)}>+</button>
                   </div>
                 </div>
               {/each}
@@ -290,13 +306,13 @@
           {/if}
         </div>
 
-        {#if cart.length > 0}
-          <div class="drawer-foot">
-            <div class="total-row">
-              <span>Total Tagihan:</span>
-              <strong class="total-val">{formatRupiah(totalCartPrice)}</strong>
+        {#if cart.items.length > 0}
+          <div class="drawer-footer">
+            <div class="total-bar">
+              <span>Total:</span>
+              <strong class="total-text">{formatRupiah(cart.totalAmountCents)}</strong>
             </div>
-            <button class="btn-checkout" onclick={() => showToast('🚀 Fitur Checkout Midtrans siap diintegrasikan di Issue 14!')}>
+            <button class="btn-checkout" onclick={handleStartCheckout}>
               Lanjut ke Pembayaran 💳
             </button>
           </div>
@@ -304,6 +320,9 @@
       </div>
     </div>
   {/if}
+
+  <!-- Live Chat Widget -->
+  <LiveChat />
 </div>
 
 <style>
@@ -314,26 +333,39 @@
     color: #f1f5f9;
   }
 
-  .app-wrapper {
+  .app-layout {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
   }
 
-  .toast-popup {
+  /* Toast Stack */
+  .toast-stack {
     position: fixed;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #0284c7;
-    color: #fff;
-    padding: 0.75rem 1.5rem;
-    border-radius: 9999px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    top: 1.5rem;
+    right: 1.5rem;
     z-index: 9999;
-    font-weight: 500;
-    animation: fadeIn 0.2s ease-out;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
+  .toast-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 260px;
+    max-width: 380px;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    animation: slideRight 0.2s ease-out;
+  }
+  .toast-card.success { background: #059669; }
+  .toast-card.error { background: #dc2626; }
+  .toast-card.info { background: #0284c7; }
+  .t-close { background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; }
 
   /* Navbar */
   .navbar {
@@ -341,9 +373,9 @@
     border-bottom: 1px solid #1e293b;
     position: sticky;
     top: 0;
-    z-index: 50;
+    z-index: 100;
   }
-  .nav-container {
+  .nav-inner {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0.75rem 1.5rem;
@@ -351,249 +383,171 @@
     align-items: center;
     justify-content: space-between;
   }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  .logo-icon { font-size: 1.8rem; }
-  .brand h1 { margin: 0; font-size: 1.25rem; color: #38bdf8; }
-  .brand-tag { font-size: 0.75rem; color: #94a3b8; }
-  .nav-links { display: flex; gap: 0.5rem; }
-  .nav-links button {
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.2s;
-  }
-  .nav-links button:hover { background: #1e293b; color: #f8fafc; }
-  .nav-links button.active { background: #1e293b; color: #38bdf8; font-weight: 600; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; }
+  .logo-emoji { font-size: 1.7rem; }
+  .brand h2 { margin: 0; font-size: 1.25rem; color: #38bdf8; }
+  .subtext { font-size: 0.75rem; color: #94a3b8; }
 
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+  .nav-tabs { display: flex; gap: 0.5rem; }
+  .nav-tabs button {
+    background: transparent; border: none; color: #94a3b8;
+    padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;
+    font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem;
   }
+  .nav-tabs button:hover { background: #1e293b; color: #fff; }
+  .nav-tabs button.active { background: #1e293b; color: #38bdf8; font-weight: bold; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
   .status-dot.green { background: #10b981; box-shadow: 0 0 6px #10b981; }
   .status-dot.yellow { background: #f59e0b; }
 
-  .cart-btn {
-    background: #0284c7;
-    color: #fff;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    position: relative;
+  .nav-user-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .user-pill {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: #1e293b; padding: 0.35rem 0.75rem; border-radius: 20px; border: 1px solid #334155;
   }
-  .badge-count {
-    background: #ef4444;
-    color: white;
-    font-size: 0.75rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 9999px;
+  .uname { font-size: 0.85rem; color: #cbd5e1; }
+  .btn-logout {
+    background: #475569; color: #fff; border: none; font-size: 0.75rem;
+    padding: 0.2rem 0.5rem; border-radius: 4px; cursor: pointer;
   }
-
-  /* Main Body */
-  .main-body {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem;
-    flex: 1;
-    width: 100%;
-    box-sizing: border-box;
+  .btn-login {
+    background: #0284c7; color: #fff; border: none; padding: 0.5rem 0.9rem;
+    border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer;
+  }
+  .btn-orders {
+    background: #1e293b; color: #38bdf8; border: 1px solid #334155;
+    padding: 0.5rem 0.8rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;
+  }
+  .cart-trigger {
+    background: #0284c7; color: #fff; border: none; padding: 0.5rem 1rem;
+    border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+  }
+  .cart-count {
+    background: #ef4444; color: white; font-size: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 999px;
   }
 
-  .toolbar {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-  .search-box {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    padding: 0 0.8rem;
-  }
-  .search-icon { font-size: 1rem; margin-right: 0.5rem; }
-  .search-box input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    padding: 0.75rem 0;
-    color: #fff;
-    font-size: 0.95rem;
-  }
-  .search-box input:focus { outline: none; }
-  .btn-refresh {
-    background: #334155;
-    color: #fff;
-    border: none;
-    padding: 0 1.25rem;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
+  /* Page Body */
+  .page-body {
+    max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; flex: 1; width: 100%; box-sizing: border-box;
   }
 
-  /* Product Grid */
-  .product-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 1.5rem;
+  /* Catalog Filters */
+  .catalog-filters { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.75rem; }
+  .search-field {
+    display: flex; align-items: center; background: #0f172a; border: 1px solid #334155;
+    border-radius: 8px; padding: 0 0.85rem;
   }
-  .product-card {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 12px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+  .s-icon { margin-right: 0.5rem; font-size: 1rem; }
+  .search-field input {
+    width: 100%; background: transparent; border: none; padding: 0.75rem 0;
+    color: #fff; font-size: 0.95rem;
+  }
+  .search-field input:focus { outline: none; }
+  .category-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .pill-btn {
+    background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+    padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; cursor: pointer;
+  }
+  .pill-btn.active { background: #0284c7; color: #fff; border-color: #0284c7; font-weight: bold; }
+
+  /* Catalog Grid */
+  .catalog-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1.5rem;
+  }
+  .product-item {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    overflow: hidden; display: flex; flex-direction: column;
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
   }
-  .product-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 24px rgba(0,0,0,0.35);
-    border-color: #0284c7;
+  .product-item:hover {
+    transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: #0284c7;
   }
-  .img-box {
-    height: 180px;
-    background: #0f172a;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .img-container {
+    height: 180px; background: #0f172a; position: relative;
+    display: flex; align-items: center; justify-content: center;
   }
-  .img-box img { width: 100%; height: 100%; object-fit: cover; }
-  .placeholder-icon { font-size: 3.5rem; }
-  .out-badge {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: #dc2626;
-    color: white;
-    font-size: 0.75rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-weight: bold;
+  .img-container img { width: 100%; height: 100%; object-fit: cover; }
+  .placeholder-emoji { font-size: 3.5rem; }
+  .badge-habis {
+    position: absolute; top: 8px; right: 8px; background: #dc2626; color: #fff;
+    font-size: 0.75rem; font-weight: bold; padding: 0.2rem 0.5rem; border-radius: 4px;
   }
-  .card-body {
-    padding: 1.25rem;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+  .item-details { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; }
+  .p-title { margin: 0 0 0.5rem; font-size: 1.05rem; color: #f8fafc; }
+  .p-desc { font-size: 0.85rem; color: #94a3b8; margin: 0 0 1rem; flex: 1; }
+  .item-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .price-value { font-size: 1.15rem; font-weight: bold; color: #38bdf8; }
+  .stock-value { color: #64748b; }
+  .btn-add {
+    background: #0284c7; color: #fff; border: none; padding: 0.65rem;
+    border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s;
   }
-  .product-name {
-    margin: 0 0 0.5rem;
-    font-size: 1.05rem;
-    color: #f8fafc;
-  }
-  .product-desc {
-    font-size: 0.85rem;
-    color: #94a3b8;
-    margin: 0 0 1rem;
-    flex: 1;
-  }
-  .card-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-  .price-tag { font-size: 1.15rem; font-weight: bold; color: #38bdf8; }
-  .stock-text { color: #64748b; }
-  .btn-buy {
-    width: 100%;
-    background: #0284c7;
-    color: #fff;
-    border: none;
-    padding: 0.65rem;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .btn-buy:hover:not(:disabled) { background: #0369a1; }
-  .btn-buy:disabled { background: #475569; cursor: not-allowed; }
+  .btn-add:hover:not(:disabled) { background: #0369a1; }
+  .btn-add:disabled { background: #475569; cursor: not-allowed; }
 
-  /* Diagnostic Card */
-  .diag-card {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 12px;
-    padding: 1.5rem;
+  /* Diagnostic View */
+  .card-panel {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem;
   }
-  .diag-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .panel-header h3 { margin: 0; }
+  .btn-refresh {
+    background: #0284c7; color: #fff; border: none; padding: 0.5rem 1rem;
+    border-radius: 6px; cursor: pointer; font-weight: 500;
   }
-  .alert-box {
-    padding: 1.25rem;
-    border-radius: 8px;
-    margin-top: 1rem;
-  }
+  .alert-box { padding: 1.25rem; border-radius: 8px; margin-top: 1rem; }
   .alert-box.success { background: #064e3b; color: #a7f3d0; }
   .alert-box.error { background: #7f1d1d; color: #fecaca; }
-  .diag-list { list-style: none; padding: 0; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.4rem; }
+  .subsystems-dump pre { background: #022c22; padding: 0.75rem; border-radius: 6px; overflow-x: auto; }
 
-  /* Drawer */
+  /* Cart Drawer */
   .drawer-backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300;
     display: flex; justify-content: flex-end;
   }
-  .drawer {
-    width: 100%; max-width: 400px; height: 100%;
-    background: #0f172a; border-left: 1px solid #1e293b;
-    display: flex; flex-direction: column; animation: slideIn 0.2s ease-out;
+  .cart-drawer {
+    width: 100%; max-width: 400px; height: 100%; background: #0f172a;
+    border-left: 1px solid #1e293b; display: flex; flex-direction: column;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.5); animation: slideLeft 0.2s ease-out;
   }
-  .drawer-head {
+  .drawer-header {
     padding: 1.25rem; border-bottom: 1px solid #1e293b;
     display: flex; justify-content: space-between; align-items: center;
   }
-  .btn-close { background: none; border: none; font-size: 1.5rem; color: #fff; cursor: pointer; }
-  .drawer-content { flex: 1; overflow-y: auto; padding: 1.25rem; }
-  .cart-card {
-    background: #1e293b; padding: 0.75rem 1rem; border-radius: 8px;
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 0.75rem;
+  .drawer-header h3 { margin: 0; }
+  .close-drawer { background: none; border: none; font-size: 1.5rem; color: #94a3b8; cursor: pointer; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 1.25rem; }
+  .empty-cart-state { text-align: center; color: #94a3b8; padding: 3rem 0; }
+  .btn-explore {
+    background: #0284c7; color: #fff; border: none; padding: 0.5rem 1rem;
+    border-radius: 6px; cursor: pointer; margin-top: 1rem;
   }
-  .cart-info h4 { margin: 0 0 0.25rem; font-size: 0.95rem; }
-  .cart-price { color: #38bdf8; font-weight: bold; font-size: 0.9rem; }
-  .cart-ctrls { display: flex; align-items: center; gap: 0.5rem; }
-  .btn-step {
-    background: #334155; color: white; border: none; width: 26px; height: 26px;
+  .cart-lines { display: flex; flex-direction: column; gap: 0.75rem; }
+  .line-item {
+    background: #1e293b; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #334155;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .line-info h4 { margin: 0 0 0.25rem; font-size: 0.95rem; }
+  .line-price { color: #38bdf8; font-weight: bold; font-size: 0.9rem; }
+  .line-actions { display: flex; align-items: center; gap: 0.5rem; }
+  .qty-btn {
+    background: #334155; color: #fff; border: none; width: 26px; height: 26px;
     border-radius: 4px; cursor: pointer; font-weight: bold;
   }
-  .drawer-foot {
-    padding: 1.25rem; border-top: 1px solid #1e293b; background: #0b1120;
-  }
-  .total-row { display: flex; justify-content: space-between; font-size: 1.1rem; margin-bottom: 1rem; }
-  .total-val { color: #38bdf8; }
+  .qty-num { min-width: 20px; text-align: center; }
+  .drawer-footer { padding: 1.25rem; border-top: 1px solid #1e293b; background: #0b1120; }
+  .total-bar { display: flex; justify-content: space-between; font-size: 1.1rem; margin-bottom: 1rem; }
+  .total-text { color: #38bdf8; }
   .btn-checkout {
     width: 100%; background: #0284c7; color: #fff; border: none;
     padding: 0.8rem; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer;
   }
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translate(-50%, 10px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
+  @keyframes slideRight {
+    from { transform: translateX(50px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
   }
-  @keyframes slideIn {
+  @keyframes slideLeft {
     from { transform: translateX(100%); }
     to { transform: translateX(0); }
   }

@@ -6,3 +6,7 @@ target
 .env.*
 README.md
 AGENTS.md
+frontend/node_modules
+frontend/dist
+crates/web/static/dist
+

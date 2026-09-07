@@ -4,6 +4,22 @@ export interface HealthResponse {
   subsystems?: Record<string, string>;
 }
 
+export interface BuyerProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  is_phone_verified: boolean;
+  created_at: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  token_type: string;
+  expires_in: number;
+  buyer: BuyerProfile;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -12,6 +28,7 @@ export interface Product {
   stock: number;
   image_url?: string | null;
   category?: string | null;
+  created_at?: string;
 }
 
 export interface CatalogPageResponse {
@@ -25,4 +42,40 @@ export interface CatalogPageResponse {
 export interface CartItem {
   product: Product;
   quantity: number;
+}
+
+export interface CreateOrderPayload {
+  items: { product_id: string; quantity: number }[];
+  notes?: string;
+  shipping_address_id?: string;
+}
+
+export interface CreateOrderResponse {
+  order_id: string;
+  total_amount_cents: number;
+  snap_token?: string;
+  redirect_url?: string;
+  status: string;
+}
+
+export interface BuyerOrder {
+  id: string;
+  total_amount_cents: number;
+  status: 'PENDING_PAYMENT' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
+  tracking_number?: string | null;
+  items: {
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    price_cents: number;
+  }[];
+  created_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender_role: 'Buyer' | 'Seller' | 'Admin';
+  sender_name: string;
+  content: string;
+  created_at: string;
 }

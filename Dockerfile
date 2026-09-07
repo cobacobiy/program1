@@ -1,5 +1,13 @@
 # Multi-stage Dockerfile for Program1 Rust Modular Monolith
-# Uses cargo-chef for dependency caching to avoid rebuilding 200+ crates on every edit
+# Uses cargo-chef for dependency caching and Bun for frontend build
+
+# --- Stage 0: Frontend builder (Bun + Svelte 5) ---
+FROM oven/bun:1-alpine AS frontend-builder
+WORKDIR /app
+COPY frontend/package.json frontend/bun.lock* ./frontend/
+RUN cd frontend && (bun install --frozen-lockfile || bun install)
+COPY frontend ./frontend
+RUN cd frontend && bun run build
 
 # --- Stage 1: Chef base ---
 FROM lukemathwalker/cargo-chef:latest-rust-bookworm AS chef
@@ -47,8 +55,9 @@ COPY --from=builder /usr/src/program1/target/release/program1 /app/program1
 # Create persistent storage directories
 RUN mkdir -p /app/data/uploads
 
-# Copy static Web UI assets
+# Copy static Web UI assets & compiled Svelte SPA
 COPY crates/web/static /app/crates/web/static
+COPY --from=frontend-builder /app/crates/web/static/dist /app/crates/web/static/dist
 
 ENV RUST_LOG=info,program1=debug
 ENV APP_PORT=8080
