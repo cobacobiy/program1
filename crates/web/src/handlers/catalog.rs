@@ -196,7 +196,10 @@ pub async fn create_variant_handler(
     payload.variant_name = program1_core::sanitize::sanitize_text(&payload.variant_name, 50);
     payload.variant_value = program1_core::sanitize::sanitize_text(&payload.variant_value, 100);
 
-    let variant = state.catalog_contract.create_variant(product_id, payload).await?;
+    let variant = state
+        .catalog_contract
+        .create_variant(product_id, payload)
+        .await?;
 
     let _ = state
         .audit_contract
@@ -250,7 +253,10 @@ pub async fn update_variant_handler(
     payload.variant_name = program1_core::sanitize::sanitize_text(&payload.variant_name, 50);
     payload.variant_value = program1_core::sanitize::sanitize_text(&payload.variant_value, 100);
 
-    let variant = state.catalog_contract.update_variant(variant_id, payload).await?;
+    let variant = state
+        .catalog_contract
+        .update_variant(variant_id, payload)
+        .await?;
 
     let _ = state
         .audit_contract
@@ -316,4 +322,3 @@ pub async fn delete_variant_handler(
 
     Ok(StatusCode::NO_CONTENT)
 }
-

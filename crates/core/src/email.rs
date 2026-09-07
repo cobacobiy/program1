@@ -9,12 +9,7 @@ use tokio::sync::Mutex;
 /// Shared trait for sending transactional emails across the modular monolith
 #[async_trait]
 pub trait EmailSender: Send + Sync {
-    async fn send_email(
-        &self,
-        to: &str,
-        subject: &str,
-        html_body: &str,
-    ) -> Result<(), String>;
+    async fn send_email(&self, to: &str, subject: &str, html_body: &str) -> Result<(), String>;
 }
 
 /// Development & local fallback: logs email details without establishing network connection
@@ -29,12 +24,7 @@ impl ConsoleEmailSender {
 
 #[async_trait]
 impl EmailSender for ConsoleEmailSender {
-    async fn send_email(
-        &self,
-        to: &str,
-        subject: &str,
-        html_body: &str,
-    ) -> Result<(), String> {
+    async fn send_email(&self, to: &str, subject: &str, html_body: &str) -> Result<(), String> {
         let trimmed_to = to.trim();
         if trimmed_to.is_empty() || !trimmed_to.contains('@') {
             return Err(format!("Invalid recipient email address: '{}'", to));
@@ -82,12 +72,7 @@ impl MockEmailSender {
 
 #[async_trait]
 impl EmailSender for MockEmailSender {
-    async fn send_email(
-        &self,
-        to: &str,
-        subject: &str,
-        html_body: &str,
-    ) -> Result<(), String> {
+    async fn send_email(&self, to: &str, subject: &str, html_body: &str) -> Result<(), String> {
         let trimmed_to = to.trim();
         if trimmed_to.is_empty() || !trimmed_to.contains('@') {
             return Err(format!("Invalid recipient email address: '{}'", to));
@@ -127,12 +112,7 @@ impl SmtpEmailSender {
 
 #[async_trait]
 impl EmailSender for SmtpEmailSender {
-    async fn send_email(
-        &self,
-        to: &str,
-        subject: &str,
-        html_body: &str,
-    ) -> Result<(), String> {
+    async fn send_email(&self, to: &str, subject: &str, html_body: &str) -> Result<(), String> {
         let trimmed_to = to.trim();
         if trimmed_to.is_empty() || !trimmed_to.contains('@') {
             return Err(format!("Invalid recipient email address: '{}'", to));
@@ -164,7 +144,8 @@ impl EmailSender for SmtpEmailSender {
         };
 
         if let Some(ref pass) = self.config.password {
-            builder = builder.credentials(Credentials::new(self.config.username.clone(), pass.clone()));
+            builder =
+                builder.credentials(Credentials::new(self.config.username.clone(), pass.clone()));
         }
 
         let transport = builder.build();
@@ -183,7 +164,10 @@ impl EmailSender for SmtpEmailSender {
 
 /// Generates Welcome Email (Subject, HTML Body)
 pub fn welcome_email(buyer_name: &str, store_name: &str, login_url: &str) -> (String, String) {
-    let subject = format!("Selamat Datang di {} — Akun Anda Siap Digunakan!", store_name);
+    let subject = format!(
+        "Selamat Datang di {} — Akun Anda Siap Digunakan!",
+        store_name
+    );
     let html = format!(
         r#"<!DOCTYPE html>
 <html lang="id">
@@ -255,7 +239,7 @@ pub fn format_idr(amount: f64) -> String {
     let chars: Vec<char> = s.chars().collect();
     let len = chars.len();
     for (i, &c) in chars.iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push('.');
         }
         result.push(c);
@@ -378,7 +362,10 @@ pub fn payment_success_email(
     } else {
         order_id
     };
-    let subject = format!("Pembayaran Berhasil untuk Pesanan #{} — {}", short_id, store_name);
+    let subject = format!(
+        "Pembayaran Berhasil untuk Pesanan #{} — {}",
+        short_id, store_name
+    );
     let amount_str = format_idr(amount);
     let html = format!(
         r#"<!DOCTYPE html>
@@ -456,7 +443,10 @@ pub fn shipping_notification_email(
     } else {
         order_id
     };
-    let subject = format!("Pesanan #{} Sedang Dalam Pengiriman! — {}", short_id, store_name);
+    let subject = format!(
+        "Pesanan #{} Sedang Dalam Pengiriman! — {}",
+        short_id, store_name
+    );
     let tracking_display = tracking_number.unwrap_or("Belum Tersedia / Menunggu Update Kurir");
     let courier_display = courier.unwrap_or("Kurir Standar");
 
@@ -527,11 +517,7 @@ mod tests {
     async fn test_console_email_sender_succeeds() {
         let sender = ConsoleEmailSender::new();
         let res = sender
-            .send_email(
-                "buyer@example.com",
-                "Test Subject",
-                "<p>Hello World</p>",
-            )
+            .send_email("buyer@example.com", "Test Subject", "<p>Hello World</p>")
             .await;
         assert!(res.is_ok());
     }

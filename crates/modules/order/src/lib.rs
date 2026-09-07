@@ -119,17 +119,29 @@ impl OrderModule {
             .try_get::<Option<String>, _>("shipped_at")
             .ok()
             .flatten()
-            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
+            .and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            });
         let delivered_at = row
             .try_get::<Option<String>, _>("delivered_at")
             .ok()
             .flatten()
-            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
+            .and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            });
         let cancelled_at = row
             .try_get::<Option<String>, _>("cancelled_at")
             .ok()
             .flatten()
-            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
+            .and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            });
         let cancelled_by: Option<String> = row.try_get("cancelled_by").ok().flatten();
         let cancel_reason: Option<String> = row.try_get("cancel_reason").ok().flatten();
 
@@ -555,7 +567,13 @@ impl OrderContract for OrderModule {
         let now = Utc::now();
         let now_str = now.to_rfc3339();
 
-        let (shipped_at_update, delivered_at_update, cancelled_at_update, cancelled_by_update, cancel_reason_update) = match new_status {
+        let (
+            shipped_at_update,
+            delivered_at_update,
+            cancelled_at_update,
+            cancelled_by_update,
+            cancel_reason_update,
+        ) = match new_status {
             OrderStatus::Shipped => (Some(now_str), None, None, None, None),
             OrderStatus::Delivered => (None, Some(now_str), None, None, None),
             OrderStatus::Cancelled => (
@@ -799,7 +817,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(shipped_order.status, "shipped");
-        assert_eq!(shipped_order.tracking_number, Some("JNT123456789".to_string()));
+        assert_eq!(
+            shipped_order.tracking_number,
+            Some("JNT123456789".to_string())
+        );
         assert!(shipped_order.shipped_at.is_some());
 
         // 4. shipped -> delivered
@@ -896,7 +917,10 @@ mod tests {
             .unwrap();
         assert_eq!(cancelled.status, "cancelled");
         assert_eq!(cancelled.cancelled_by, Some("buyer".to_string()));
-        assert_eq!(cancelled.cancel_reason, Some("Salah pilih item".to_string()));
+        assert_eq!(
+            cancelled.cancel_reason,
+            Some("Salah pilih item".to_string())
+        );
         assert!(cancelled.cancelled_at.is_some());
 
         // Cancelled order cannot transition to processing

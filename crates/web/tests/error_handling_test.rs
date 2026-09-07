@@ -111,6 +111,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
         false,
     ));
     let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -128,6 +129,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

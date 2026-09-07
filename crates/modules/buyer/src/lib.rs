@@ -3,7 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use program1_contracts::{
     AuditContract, AuditLogEntry, AuthContract, BuyerAccountDto, BuyerAddressDto,
     BuyerAuthResponse, BuyerContract, BuyerLoginRequest, ContractError, CreateBuyerAddressRequest,
-    PaginatedResponse, RegisterBuyerRequest, UpdateBuyerAddressRequest,
+    PaginatedResponse, RegisterBuyerRequest, UpdateBuyerAddressRequest, WishlistItemDto,
 };
 use program1_core::database::DbPool;
 use rand::Rng;
@@ -296,7 +296,9 @@ impl SmsOtpSender for ConsoleOrProviderSmsSender {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
                     .build()
-                    .map_err(|e| ContractError::Internal(format!("HTTP client build error: {}", e)))?;
+                    .map_err(|e| {
+                        ContractError::Internal(format!("HTTP client build error: {}", e))
+                    })?;
 
                 let resp = client
                     .post("https://api.fonnte.com/send")
@@ -331,9 +333,7 @@ impl SmsOtpSender for ConsoleOrProviderSmsSender {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
-                .map_err(|e| {
-                    ContractError::Internal(format!("HTTP client build error: {}", e))
-                })?;
+                .map_err(|e| ContractError::Internal(format!("HTTP client build error: {}", e)))?;
             let resp = client
                 .post(&self.sms_provider)
                 .header(
@@ -1570,6 +1570,156 @@ impl BuyerContract for BuyerModule {
 
         Self::row_to_buyer_dto(&updated_row)
     }
+
+    async fn get_wishlist(&self, buyer_id: Uuid) -> Result<Vec<WishlistItemDto>, ContractError> {
+        let rows = sqlx::query(
+            "SELECT w.id, w.buyer_id, w.product_id, w.created_at,
+                    c.name as product_name, c.price as product_price, c.image_url as product_image_url
+             FROM buyer_wishlists w
+             JOIN catalog_items c ON w.product_id = c.id
+             WHERE w.buyer_id = $1
+             ORDER BY w.created_at DESC",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id_str: String = row.get("id");
+            let b_id_str: String = row.get("buyer_id");
+            let p_id_str: String = row.get("product_id");
+            let name: String = row.get("product_name");
+            let price_f64: f64 = row.get("product_price");
+            let image_url: Option<String> = row.get("product_image_url");
+            let created_at_str: String = row.get("created_at");
+
+            let id = Uuid::parse_str(&id_str)
+                .map_err(|e| ContractError::Internal(format!("Corrupt wishlist UUID: {}", e)))?;
+            let b_id = Uuid::parse_str(&b_id_str)
+                .map_err(|e| ContractError::Internal(format!("Corrupt buyer UUID: {}", e)))?;
+            let p_id = Uuid::parse_str(&p_id_str)
+                .map_err(|e| ContractError::Internal(format!("Corrupt product UUID: {}", e)))?;
+            let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+
+            items.push(WishlistItemDto {
+                id,
+                buyer_id: b_id,
+                product_id: p_id,
+                product_name: name,
+                product_price_cents: price_f64.round() as i64,
+                product_image_url: image_url,
+                created_at,
+            });
+        }
+        Ok(items)
+    }
+
+    async fn add_to_wishlist(
+        &self,
+        buyer_id: Uuid,
+        product_id: Uuid,
+    ) -> Result<WishlistItemDto, ContractError> {
+        let prod_row =
+            sqlx::query("SELECT id, name, price, image_url FROM catalog_items WHERE id = $1")
+                .bind(product_id.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let prod = match prod_row {
+            Some(p) => p,
+            None => {
+                return Err(ContractError::NotFound(format!(
+                    "Produk {} tidak ditemukan",
+                    product_id
+                )))
+            }
+        };
+
+        let wishlist_id = Uuid::new_v4();
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        let insert_res = sqlx::query(
+            "INSERT INTO buyer_wishlists (id, buyer_id, product_id, created_at) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(wishlist_id.to_string())
+        .bind(buyer_id.to_string())
+        .bind(product_id.to_string())
+        .bind(&now_str)
+        .execute(&self.pool)
+        .await;
+
+        if let Err(e) = insert_res {
+            let err_str = e.to_string();
+            if err_str.contains("UNIQUE constraint failed")
+                || err_str.contains("code: 2067")
+                || err_str.contains("code: 1555")
+            {
+                return Err(ContractError::AlreadyExists(
+                    "Produk sudah ada di dalam wishlist".to_string(),
+                ));
+            } else {
+                return Err(ContractError::Internal(err_str));
+            }
+        }
+
+        let product_name: String = prod.get("name");
+        let price_f64: f64 = prod.get("price");
+        let product_image_url: Option<String> = prod.get("image_url");
+
+        Ok(WishlistItemDto {
+            id: wishlist_id,
+            buyer_id,
+            product_id,
+            product_name,
+            product_price_cents: price_f64.round() as i64,
+            product_image_url,
+            created_at: now,
+        })
+    }
+
+    async fn remove_from_wishlist(
+        &self,
+        buyer_id: Uuid,
+        product_id: Uuid,
+    ) -> Result<(), ContractError> {
+        let res =
+            sqlx::query("DELETE FROM buyer_wishlists WHERE buyer_id = $1 AND product_id = $2")
+                .bind(buyer_id.to_string())
+                .bind(product_id.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        if res.rows_affected() == 0 {
+            return Err(ContractError::NotFound(
+                "Produk tidak ditemukan di dalam wishlist".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn is_in_wishlist(
+        &self,
+        buyer_id: Uuid,
+        product_id: Uuid,
+    ) -> Result<bool, ContractError> {
+        let row = sqlx::query(
+            "SELECT 1 FROM buyer_wishlists WHERE buyer_id = $1 AND product_id = $2 LIMIT 1",
+        )
+        .bind(buyer_id.to_string())
+        .bind(product_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(row.is_some())
+    }
 }
 
 #[cfg(test)]
@@ -2325,5 +2475,100 @@ mod tests {
             .update_buyer_profile(reg.buyer.id, Some("A".to_string()), None)
             .await;
         assert!(invalid.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_wishlist_add_list_and_remove() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let reg = module
+            .register(RegisterBuyerRequest {
+                full_name: "Wishlist Buyer".to_string(),
+                email: "wishlist.test@store.com".to_string(),
+                password: "Password123!".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let prod_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO catalog_items (id, name, sku, category, price, stock) VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(prod_id.to_string())
+        .bind("Mechanical Keyboard RGB")
+        .bind("SKU-KB-RGB")
+        .bind("Accessories")
+        .bind(250000.0)
+        .bind(15)
+        .execute(&module.pool)
+        .await
+        .unwrap();
+
+        // 1. Check initially not in wishlist
+        let in_wishlist = module.is_in_wishlist(reg.buyer.id, prod_id).await.unwrap();
+        assert!(!in_wishlist);
+
+        // 2. Add to wishlist
+        let added = module.add_to_wishlist(reg.buyer.id, prod_id).await.unwrap();
+        assert_eq!(added.buyer_id, reg.buyer.id);
+        assert_eq!(added.product_id, prod_id);
+        assert_eq!(added.product_name, "Mechanical Keyboard RGB");
+        assert_eq!(added.product_price_cents, 250000);
+
+        // 3. Now in wishlist
+        let in_wishlist = module.is_in_wishlist(reg.buyer.id, prod_id).await.unwrap();
+        assert!(in_wishlist);
+
+        // 4. List wishlist
+        let items = module.get_wishlist(reg.buyer.id).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].product_name, "Mechanical Keyboard RGB");
+
+        // 5. Remove from wishlist
+        module
+            .remove_from_wishlist(reg.buyer.id, prod_id)
+            .await
+            .unwrap();
+        let items_after = module.get_wishlist(reg.buyer.id).await.unwrap();
+        assert_eq!(items_after.len(), 0);
+
+        // 6. Removing non-existent returns NotFound
+        let not_found_err = module.remove_from_wishlist(reg.buyer.id, prod_id).await;
+        assert!(matches!(not_found_err, Err(ContractError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_wishlist_duplicate_conflict() {
+        let (module, _) = setup_test_buyer_module().await;
+
+        let reg = module
+            .register(RegisterBuyerRequest {
+                full_name: "Conflict Buyer".to_string(),
+                email: "conflict.wishlist@store.com".to_string(),
+                password: "Password123!".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let prod_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO catalog_items (id, name, sku, category, price, stock) VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(prod_id.to_string())
+        .bind("Gaming Mouse Pro")
+        .bind("SKU-MOUSE-01")
+        .bind("Accessories")
+        .bind(100000.0)
+        .bind(20)
+        .execute(&module.pool)
+        .await
+        .unwrap();
+
+        // Add first time -> OK
+        module.add_to_wishlist(reg.buyer.id, prod_id).await.unwrap();
+
+        // Add second time -> Conflict / AlreadyExists
+        let err = module.add_to_wishlist(reg.buyer.id, prod_id).await;
+        assert!(matches!(err, Err(ContractError::AlreadyExists(_))));
     }
 }

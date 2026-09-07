@@ -8,6 +8,7 @@ use program1_contracts::{
     CreateBuyerAddressRequest, ErrorCode, GoogleAuthRequest, JwtClaims, OtpRequest,
     OtpVerifyRequest, PaginatedResponse, PaginationParams, RegisterBuyerRequest,
     UpdateBuyerAddressRequest, UpdateBuyerProfileRequest, UpdateBuyerStatusRequest,
+    WishlistItemDto,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -401,11 +402,7 @@ pub async fn admin_list_buyers_handler(
 
     let buyers = state
         .buyer_contract
-        .list_buyers_paginated(
-            params.page(),
-            params.page_size(),
-            params.search.as_deref(),
-        )
+        .list_buyers_paginated(params.page(), params.page_size(), params.search.as_deref())
         .await?;
     Ok(Json(buyers))
 }
@@ -476,4 +473,112 @@ pub async fn admin_list_buyer_activity_handler(
     }
     let logs = state.audit_contract.get_logs(Some("buyer"), 100, 0).await?;
     Ok(Json(logs))
+}
+
+/// Get authenticated buyer's wishlist items
+#[utoipa::path(
+    get,
+    path = "/api/v1/buyer/wishlist",
+    responses(
+        (status = 200, description = "List of wishlist items", body = Vec<WishlistItemDto>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Buyer Wishlist"
+)]
+pub async fn get_wishlist_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<Vec<WishlistItemDto>>, ApiError> {
+    let items = state.buyer_contract.get_wishlist(claims.sub).await?;
+    Ok(Json(items))
+}
+
+/// Add product to buyer's wishlist
+#[utoipa::path(
+    post,
+    path = "/api/v1/buyer/wishlist/{product_id}",
+    params(
+        ("product_id" = Uuid, Path, description = "Product UUID to add to wishlist")
+    ),
+    responses(
+        (status = 201, description = "Product added to wishlist", body = WishlistItemDto),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Product not found", body = ApiError),
+        (status = 409, description = "Product already in wishlist", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Buyer Wishlist"
+)]
+pub async fn add_to_wishlist_handler(
+    Path(product_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<(StatusCode, Json<WishlistItemDto>), ApiError> {
+    let item = state
+        .buyer_contract
+        .add_to_wishlist(claims.sub, product_id)
+        .await?;
+    Ok((StatusCode::CREATED, Json(item)))
+}
+
+/// Remove product from buyer's wishlist
+#[utoipa::path(
+    delete,
+    path = "/api/v1/buyer/wishlist/{product_id}",
+    params(
+        ("product_id" = Uuid, Path, description = "Product UUID to remove from wishlist")
+    ),
+    responses(
+        (status = 204, description = "Product removed from wishlist"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Item not found in wishlist", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Buyer Wishlist"
+)]
+pub async fn remove_from_wishlist_handler(
+    Path(product_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .buyer_contract
+        .remove_from_wishlist(claims.sub, product_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Check if product is in buyer's wishlist
+#[utoipa::path(
+    get,
+    path = "/api/v1/buyer/wishlist/{product_id}/check",
+    params(
+        ("product_id" = Uuid, Path, description = "Product UUID to check")
+    ),
+    responses(
+        (status = 200, description = "Wishlist status", body = bool),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Buyer Wishlist"
+)]
+pub async fn check_wishlist_handler(
+    Path(product_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<bool>, ApiError> {
+    let is_in = state
+        .buyer_contract
+        .is_in_wishlist(claims.sub, product_id)
+        .await?;
+    Ok(Json(is_in))
 }

@@ -49,10 +49,11 @@
         toast.error(promoError);
       }
     } catch (err: any) {
-      promoError = err.message || 'Gagal memvalidasi kupon.';
+      const msg = err.message || 'Gagal memvalidasi kupon.';
+      promoError = msg;
       appliedCoupon = null;
       discountAmount = 0;
-      toast.error(promoError);
+      toast.error(msg);
     } finally {
       isValidatingCoupon = false;
     }

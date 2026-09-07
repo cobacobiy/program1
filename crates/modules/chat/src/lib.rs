@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use program1_contracts::{ChatContract, ChatMessageDto, ChatRoomDto, ChatSenderType, ContractError};
+use program1_contracts::{
+    ChatContract, ChatMessageDto, ChatRoomDto, ChatSenderType, ContractError,
+};
 use program1_core::database::DbPool;
 use sqlx::Row;
 use uuid::Uuid;
@@ -172,7 +174,9 @@ impl ChatContract for ChatModule {
                 .bind(&room_id_str)
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ContractError::Internal(format!("Failed to update chat room: {}", e)))?;
+                .map_err(|e| {
+                    ContractError::Internal(format!("Failed to update chat room: {}", e))
+                })?;
             }
             ChatSenderType::Seller => {
                 sqlx::query(
@@ -185,7 +189,9 @@ impl ChatContract for ChatModule {
                 .bind(&room_id_str)
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ContractError::Internal(format!("Failed to update chat room: {}", e)))?;
+                .map_err(|e| {
+                    ContractError::Internal(format!("Failed to update chat room: {}", e))
+                })?;
 
                 // Mark buyer messages as read
                 let _ = sqlx::query(
@@ -206,7 +212,9 @@ impl ChatContract for ChatModule {
                 .bind(&room_id_str)
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ContractError::Internal(format!("Failed to update chat room: {}", e)))?;
+                .map_err(|e| {
+                    ContractError::Internal(format!("Failed to update chat room: {}", e))
+                })?;
             }
         }
 
@@ -301,7 +309,9 @@ impl ChatContract for ChatModule {
         .bind(&buyer_id_str)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| ContractError::Internal(format!("Failed to retrieve created chat room: {}", e)))?;
+        .map_err(|e| {
+            ContractError::Internal(format!("Failed to retrieve created chat room: {}", e))
+        })?;
 
         Self::row_to_room(&row)
     }
@@ -315,7 +325,9 @@ impl ChatContract for ChatModule {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| ContractError::Internal(format!("Failed to fetch active chat rooms: {}", e)))?;
+        .map_err(|e| {
+            ContractError::Internal(format!("Failed to fetch active chat rooms: {}", e))
+        })?;
 
         let mut rooms = Vec::with_capacity(rows.len());
         for r in &rows {
@@ -463,13 +475,7 @@ mod tests {
             .unwrap();
 
         let res = module
-            .send_message(
-                room.id,
-                ChatSenderType::Buyer,
-                buyer_id,
-                "Dewi",
-                "    ",
-            )
+            .send_message(room.id, ChatSenderType::Buyer, buyer_id, "Dewi", "    ")
             .await;
         assert!(res.is_err());
         match res {

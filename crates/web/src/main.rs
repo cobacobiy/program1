@@ -8,10 +8,11 @@ use program1_module_auth::AuthModule;
 use program1_module_catalog::CatalogModule;
 use program1_module_channel::ChannelSyncModule;
 use program1_module_chat::ChatModule;
+use program1_module_coupon::CouponModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_payment::PaymentModule;
-use program1_module_coupon::CouponModule;
+use program1_module_review::ReviewModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
 
@@ -58,25 +59,28 @@ async fn main() {
         catalog_module.clone(),
     ));
     let channel_module = Arc::new(ChannelSyncModule::new(db_pool.clone()));
-    let email_sender: Arc<dyn program1_core::EmailSender> = if config.email_provider.eq_ignore_ascii_case("smtp") {
-        tracing::info!(
-            host = %config.smtp_host,
-            port = %config.smtp_port,
-            user = %config.smtp_username,
-            "Initializing SmtpEmailSender"
-        );
-        Arc::new(program1_core::SmtpEmailSender::new(program1_core::SmtpEmailConfig {
-            host: config.smtp_host.clone(),
-            port: config.smtp_port,
-            username: config.smtp_username.clone(),
-            password: config.smtp_password.clone(),
-            from_name: config.smtp_from_name.clone(),
-            from_email: config.smtp_from_email.clone(),
-        }))
-    } else {
-        tracing::info!("Initializing ConsoleEmailSender for development/test environment");
-        Arc::new(program1_core::ConsoleEmailSender::new())
-    };
+    let email_sender: Arc<dyn program1_core::EmailSender> =
+        if config.email_provider.eq_ignore_ascii_case("smtp") {
+            tracing::info!(
+                host = %config.smtp_host,
+                port = %config.smtp_port,
+                user = %config.smtp_username,
+                "Initializing SmtpEmailSender"
+            );
+            Arc::new(program1_core::SmtpEmailSender::new(
+                program1_core::SmtpEmailConfig {
+                    host: config.smtp_host.clone(),
+                    port: config.smtp_port,
+                    username: config.smtp_username.clone(),
+                    password: config.smtp_password.clone(),
+                    from_name: config.smtp_from_name.clone(),
+                    from_email: config.smtp_from_email.clone(),
+                },
+            ))
+        } else {
+            tracing::info!("Initializing ConsoleEmailSender for development/test environment");
+            Arc::new(program1_core::ConsoleEmailSender::new())
+        };
 
     let order_module = Arc::new(
         OrderModule::new(
@@ -124,6 +128,7 @@ async fn main() {
         config.midtrans_is_production,
     ));
     let coupon_module = Arc::new(CouponModule::new(db_pool.clone()));
+    let review_module = Arc::new(ReviewModule::new(db_pool.clone()));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -149,6 +154,7 @@ async fn main() {
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

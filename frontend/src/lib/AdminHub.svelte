@@ -3,7 +3,7 @@
   import { adminAuth } from './adminAuth.svelte';
   import { toast } from './toast.svelte';
   import { formatRupiah } from './currency';
-  import type { Product, ProductVariant, CreateVariantPayload, Coupon, CreateCouponPayload, DiscountType } from './types';
+  import type { Product, ProductVariant, CreateVariantPayload, Coupon, CreateCouponPayload, DiscountType, ProductReview, PaginatedReviews } from './types';
 
   interface AdminOrder {
     id: string;
@@ -29,7 +29,7 @@
   }
 
   // Active sub-tab
-  let subTab = $state<'kpi' | 'catalog' | 'inventory' | 'orders' | 'audit' | 'coupons'>('kpi');
+  let subTab = $state<'kpi' | 'catalog' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews'>('kpi');
 
   // Login form state
   let loginUser = $state('admin');
@@ -41,6 +41,13 @@
   let inventory = $state<InventoryRecord[]>([]);
   let auditLogs = $state<AuditLogRecord[]>([]);
   let coupons = $state<Coupon[]>([]);
+  let adminReviews = $state<ProductReview[]>([]);
+  let reviewsFilter = $state<'all' | 'visible' | 'hidden'>('all');
+  let adminReviewsPage = $state(1);
+  let adminReviewsPageSize = $state(20);
+  let adminReviewsTotal = $state(0);
+  let adminReviewsTotalPages = $state(1);
+  let reviewsLoading = $state(false);
   let loading = $state(false);
 
   // New coupon modal state
@@ -253,10 +260,64 @@
         const coup = await fetchAdmin<Coupon[]>('/api/v1/admin/coupons').catch(() => []);
         coupons = coup || [];
       }
+      if (subTab === 'kpi' || subTab === 'reviews') {
+        await loadAdminReviews(adminReviewsPage);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Gagal memuat data admin');
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadAdminReviews(page = 1) {
+    reviewsLoading = true;
+    try {
+      let url = `/api/v1/admin/reviews?page=${page}&page_size=${adminReviewsPageSize}`;
+      if (reviewsFilter === 'visible') {
+        url += '&is_visible=true';
+      } else if (reviewsFilter === 'hidden') {
+        url += '&is_visible=false';
+      }
+      const revs = await fetchAdmin<PaginatedReviews>(url);
+      adminReviews = revs.data || [];
+      adminReviewsPage = revs.page;
+      adminReviewsTotal = revs.total;
+      adminReviewsTotalPages = revs.total_pages;
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal memuat daftar ulasan');
+      adminReviews = [];
+    } finally {
+      reviewsLoading = false;
+    }
+  }
+
+  function setReviewsFilter(filter: 'all' | 'visible' | 'hidden') {
+    reviewsFilter = filter;
+    adminReviewsPage = 1;
+    loadAdminReviews(1);
+  }
+
+  function changeAdminReviewsPage(newPage: number) {
+    if (newPage < 1 || newPage > adminReviewsTotalPages) return;
+    loadAdminReviews(newPage);
+  }
+
+  async function handleToggleReviewVisibility(review: ProductReview) {
+    const newVisibility = !review.is_visible;
+    try {
+      const updated = await fetchAdmin<ProductReview>(`/api/v1/admin/reviews/${review.id}/visibility`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_visible: newVisibility }),
+      });
+      if (reviewsFilter !== 'all') {
+        await loadAdminReviews(adminReviewsPage);
+      } else {
+        adminReviews = adminReviews.map(r => r.id === review.id ? updated : r);
+      }
+      toast.success(`Ulasan berhasil ${newVisibility ? 'ditampilkan' : 'disembunyikan'}!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mengubah status visibilitas ulasan');
     }
   }
 
@@ -396,6 +457,7 @@
           <button class:active={subTab === 'inventory'} onclick={() => subTab = 'inventory'}>🏭 Stok & Inventori</button>
           <button class:active={subTab === 'orders'} onclick={() => subTab = 'orders'}>🛒 Pesanan Masuk ({orders.length})</button>
           <button class:active={subTab === 'coupons'} onclick={() => subTab = 'coupons'}>🏷️ Kupon Diskon ({coupons.length})</button>
+          <button class:active={subTab === 'reviews'} onclick={() => { subTab = 'reviews'; loadAdminReviews(1); }}>⭐ Moderasi Ulasan ({adminReviewsTotal})</button>
           <button class:active={subTab === 'audit'} onclick={() => subTab = 'audit'}>📜 Audit Logs</button>
         </nav>
 
@@ -428,6 +490,11 @@
                 <span class="kpi-label">Kupon Promo Aktif</span>
                 <strong class="kpi-val">{coupons.filter(c => c.is_active).length}</strong>
                 <small class="kpi-hint">Dari total {coupons.length} voucher</small>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Ulasan Pelanggan</span>
+                <strong class="kpi-val">{adminReviews.length}</strong>
+                <small class="kpi-hint">{adminReviews.filter(r => r.is_visible).length} tampil publik</small>
               </div>
             </div>
           </div>
@@ -641,6 +708,123 @@
                   {/each}
                 </tbody>
               </table>
+            {/if}
+          </div>
+
+        {:else if subTab === 'reviews'}
+          <div class="section-panel">
+            <div class="panel-top">
+              <div>
+                <h2>⭐ Moderasi Ulasan & Rating Produk</h2>
+                <span class="panel-subtitle">Total: <strong>{adminReviewsTotal}</strong> ulasan &bull; Halaman {adminReviewsPage} dari {adminReviewsTotalPages}</span>
+              </div>
+              <div class="filter-group">
+                <button
+                  class="btn-filter"
+                  class:active={reviewsFilter === 'all'}
+                  onclick={() => setReviewsFilter('all')}
+                >
+                  Semua
+                </button>
+                <button
+                  class="btn-filter"
+                  class:active={reviewsFilter === 'visible'}
+                  onclick={() => setReviewsFilter('visible')}
+                >
+                  Tampil
+                </button>
+                <button
+                  class="btn-filter"
+                  class:active={reviewsFilter === 'hidden'}
+                  onclick={() => setReviewsFilter('hidden')}
+                >
+                  Disembunyikan
+                </button>
+              </div>
+            </div>
+
+            {#if reviewsLoading || loading}
+              <p>Memuat daftar ulasan...</p>
+            {:else if adminReviews.length === 0}
+              <p class="empty-text">Tidak ada ulasan ditemukan.</p>
+            {:else}
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Produk</th>
+                    <th>Pembeli</th>
+                    <th>Rating</th>
+                    <th>Isi Ulasan</th>
+                    <th>Tanggal</th>
+                    <th>Status</th>
+                    <th>Aksi Moderasi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each adminReviews as rev (rev.id)}
+                    <tr>
+                      <td>
+                        <strong>{products.find(p => p.id === rev.product_id)?.name || 'Produk'}</strong>
+                        <div><small><code>#{rev.product_id.slice(0, 8)}</code></small></div>
+                      </td>
+                      <td>
+                        <strong>{rev.buyer_name}</strong>
+                      </td>
+                      <td>
+                        <span class="stars-badge">
+                          {"★".repeat(rev.rating)}{"☆".repeat(5 - rev.rating)} ({rev.rating}/5)
+                        </span>
+                      </td>
+                      <td class="review-text-cell">
+                        {#if rev.review_text}
+                          <span>{rev.review_text}</span>
+                        {:else}
+                          <em class="text-muted">(Tanpa teks ulasan)</em>
+                        {/if}
+                      </td>
+                      <td>
+                        <small>{new Date(rev.created_at).toLocaleDateString('id-ID')}</small>
+                      </td>
+                      <td>
+                        <span class="status-pill {rev.is_visible ? 'delivered' : 'cancelled'}">
+                          {rev.is_visible ? '✓ Tampil' : '✕ Disembunyikan'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          class="btn-action"
+                          class:primary={!rev.is_visible}
+                          onclick={() => handleToggleReviewVisibility(rev)}
+                        >
+                          {rev.is_visible ? 'Sembunyikan' : 'Tampilkan'}
+                        </button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+
+              {#if adminReviewsTotalPages > 1}
+                <div class="pagination-bar">
+                  <button
+                    class="btn-page"
+                    disabled={adminReviewsPage <= 1 || reviewsLoading}
+                    onclick={() => changeAdminReviewsPage(adminReviewsPage - 1)}
+                  >
+                    &larr; Sebelumnya
+                  </button>
+                  <span class="page-info">
+                    Halaman {adminReviewsPage} dari {adminReviewsTotalPages} ({adminReviewsTotal} ulasan)
+                  </span>
+                  <button
+                    class="btn-page"
+                    disabled={adminReviewsPage >= adminReviewsTotalPages || reviewsLoading}
+                    onclick={() => changeAdminReviewsPage(adminReviewsPage + 1)}
+                  >
+                    Selanjutnya &rarr;
+                  </button>
+                </div>
+              {/if}
             {/if}
           </div>
         {/if}
@@ -1003,4 +1187,32 @@
     background: #1e293b; border: 1px solid #334155; border-radius: 6px;
     padding: 0.6rem; color: #fff; font-family: inherit;
   }
+
+  /* Review Moderation Styles */
+  .filter-group { display: flex; gap: 0.5rem; }
+  .btn-filter {
+    background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+    padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
+    transition: all 0.2s;
+  }
+  .btn-filter:hover { background: #334155; color: #fff; }
+  .btn-filter.active { background: #0284c7; color: #fff; border-color: #0284c7; font-weight: bold; }
+  .stars-badge { color: #f59e0b; font-size: 0.85rem; font-weight: 500; }
+  .review-text-cell { max-width: 320px; font-size: 0.85rem; line-height: 1.4; color: #cbd5e1; }
+  .text-muted { color: #64748b; font-size: 0.8rem; font-style: italic; }
+  .status-pill.delivered { background: #065f46; color: #a7f3d0; }
+  .status-pill.cancelled { background: #7f1d1d; color: #fecaca; }
+
+  .panel-subtitle { font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem; display: inline-block; }
+  .pagination-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 1rem; margin-top: 1rem; border-top: 1px solid #334155;
+  }
+  .btn-page {
+    background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+    padding: 0.4rem 0.85rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+  }
+  .btn-page:hover:not(:disabled) { background: #334155; color: #fff; }
+  .btn-page:disabled { opacity: 0.4; cursor: not-allowed; }
+  .page-info { font-size: 0.8rem; color: #94a3b8; }
 </style>

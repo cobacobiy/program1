@@ -5,9 +5,7 @@ use axum::{
     http::{header, Request, StatusCode},
 };
 use chrono::Utc;
-use program1_contracts::{
-    AuthContract, ChatMessageDto, ChatRoomDto, ChatSenderType, UserContract,
-};
+use program1_contracts::{AuthContract, ChatMessageDto, ChatRoomDto, ChatSenderType, UserContract};
 use program1_core::init_database;
 use program1_module_analytics::AnalyticsModule;
 use program1_module_audit::AuditModule;
@@ -65,6 +63,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
         false,
     ));
     let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -116,6 +115,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -287,7 +287,10 @@ async fn test_chat_unauthorized_and_validation_errors() {
     let dummy_room_id = Uuid::new_v4();
     let empty_msg_req = Request::builder()
         .method("POST")
-        .uri(format!("/api/v1/admin/chat/rooms/{}/messages", dummy_room_id))
+        .uri(format!(
+            "/api/v1/admin/chat/rooms/{}/messages",
+            dummy_room_id
+        ))
         .header(header::AUTHORIZATION, format!("Bearer {}", admin_token))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(json!({ "content": "" }).to_string()))

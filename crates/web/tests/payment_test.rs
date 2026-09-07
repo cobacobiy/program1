@@ -34,10 +34,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid, Uuid, SqlitePo
         24,
     ));
     let catalog_module = Arc::new(CatalogModule::new(pool.clone()));
-    let inventory_module = Arc::new(InventoryModule::new(
-        pool.clone(),
-        catalog_module.clone(),
-    ));
+    let inventory_module = Arc::new(InventoryModule::new(pool.clone(), catalog_module.clone()));
     let channel_module = Arc::new(ChannelSyncModule::new(pool.clone()));
     let order_module = Arc::new(OrderModule::new(
         pool.clone(),
@@ -73,6 +70,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid, Uuid, SqlitePo
         false,
     ));
     let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -145,6 +143,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid, Uuid, SqlitePo
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -257,7 +256,8 @@ async fn test_buyer_checkout_and_create_payment_flow() {
 
     // 5. Test Webhook Notification (with signature verification)
     let gross_str = format!("{:.2}", payment_data["amount"].as_f64().unwrap());
-    let signature = PaymentModule::compute_signature(&order_id, "200", &gross_str, "test-server-key");
+    let signature =
+        PaymentModule::compute_signature(&order_id, "200", &gross_str, "test-server-key");
 
     // 5a. Test invalid signature rejection
     let invalid_notif_body = json!({
@@ -404,7 +404,9 @@ async fn test_payment_unauthorized_and_ownership_protection() {
         .method(Method::POST)
         .uri("/api/v1/payments")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_vec(&json!({ "order_id": order_id })).unwrap()))
+        .body(Body::from(
+            serde_json::to_vec(&json!({ "order_id": order_id })).unwrap(),
+        ))
         .unwrap();
 
     let unauth_resp = app.clone().oneshot(unauth_req).await.unwrap();
@@ -416,7 +418,9 @@ async fn test_payment_unauthorized_and_ownership_protection() {
         .uri("/api/v1/payments")
         .header(header::AUTHORIZATION, format!("Bearer {}", buyer2_token))
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_vec(&json!({ "order_id": order_id })).unwrap()))
+        .body(Body::from(
+            serde_json::to_vec(&json!({ "order_id": order_id })).unwrap(),
+        ))
         .unwrap();
 
     let forbidden_resp = app.clone().oneshot(forbidden_req).await.unwrap();

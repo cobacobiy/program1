@@ -6,13 +6,13 @@ use axum::{
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
-    AuditLogEntry, CouponDto, CreateCouponRequest, ValidateCouponRequest, CouponValidationResult,
+    AuditLogEntry, CouponDto, CouponValidationResult, CreateCouponRequest, ValidateCouponRequest,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

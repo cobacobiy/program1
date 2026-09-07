@@ -207,7 +207,10 @@ impl InventoryContract for InventoryModule {
 
         let mut all_stocks = self.get_all_stocks().await?;
 
-        if let Some(search_term) = search.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+        if let Some(search_term) = search
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+        {
             all_stocks.retain(|s| {
                 s.product_name.to_lowercase().contains(&search_term)
                     || s.sku.to_lowercase().contains(&search_term)
@@ -215,7 +218,9 @@ impl InventoryContract for InventoryModule {
         }
 
         let sort_col = sort_by.unwrap_or("product_name").to_lowercase();
-        let is_desc = sort_order.map(|s| s.eq_ignore_ascii_case("desc")).unwrap_or(false);
+        let is_desc = sort_order
+            .map(|s| s.eq_ignore_ascii_case("desc"))
+            .unwrap_or(false);
 
         all_stocks.sort_by(|a, b| {
             let ordering = match sort_col.as_str() {
@@ -240,7 +245,11 @@ impl InventoryContract for InventoryModule {
 
         let offset = ((page - 1) * page_size) as usize;
         let data = if offset < all_stocks.len() {
-            all_stocks.into_iter().skip(offset).take(page_size as usize).collect()
+            all_stocks
+                .into_iter()
+                .skip(offset)
+                .take(page_size as usize)
+                .collect()
         } else {
             Vec::new()
         };

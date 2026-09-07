@@ -7,8 +7,8 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use program1_contracts::{
-    AuthContract, BuyerContract, CatalogContract, OrderContract, OrderStatus,
-    RegisterBuyerRequest, StorefrontOrderItemRequest, StorefrontOrderRequest, UserContract,
+    AuthContract, BuyerContract, CatalogContract, OrderContract, OrderStatus, RegisterBuyerRequest,
+    StorefrontOrderItemRequest, StorefrontOrderRequest, UserContract,
 };
 use program1_core::init_database;
 use program1_core::MockEmailSender;
@@ -31,7 +31,10 @@ async fn test_buyer_registration_sends_welcome_email() {
         .await
         .expect("Failed to init db");
 
-    let auth_module = Arc::new(AuthModule::new("jwt-secret-1234567890-test-key-32chars".to_string(), 24));
+    let auth_module = Arc::new(AuthModule::new(
+        "jwt-secret-1234567890-test-key-32chars".to_string(),
+        24,
+    ));
     let audit_module = Arc::new(AuditModule::new(pool.clone()));
     let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
         client_id: "test".to_string(),
@@ -59,7 +62,10 @@ async fn test_buyer_registration_sends_welcome_email() {
         password: "password123".to_string(),
     };
 
-    let auth_res = buyer_module.register(reg_req).await.expect("Registration failed");
+    let auth_res = buyer_module
+        .register(reg_req)
+        .await
+        .expect("Registration failed");
     assert_eq!(auth_res.buyer.email, "ahmad@example.com");
 
     // Allow async background task to complete
@@ -68,7 +74,9 @@ async fn test_buyer_registration_sends_welcome_email() {
     let sent = mock_email.get_sent_emails().await;
     assert_eq!(sent.len(), 1, "Expected exactly 1 welcome email");
     assert_eq!(sent[0].to, "ahmad@example.com");
-    assert!(sent[0].subject.contains("Selamat Datang di AURA Test Store"));
+    assert!(sent[0]
+        .subject
+        .contains("Selamat Datang di AURA Test Store"));
     assert!(sent[0].html_body.contains("Ahmad Dahlan"));
 }
 
@@ -140,7 +148,9 @@ async fn test_storefront_order_lifecycle_emails() {
     assert_eq!(sent_2.len(), 2, "Expected payment success email added");
     assert_eq!(sent_2[1].to, "dewi.sartika@example.com");
     assert!(sent_2[1].subject.contains("Pembayaran Berhasil"));
-    assert!(sent_2[1].html_body.contains("Pembayaran Berhasil Dikonfirmasi"));
+    assert!(sent_2[1]
+        .html_body
+        .contains("Pembayaran Berhasil Dikonfirmasi"));
 
     // 3. Transition Paid -> Processing (no email configured for processing)
     let processing_order = order_module
@@ -174,7 +184,11 @@ async fn test_storefront_order_lifecycle_emails() {
     tokio::time::sleep(Duration::from_millis(60)).await;
 
     let sent_3 = mock_email.get_sent_emails().await;
-    assert_eq!(sent_3.len(), 3, "Expected shipping notification email added");
+    assert_eq!(
+        sent_3.len(),
+        3,
+        "Expected shipping notification email added"
+    );
     assert_eq!(sent_3[2].to, "dewi.sartika@example.com");
     assert!(sent_3[2].subject.contains("Sedang Dalam Pengiriman"));
     assert!(sent_3[2].html_body.contains("SICEPAT-RES-001122"));
@@ -192,10 +206,7 @@ async fn test_full_http_storefront_checkout_email_flow() {
         24,
     ));
     let catalog_module = Arc::new(CatalogModule::new(pool.clone()));
-    let inventory_module = Arc::new(InventoryModule::new(
-        pool.clone(),
-        catalog_module.clone(),
-    ));
+    let inventory_module = Arc::new(InventoryModule::new(pool.clone(), catalog_module.clone()));
     let channel_module = Arc::new(ChannelSyncModule::new(pool.clone()));
 
     let mock_email = Arc::new(MockEmailSender::new());
@@ -243,6 +254,7 @@ async fn test_full_http_storefront_checkout_email_flow() {
         false,
     ));
     let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -267,6 +279,7 @@ async fn test_full_http_storefront_checkout_email_flow() {
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

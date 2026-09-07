@@ -12,7 +12,8 @@ use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, BuyerCheckoutRequest, ChannelType, ErrorCode, JwtClaims, MarketplaceOrderReq,
-    OmniOrderDto, PaginatedResponse, PaginationParams, ShippingAddressSnapshot, StorefrontOrderRequest,
+    OmniOrderDto, PaginatedResponse, PaginationParams, ShippingAddressSnapshot,
+    StorefrontOrderRequest,
 };
 
 /// List all omnichannel orders in history (Protected)
@@ -564,4 +565,3 @@ pub async fn get_buyer_order_handler(
 
     Ok(Json(order))
 }
-

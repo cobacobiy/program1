@@ -161,8 +161,6 @@ pub async fn get_payment_by_order_handler(
     ),
     tag = "Payments"
 )]
-pub async fn get_payment_config_handler(
-    State(state): State<AppState>,
-) -> Json<PaymentConfigDto> {
+pub async fn get_payment_config_handler(State(state): State<AppState>) -> Json<PaymentConfigDto> {
     Json(state.payment_contract.get_config())
 }

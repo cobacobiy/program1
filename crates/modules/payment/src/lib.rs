@@ -3,7 +3,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use base64::Engine;
 use chrono::{DateTime, Utc};
-use hex;
 use reqwest::Client;
 use serde_json::Value;
 use sha2::{Digest, Sha512};
@@ -11,9 +10,7 @@ use sqlx::{FromRow, SqlitePool};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use program1_contracts::{
-    ContractError, PaymentConfigDto, PaymentContract, PaymentTransactionDto,
-};
+use program1_contracts::{ContractError, PaymentConfigDto, PaymentContract, PaymentTransactionDto};
 
 #[derive(Debug, FromRow)]
 struct PaymentTransactionRow {
@@ -137,7 +134,13 @@ impl PaymentModule {
         gross_amount: &str,
         server_key: &str,
     ) -> String {
-        let input = format!("{}{}{}{}", order_id, status_code, gross_amount, server_key.trim());
+        let input = format!(
+            "{}{}{}{}",
+            order_id,
+            status_code,
+            gross_amount,
+            server_key.trim()
+        );
         let mut hasher = Sha512::new();
         hasher.update(input.as_bytes());
         hex::encode(hasher.finalize())
@@ -201,10 +204,7 @@ impl PaymentContract for PaymentModule {
         {
             // Deterministic offline/sandbox token for test and development stability
             let token = format!("snap-token-{}", Uuid::new_v4());
-            let redirect = format!(
-                "https://app.sandbox.midtrans.com/snap/v2/vtweb/{}",
-                token
-            );
+            let redirect = format!("https://app.sandbox.midtrans.com/snap/v2/vtweb/{}", token);
             (token, redirect)
         } else {
             // Live Midtrans Snap API call
@@ -259,10 +259,8 @@ impl PaymentContract for PaymentModule {
                             "Midtrans Snap API returned non-success, falling back to sandbox token"
                         );
                         let token = format!("snap-token-{}", Uuid::new_v4());
-                        let redirect = format!(
-                            "https://app.sandbox.midtrans.com/snap/v2/vtweb/{}",
-                            token
-                        );
+                        let redirect =
+                            format!("https://app.sandbox.midtrans.com/snap/v2/vtweb/{}", token);
                         (token, redirect)
                     }
                 }
@@ -272,10 +270,8 @@ impl PaymentContract for PaymentModule {
                         "Failed to reach Midtrans Snap API, falling back to sandbox token"
                     );
                     let token = format!("snap-token-{}", Uuid::new_v4());
-                    let redirect = format!(
-                        "https://app.sandbox.midtrans.com/snap/v2/vtweb/{}",
-                        token
-                    );
+                    let redirect =
+                        format!("https://app.sandbox.midtrans.com/snap/v2/vtweb/{}", token);
                     (token, redirect)
                 }
             }
@@ -327,7 +323,9 @@ impl PaymentContract for PaymentModule {
         let order_id_str = payload
             .get("order_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ContractError::ValidationError("Missing order_id in notification".to_string()))?;
+            .ok_or_else(|| {
+                ContractError::ValidationError("Missing order_id in notification".to_string())
+            })?;
 
         let status_code_str = payload
             .get("status_code")
@@ -339,10 +337,8 @@ impl PaymentContract for PaymentModule {
             .and_then(|v| {
                 if let Some(s) = v.as_str() {
                     Some(s.to_string())
-                } else if let Some(n) = v.as_f64() {
-                    Some(format!("{:.2}", n))
                 } else {
-                    None
+                    v.as_f64().map(|n| format!("{:.2}", n))
                 }
             })
             .unwrap_or_default();
@@ -353,19 +349,19 @@ impl PaymentContract for PaymentModule {
             .unwrap_or("");
 
         // Signature verification
-        if !self.server_key.is_empty() && !self.server_key.starts_with("SB-Mid-server-xxx") {
-            if signature_key.is_empty()
+        if !self.server_key.is_empty()
+            && !self.server_key.starts_with("SB-Mid-server-xxx")
+            && (signature_key.is_empty()
                 || !self.verify_signature(
                     order_id_str,
                     status_code_str,
                     &gross_amount_str,
                     signature_key,
-                )
-            {
-                return Err(ContractError::ValidationError(
-                    "Invalid Midtrans webhook signature key".to_string(),
-                ));
-            }
+                ))
+        {
+            return Err(ContractError::ValidationError(
+                "Invalid Midtrans webhook signature key".to_string(),
+            ));
         }
 
         // Map Midtrans transaction_status & fraud_status to internal status
@@ -586,7 +582,10 @@ mod tests {
         let order_id_str = order_id.to_string();
         let status_code = "200";
         let gross_amount = "100000.00";
-        let input = format!("{}{}{}{}", order_id_str, status_code, gross_amount, server_key);
+        let input = format!(
+            "{}{}{}{}",
+            order_id_str, status_code, gross_amount, server_key
+        );
         let mut hasher = Sha512::new();
         hasher.update(input.as_bytes());
         let valid_signature = hex::encode(hasher.finalize());

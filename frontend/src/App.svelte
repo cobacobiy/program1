@@ -1,6 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { HealthResponse, Product, CatalogPageResponse, ProductVariant } from './lib/types';
+  import type {
+    HealthResponse,
+    Product,
+    CatalogPageResponse,
+    ProductVariant,
+    PublicReview,
+    ProductRatingSummary,
+    PaginatedPublicReviews,
+    WishlistItem,
+  } from './lib/types';
   import { formatRupiah } from './lib/currency';
   import { auth } from './lib/auth.svelte';
   import { cart } from './lib/cart.svelte';
@@ -10,6 +19,7 @@
   import AuthModal from './lib/AuthModal.svelte';
   import CheckoutModal from './lib/CheckoutModal.svelte';
   import BuyerOrdersModal from './lib/BuyerOrdersModal.svelte';
+  import WishlistModal from './lib/WishlistModal.svelte';
   import LiveChat from './lib/LiveChat.svelte';
   import AdminHub from './lib/AdminHub.svelte';
 
@@ -17,12 +27,113 @@
   let activeTab = $state<'store' | 'admin' | 'diagnostic'>('store');
   let isCheckoutOpen = $state(false);
   let isOrdersOpen = $state(false);
+  let isWishlistOpen = $state(false);
+  let wishlist = $state<WishlistItem[]>([]);
+  let wishlistLoading = $state(false);
+
+  function isProductInWishlist(productId: string): boolean {
+    return wishlist.some((item) => item.product_id === productId);
+  }
+
+  async function loadWishlist() {
+    if (!auth.user) {
+      wishlist = [];
+      return;
+    }
+    wishlistLoading = true;
+    try {
+      wishlist = await apiFetch<WishlistItem[]>('/api/v1/buyer/wishlist');
+    } catch {
+      wishlist = [];
+    } finally {
+      wishlistLoading = false;
+    }
+  }
+
+  async function toggleWishlist(product: Product) {
+    if (!auth.user) {
+      toast.info('Silakan masuk terlebih dahulu untuk menambahkan ke Wishlist.');
+      auth.isModalOpen = true;
+      return;
+    }
+
+    if (isProductInWishlist(product.id)) {
+      try {
+        await apiFetch(`/api/v1/buyer/wishlist/${product.id}`, { method: 'DELETE' });
+        wishlist = wishlist.filter((item) => item.product_id !== product.id);
+        toast.info(`"${product.name}" dihapus dari wishlist.`);
+      } catch (err: any) {
+        toast.error(err.message || 'Gagal menghapus dari wishlist.');
+      }
+    } else {
+      try {
+        const item = await apiFetch<WishlistItem>(`/api/v1/buyer/wishlist/${product.id}`, {
+          method: 'POST',
+        });
+        wishlist = [item, ...wishlist];
+        toast.success(`"${product.name}" ditambahkan ke wishlist! ❤️`);
+      } catch (err: any) {
+        toast.error(err.message || 'Gagal menambahkan ke wishlist.');
+      }
+    }
+  }
+
+  async function handleRemoveWishlistItem(productId: string) {
+    try {
+      await apiFetch(`/api/v1/buyer/wishlist/${productId}`, { method: 'DELETE' });
+      wishlist = wishlist.filter((item) => item.product_id !== productId);
+      toast.info('Produk dihapus dari wishlist.');
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal menghapus dari wishlist.');
+    }
+  }
+
+  function handleAddWishlistItemToCart(item: WishlistItem) {
+    const matched = products.find((p) => p.id === item.product_id);
+    const prod: Product = matched || {
+      id: item.product_id,
+      name: item.product_name,
+      description: '',
+      price_cents: item.product_price_cents,
+      stock: 99,
+      image_url: item.product_image_url,
+    };
+    cart.addItem(prod);
+  }
+
+  function openWishlistModal() {
+    if (!auth.user) {
+      toast.info('Silakan masuk terlebih dahulu untuk melihat Wishlist kamu.');
+      auth.isModalOpen = true;
+      return;
+    }
+    isWishlistOpen = true;
+    loadWishlist();
+  }
+
+  $effect(() => {
+    if (auth.user) {
+      loadWishlist();
+    } else {
+      wishlist = [];
+    }
+  });
 
   // Quick Variant Picker Modal State
   let variantPickerProduct = $state<Product | null>(null);
   let availableVariants = $state<ProductVariant[]>([]);
   let selectedVariant = $state<ProductVariant | null>(null);
   let variantLoading = $state(false);
+
+  // Review & Rating State
+  let ratingSummaries = $state<Record<string, ProductRatingSummary>>({});
+  let selectedProductForDetail = $state<Product | null>(null);
+  let activeRatingSummary = $state<ProductRatingSummary | null>(null);
+  let activeReviews = $state<PublicReview[]>([]);
+  let reviewsLoading = $state(false);
+  let reviewPage = $state(1);
+  let reviewTotalPages = $state(1);
+  let reviewTotal = $state(0);
 
   async function handleAddToCartClick(product: Product) {
     variantLoading = true;
@@ -91,11 +202,60 @@
     try {
       const res = await apiFetch<CatalogPageResponse>('/catalog?page=1&page_size=30');
       products = res.items || [];
+      // Fetch rating summaries for all products in parallel
+      for (const p of products) {
+        apiFetch<ProductRatingSummary>(`/api/v1/catalog/${p.id}/rating`)
+          .then((summary) => {
+            ratingSummaries[p.id] = summary;
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
       catalogError = err.message || 'Gagal memuat katalog produk';
     } finally {
       catalogLoading = false;
     }
+  }
+
+  async function openProductDetail(product: Product) {
+    selectedProductForDetail = product;
+    reviewPage = 1;
+    activeRatingSummary = ratingSummaries[product.id] || null;
+    await Promise.all([
+      fetchRatingSummary(product.id),
+      fetchProductReviews(product.id, 1),
+    ]);
+  }
+
+  async function fetchRatingSummary(productId: string) {
+    try {
+      const sum = await apiFetch<ProductRatingSummary>(`/api/v1/catalog/${productId}/rating`);
+      activeRatingSummary = sum;
+      ratingSummaries[productId] = sum;
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchProductReviews(productId: string, page: number) {
+    reviewsLoading = true;
+    try {
+      const res = await apiFetch<PaginatedPublicReviews>(`/api/v1/catalog/${productId}/reviews?page=${page}&page_size=5`);
+      activeReviews = res.data || [];
+      reviewPage = res.page;
+      reviewTotalPages = res.total_pages;
+      reviewTotal = res.total;
+    } catch {
+      activeReviews = [];
+    } finally {
+      reviewsLoading = false;
+    }
+  }
+
+  function changeReviewPage(newPage: number) {
+    if (!selectedProductForDetail) return;
+    if (newPage < 1 || newPage > reviewTotalPages) return;
+    fetchProductReviews(selectedProductForDetail.id, newPage);
   }
 
   function handleStartCheckout() {
@@ -129,6 +289,14 @@
   <AuthModal />
   <CheckoutModal isOpen={isCheckoutOpen} onClose={() => isCheckoutOpen = false} />
   <BuyerOrdersModal isOpen={isOrdersOpen} onClose={() => isOrdersOpen = false} />
+  <WishlistModal
+    isOpen={isWishlistOpen}
+    onClose={() => isWishlistOpen = false}
+    wishlist={wishlist}
+    loading={wishlistLoading}
+    onRemoveItem={handleRemoveWishlistItem}
+    onAddToCart={handleAddWishlistItemToCart}
+  />
 
   <!-- Navbar -->
   <header class="navbar">
@@ -159,6 +327,13 @@
       </nav>
 
       <div class="nav-user-actions">
+        <button class="btn-wishlist" onclick={openWishlistModal} title="Wishlist Saya">
+          ❤️ Wishlist
+          {#if wishlist.length > 0}
+            <span class="wishlist-count">{wishlist.length}</span>
+          {/if}
+        </button>
+
         {#if auth.user}
           <button class="btn-orders" onclick={() => isOrdersOpen = true}>
             📦 Pesanan Saya
@@ -231,7 +406,13 @@
           <div class="catalog-grid">
             {#each filteredProducts as product (product.id)}
               <div class="product-item">
-                <div class="img-container">
+                <div
+                  class="img-container clickable"
+                  onclick={() => openProductDetail(product)}
+                  role="button"
+                  tabindex="0"
+                  onkeydown={(e) => e.key === 'Enter' && openProductDetail(product)}
+                >
                   {#if product.image_url}
                     <img src={product.image_url} alt={product.name} loading="lazy" />
                   {:else}
@@ -240,10 +421,45 @@
                   {#if product.stock <= 0}
                     <span class="badge-habis">Habis</span>
                   {/if}
+                  <button
+                    class="btn-fav-toggle"
+                    class:active={isProductInWishlist(product.id)}
+                    onclick={(e) => { e.stopPropagation(); toggleWishlist(product); }}
+                    title={isProductInWishlist(product.id) ? "Hapus dari wishlist" : "Tambah ke wishlist"}
+                    type="button"
+                    aria-label="Wishlist"
+                  >
+                    {isProductInWishlist(product.id) ? '❤️' : '🤍'}
+                  </button>
                 </div>
 
                 <div class="item-details">
-                  <h3 class="p-title">{product.name}</h3>
+                  <h3 class="p-title">
+                    <button
+                      type="button"
+                      class="p-title-btn"
+                      onclick={() => openProductDetail(product)}
+                    >
+                      {product.name}
+                    </button>
+                  </h3>
+
+                  <!-- Rating Preview -->
+                  <button
+                    class="rating-badge-btn"
+                    onclick={() => openProductDetail(product)}
+                    type="button"
+                    title="Lihat ulasan produk"
+                  >
+                    {#if ratingSummaries[product.id] && ratingSummaries[product.id].total_reviews > 0}
+                      <span class="star-icon">⭐</span>
+                      <strong class="rating-score">{ratingSummaries[product.id].average_rating.toFixed(1)}</strong>
+                      <span class="review-count">({ratingSummaries[product.id].total_reviews})</span>
+                    {:else}
+                      <span class="rating-none">☆ Belum ada ulasan</span>
+                    {/if}
+                  </button>
+
                   <p class="p-desc">{product.description || 'Produk kualitas terjamin dari katalog.'}</p>
                   
                   <div class="item-meta">
@@ -251,13 +467,22 @@
                     <small class="stock-value">Stok: {product.stock}</small>
                   </div>
 
-                  <button
-                    class="btn-add"
-                    disabled={product.stock <= 0}
-                    onclick={() => handleAddToCartClick(product)}
-                  >
-                    {product.stock <= 0 ? 'Stok Habis' : '+ Keranjang'}
-                  </button>
+                  <div class="card-actions-row">
+                    <button
+                      class="btn-detail"
+                      onclick={() => openProductDetail(product)}
+                      type="button"
+                    >
+                      Detail & Ulasan
+                    </button>
+                    <button
+                      class="btn-add"
+                      disabled={product.stock <= 0}
+                      onclick={() => handleAddToCartClick(product)}
+                    >
+                      {product.stock <= 0 ? 'Habis' : '+ Keranjang'}
+                    </button>
+                  </div>
                 </div>
               </div>
             {/each}
@@ -416,6 +641,180 @@
     </div>
   {/if}
 
+  <!-- Product Detail & Reviews Modal -->
+  {#if selectedProductForDetail}
+    <div
+      class="drawer-backdrop"
+      onclick={() => selectedProductForDetail = null}
+      role="presentation"
+    >
+      <div
+        class="modal-card product-detail-modal"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <div>
+            <h3>{selectedProductForDetail.name}</h3>
+            <span class="badge-tag">{selectedProductForDetail.category || 'Umum'}</span>
+          </div>
+          <button class="close-btn" onclick={() => selectedProductForDetail = null}>&times;</button>
+        </div>
+
+        <div class="detail-body">
+          <!-- Overview: image + details -->
+          <div class="detail-overview">
+            <div class="detail-img-box">
+              {#if selectedProductForDetail.image_url}
+                <img src={selectedProductForDetail.image_url} alt={selectedProductForDetail.name} />
+              {:else}
+                <span class="placeholder-emoji large">📦</span>
+              {/if}
+            </div>
+
+            <div class="detail-info">
+              <div class="detail-price-line">
+                <span class="detail-price">{formatRupiah(selectedProductForDetail.price_cents)}</span>
+                <span class="detail-stock" class:out={selectedProductForDetail.stock <= 0}>
+                  {selectedProductForDetail.stock > 0 ? `Stok: ${selectedProductForDetail.stock} unit` : 'Stok Habis'}
+                </span>
+              </div>
+              <p class="detail-desc">{selectedProductForDetail.description || 'Tidak ada deskripsi produk.'}</p>
+
+              <div class="detail-actions-row">
+                <button
+                  class="btn-add-detail"
+                  disabled={selectedProductForDetail.stock <= 0}
+                  onclick={() => {
+                    if (selectedProductForDetail) {
+                      handleAddToCartClick(selectedProductForDetail);
+                    }
+                  }}
+                >
+                  {selectedProductForDetail.stock <= 0 ? 'Stok Habis' : '🛒 Masukkan ke Keranjang'}
+                </button>
+                <button
+                  class="btn-fav-detail"
+                  class:active={isProductInWishlist(selectedProductForDetail.id)}
+                  onclick={() => {
+                    if (selectedProductForDetail) {
+                      toggleWishlist(selectedProductForDetail);
+                    }
+                  }}
+                  type="button"
+                >
+                  {isProductInWishlist(selectedProductForDetail.id) ? '❤️ Hapus dari Wishlist' : '🤍 Simpan ke Wishlist'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reviews & Rating Section -->
+          <div class="reviews-section">
+            <h4 class="reviews-heading">⭐ Ulasan & Penilaian Pembeli</h4>
+
+            <!-- Rating Summary Grid -->
+            <div class="rating-summary-container">
+              <!-- Overall Score Column -->
+              <div class="score-box">
+                <span class="big-score">
+                  {activeRatingSummary ? activeRatingSummary.average_rating.toFixed(1) : '0.0'}
+                </span>
+                <div class="star-row">
+                  {#if activeRatingSummary && activeRatingSummary.average_rating > 0}
+                    {"★".repeat(Math.round(activeRatingSummary.average_rating))}{"☆".repeat(5 - Math.round(activeRatingSummary.average_rating))}
+                  {:else}
+                    ☆☆☆☆☆
+                  {/if}
+                </div>
+                <small class="total-rev-text">
+                  {activeRatingSummary ? activeRatingSummary.total_reviews : 0} ulasan terverifikasi
+                </small>
+              </div>
+
+              <!-- 1-5 Star Breakdown Bar Chart -->
+              <div class="breakdown-box">
+                {#each [5, 4, 3, 2, 1] as star}
+                  {@const count = activeRatingSummary?.rating_distribution ? activeRatingSummary.rating_distribution[star - 1] : 0}
+                  {@const total = activeRatingSummary?.total_reviews || 0}
+                  {@const pct = total > 0 ? Math.round((count / total) * 100) : 0}
+                  <div class="breakdown-row">
+                    <span class="star-label">{star} ★</span>
+                    <div class="progress-track">
+                      <div class="progress-fill" style="width: {pct}%;"></div>
+                    </div>
+                    <span class="count-label">{count} ({pct}%)</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+            <!-- Review Cards List -->
+            <div class="reviews-list-container">
+              {#if reviewsLoading}
+                <p class="loading-revs">Memuat ulasan produk...</p>
+              {:else if activeReviews.length === 0}
+                <div class="empty-reviews">
+                  <p>Belum ada ulasan untuk produk ini.</p>
+                  <small>Jadilah yang pertama mencoba dan memberikan ulasan setelah pesanan terkirim!</small>
+                </div>
+              {:else}
+                <div class="reviews-cards">
+                  {#each activeReviews as r (r.id)}
+                    <div class="review-card">
+                      <div class="rev-header">
+                        <div class="rev-user">
+                          <span class="user-avatar">👤</span>
+                          <div>
+                            <strong class="user-name">{r.buyer_name}</strong>
+                            <div class="rev-stars">
+                              {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
+                            </div>
+                          </div>
+                        </div>
+                        <span class="rev-date">{new Date(r.created_at).toLocaleDateString('id-ID')}</span>
+                      </div>
+
+                      {#if r.review_text}
+                        <p class="rev-comment">{r.review_text}</p>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+
+                <!-- Pagination -->
+                {#if reviewTotalPages > 1}
+                  <div class="pagination-bar">
+                    <button
+                      class="btn-page"
+                      disabled={reviewPage <= 1}
+                      onclick={() => changeReviewPage(reviewPage - 1)}
+                    >
+                      &larr; Sebelumnya
+                    </button>
+                    <span class="page-info">
+                      Halaman {reviewPage} dari {reviewTotalPages} ({reviewTotal} ulasan)
+                    </span>
+                    <button
+                      class="btn-page"
+                      disabled={reviewPage >= reviewTotalPages}
+                      onclick={() => changeReviewPage(reviewPage + 1)}
+                    >
+                      Selanjutnya &rarr;
+                    </button>
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Live Chat Widget -->
   <LiveChat />
 </div>
@@ -509,6 +908,18 @@
     background: #0284c7; color: #fff; border: none; padding: 0.5rem 0.9rem;
     border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer;
   }
+  .btn-wishlist {
+    background: #1e293b; color: #f8fafc; border: 1px solid #334155;
+    padding: 0.5rem 0.85rem; border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;
+  }
+  .btn-wishlist:hover {
+    background: #334155; border-color: #ef4444; color: #fca5a5;
+  }
+  .wishlist-count {
+    background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: bold;
+    padding: 0.1rem 0.45rem; border-radius: 9999px;
+  }
   .btn-orders {
     background: #1e293b; color: #38bdf8; border: 1px solid #334155;
     padding: 0.5rem 0.8rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer;
@@ -567,8 +978,36 @@
     position: absolute; top: 8px; right: 8px; background: #dc2626; color: #fff;
     font-size: 0.75rem; font-weight: bold; padding: 0.2rem 0.5rem; border-radius: 4px;
   }
+  .btn-fav-toggle {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 50%;
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; cursor: pointer; transition: transform 0.15s, background 0.15s;
+    z-index: 2;
+  }
+  .btn-fav-toggle:hover {
+    transform: scale(1.15); background: rgba(15, 23, 42, 0.95);
+  }
+  .btn-fav-toggle.active {
+    border-color: #ef4444; background: rgba(239, 68, 68, 0.25);
+  }
   .item-details { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; }
   .p-title { margin: 0 0 0.5rem; font-size: 1.05rem; color: #f8fafc; }
+  .p-title-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: color 0.15s ease;
+  }
+  .p-title-btn:hover {
+    color: #38bdf8;
+  }
   .p-desc { font-size: 0.85rem; color: #94a3b8; margin: 0 0 1rem; flex: 1; }
   .item-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
   .price-value { font-size: 1.15rem; font-weight: bold; color: #38bdf8; }
@@ -684,4 +1123,125 @@
   }
   .btn-confirm-var:hover { background: #0369a1; }
   .btn-confirm-var:disabled { background: #475569; cursor: not-allowed; }
+
+  /* Product Detail & Reviews Modal Styles */
+  .clickable { cursor: pointer; }
+  .clickable:hover { opacity: 0.9; }
+  .rating-badge-btn {
+    background: transparent; border: none; padding: 0.2rem 0;
+    cursor: pointer; display: flex; align-items: center; gap: 0.35rem;
+    font-size: 0.85rem; text-align: left;
+  }
+  .rating-badge-btn:hover .rating-score { text-decoration: underline; }
+  .star-icon { font-size: 0.9rem; }
+  .rating-score { color: #f59e0b; font-weight: bold; }
+  .review-count { color: #94a3b8; font-size: 0.8rem; }
+  .rating-none { color: #64748b; font-size: 0.78rem; font-style: italic; }
+
+  .card-actions-row { display: flex; gap: 0.5rem; width: 100%; margin-top: 0.5rem; }
+  .btn-detail {
+    flex: 1; background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+    padding: 0.6rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-detail:hover { background: #334155; color: #fff; }
+
+  .product-detail-modal {
+    background: #0f172a; border: 1px solid #334155; border-radius: 12px;
+    width: 90%; max-width: 640px; max-height: 88vh; display: flex; flex-direction: column;
+    color: #f8fafc; box-shadow: 0 10px 35px rgba(0,0,0,0.7); overflow: hidden;
+  }
+  .detail-body { padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; }
+  .detail-overview { display: flex; gap: 1.25rem; }
+  .detail-img-box {
+    width: 140px; height: 140px; border-radius: 8px; background: #1e293b;
+    display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;
+  }
+  .detail-img-box img { width: 100%; height: 100%; object-fit: cover; }
+  .placeholder-emoji.large { font-size: 3rem; }
+  .detail-info { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; }
+  .detail-price-line { display: flex; align-items: baseline; gap: 0.75rem; }
+  .detail-price { color: #38bdf8; font-size: 1.35rem; font-weight: bold; }
+  .detail-stock { font-size: 0.85rem; color: #10b981; font-weight: 500; }
+  .detail-stock.out { color: #ef4444; }
+  .detail-desc { font-size: 0.88rem; color: #cbd5e1; line-height: 1.45; margin: 0; }
+  .detail-actions-row { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
+  .btn-add-detail {
+    background: #0284c7; color: #fff; border: none; padding: 0.65rem 1rem;
+    border-radius: 6px; font-weight: bold; cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-add-detail:hover { background: #0369a1; }
+  .btn-add-detail:disabled { background: #475569; cursor: not-allowed; }
+  .btn-fav-detail {
+    background: #1e293b; color: #f8fafc; border: 1px solid #334155;
+    padding: 0.6rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.88rem;
+    cursor: pointer; transition: all 0.2s; width: 100%;
+  }
+  .btn-fav-detail:hover {
+    background: #334155; border-color: #ef4444;
+  }
+  .btn-fav-detail.active {
+    background: #450a0a; border-color: #ef4444; color: #fca5a5;
+  }
+
+  /* Reviews & Rating Section in Modal */
+  .reviews-section { border-top: 1px solid #1e293b; padding-top: 1.25rem; }
+  .reviews-heading { margin: 0 0 1rem; font-size: 1.1rem; color: #f1f5f9; }
+  .rating-summary-container {
+    display: flex; gap: 1.5rem; background: #1e293b; padding: 1rem 1.25rem;
+    border-radius: 10px; border: 1px solid #334155; margin-bottom: 1.25rem;
+    align-items: center;
+  }
+  .score-box {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 110px; border-right: 1px solid #334155; padding-right: 1rem;
+  }
+  .big-score { font-size: 2.4rem; font-weight: 900; color: #f59e0b; line-height: 1; }
+  .star-row { color: #f59e0b; font-size: 1.1rem; margin: 0.35rem 0 0.2rem; }
+  .total-rev-text { font-size: 0.75rem; color: #94a3b8; text-align: center; }
+
+  .breakdown-box { flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
+  .breakdown-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+  .star-label { width: 30px; color: #cbd5e1; font-weight: 500; text-align: right; }
+  .progress-track {
+    flex: 1; height: 8px; background: #0f172a; border-radius: 4px; overflow: hidden;
+  }
+  .progress-fill { height: 100%; background: #f59e0b; border-radius: 4px; transition: width 0.3s ease; }
+  .count-label { width: 60px; color: #94a3b8; font-size: 0.75rem; text-align: right; }
+
+  .reviews-list-container { display: flex; flex-direction: column; gap: 0.85rem; }
+  .loading-revs { text-align: center; color: #94a3b8; padding: 1.5rem; }
+  .empty-reviews {
+    text-align: center; padding: 1.5rem 1rem; background: #1e293b; border-radius: 8px;
+    color: #94a3b8;
+  }
+  .empty-reviews p { margin: 0 0 0.25rem; font-weight: 500; color: #cbd5e1; }
+  .reviews-cards { display: flex; flex-direction: column; gap: 0.75rem; }
+  .review-card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+    padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  .rev-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .rev-user { display: flex; align-items: center; gap: 0.6rem; }
+  .user-avatar { font-size: 1.3rem; }
+  .user-name { font-size: 0.9rem; color: #f1f5f9; display: block; }
+  .rev-stars { color: #f59e0b; font-size: 0.85rem; }
+  .rev-date { font-size: 0.75rem; color: #64748b; }
+  .rev-comment {
+    margin: 0; font-size: 0.85rem; color: #cbd5e1; line-height: 1.4;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  .pagination-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 0.5rem; margin-top: 0.5rem;
+  }
+  .btn-page {
+    background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+    padding: 0.4rem 0.85rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+  }
+  .btn-page:hover:not(:disabled) { background: #334155; color: #fff; }
+  .btn-page:disabled { opacity: 0.4; cursor: not-allowed; }
+  .page-info { font-size: 0.8rem; color: #94a3b8; }
 </style>

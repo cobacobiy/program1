@@ -129,8 +129,15 @@ pub fn create_app(state: AppState) -> Router {
     let chat_limit_layer = axum::middleware::from_fn(move |req, next| {
         let lim = chat_limiter.clone();
         async move {
-            rate_limit::rate_limit_layer(lim, "chat_messages", 30, Duration::from_secs(60), req, next)
-                .await
+            rate_limit::rate_limit_layer(
+                lim,
+                "chat_messages",
+                30,
+                Duration::from_secs(60),
+                req,
+                next,
+            )
+            .await
         }
     });
 
@@ -157,10 +164,7 @@ pub fn create_app(state: AppState) -> Router {
         .route("/health", get(health_check))
         .route("/health/ready", get(readiness_check))
         .route("/api/v1/store/info", get(get_store_info))
-        .route(
-            "/api/v1/payments/config",
-            get(get_payment_config_handler),
-        )
+        .route("/api/v1/payments/config", get(get_payment_config_handler))
         .route(
             "/api/v1/payments/notification",
             post(payment_notification_handler).route_layer(payment_limit_layer.clone()),
@@ -188,7 +192,18 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/catalog", get(list_catalog))
         .route("/api/v1/catalog/:id", get(get_catalog_item))
         .route("/api/v1/catalog/:id/variants", get(list_variants_handler))
-        .route("/api/v1/catalog/:id/variants/:vid", get(get_variant_handler))
+        .route(
+            "/api/v1/catalog/:id/variants/:vid",
+            get(get_variant_handler),
+        )
+        .route(
+            "/api/v1/catalog/:id/reviews",
+            get(get_product_reviews_handler),
+        )
+        .route(
+            "/api/v1/catalog/:id/rating",
+            get(get_product_rating_handler),
+        )
         .route("/api/v1/coupons/validate", post(validate_coupon_handler));
 
     // 2. Buyer protected routes (valid Buyer JWT required)
@@ -221,14 +236,8 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/orders",
             post(create_storefront_order).route_layer(order_limit_layer.clone()),
         )
-        .route(
-            "/api/v1/buyer/orders",
-            get(list_buyer_orders_handler),
-        )
-        .route(
-            "/api/v1/buyer/orders/:id",
-            get(get_buyer_order_handler),
-        )
+        .route("/api/v1/buyer/orders", get(list_buyer_orders_handler))
+        .route("/api/v1/buyer/orders/:id", get(get_buyer_order_handler))
         .route(
             "/api/v1/orders/:id/cancel",
             post(buyer_cancel_order_handler).route_layer(order_limit_layer.clone()),
@@ -251,6 +260,19 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/payments/order/:order_id",
             get(get_payment_by_order_handler),
+        )
+        .route(
+            "/api/v1/buyer/reviews",
+            get(list_buyer_reviews_handler).post(create_review_handler),
+        )
+        .route("/api/v1/buyer/wishlist", get(get_wishlist_handler))
+        .route(
+            "/api/v1/buyer/wishlist/:product_id",
+            post(add_to_wishlist_handler).delete(remove_from_wishlist_handler),
+        )
+        .route(
+            "/api/v1/buyer/wishlist/:product_id/check",
+            get(check_wishlist_handler),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -315,7 +337,10 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/admin/buyers/activity",
             get(admin_list_buyer_activity_handler),
         )
-        .route("/api/v1/admin/chat/rooms", get(admin_list_chat_rooms_handler))
+        .route(
+            "/api/v1/admin/chat/rooms",
+            get(admin_list_chat_rooms_handler),
+        )
         .route(
             "/api/v1/admin/chat/rooms/:room_id/messages",
             get(admin_get_messages_handler)
@@ -330,10 +355,7 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/admin/coupons/:id/status",
             patch(toggle_coupon_handler),
         )
-        .route(
-            "/api/v1/admin/coupons/:id",
-            delete(delete_coupon_handler),
-        )
+        .route("/api/v1/admin/coupons/:id", delete(delete_coupon_handler))
         .route(
             "/api/v1/admin/payments/order/:order_id",
             get(get_payment_by_order_handler),
@@ -377,6 +399,11 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/analytics", get(get_analytics))
         .route("/api/v1/audit/logs", get(list_audit_logs))
         .route("/api/v1/audit/logs/user/:id", get(get_user_audit_logs))
+        .route("/api/v1/admin/reviews", get(admin_list_reviews_handler))
+        .route(
+            "/api/v1/admin/reviews/:id/visibility",
+            patch(admin_moderate_review_handler),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_admin,
@@ -412,8 +439,8 @@ pub fn create_app(state: AppState) -> Router {
     let svelte_page = std::fs::read_to_string("crates/web/static/dist/index.html").ok();
     let root_page = svelte_page.clone().unwrap_or(store_page);
 
-    let assets_service = ServeDir::new("crates/web/static/dist/assets")
-        .fallback(ServeDir::new("crates/web/static"));
+    let assets_service =
+        ServeDir::new("crates/web/static/dist/assets").fallback(ServeDir::new("crates/web/static"));
 
     let mut static_routes = Router::new()
         .route("/admin", get(move || async move { Html(admin_page) }))

@@ -143,3 +143,66 @@ export interface CouponValidationResult {
   message: string;
 }
 
+export interface ProductReview {
+  id: string;
+  product_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  order_id: string;
+  rating: number;
+  review_text?: string | null;
+  is_visible: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductRatingSummary {
+  product_id: string;
+  average_rating: number;
+  total_reviews: number;
+  rating_distribution: [number, number, number, number, number];
+}
+
+export interface CreateReviewPayload {
+  product_id: string;
+  order_id: string;
+  rating: number;
+  review_text?: string | null;
+}
+
+export interface PaginatedReviews {
+  data: ProductReview[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface PublicReview {
+  id: string;
+  product_id: string;
+  buyer_name: string;
+  rating: number;
+  review_text?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedPublicReviews {
+  data: PublicReview[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface WishlistItem {
+  id: string;
+  buyer_id: string;
+  product_id: string;
+  product_name: string;
+  product_price_cents: number;
+  product_image_url?: string | null;
+  created_at: string;
+}
+

@@ -23,12 +23,12 @@ pub struct UploadResponse {
 /// Detect and validate image extension from file magic bytes
 pub fn detect_image_extension(bytes: &[u8]) -> Result<&'static str, ApiError> {
     // JPEG magic bytes: FF D8 FF
-    if bytes.len() >= 3 && &bytes[0..3] == [0xFF, 0xD8, 0xFF] {
+    if bytes.len() >= 3 && bytes[0..3] == [0xFF, 0xD8, 0xFF] {
         return Ok("jpg");
     }
 
     // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
-    if bytes.len() >= 8 && &bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+    if bytes.len() >= 8 && bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
         return Ok("png");
     }
 
@@ -88,11 +88,7 @@ pub async fn upload_image_handler(
                 } else {
                     ErrorCode::ValidationFailed
                 };
-                ApiError::new(
-                    code,
-                    format!("Gagal membaca data file: {}", e),
-                    status,
-                )
+                ApiError::new(code, format!("Gagal membaca data file: {}", e), status)
             })?;
             file_data = Some(data.to_vec());
             break;

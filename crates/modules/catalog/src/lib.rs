@@ -115,14 +115,17 @@ impl CatalogModule {
         })
     }
 
-    fn variant_row_to_dto(row: &sqlx::sqlite::SqliteRow) -> Result<ProductVariantDto, ContractError> {
+    fn variant_row_to_dto(
+        row: &sqlx::sqlite::SqliteRow,
+    ) -> Result<ProductVariantDto, ContractError> {
         let id_str: String = row.get("id");
         let id = Uuid::parse_str(&id_str)
             .map_err(|e| ContractError::Internal(format!("Corrupt UUID in variant id: {}", e)))?;
 
         let product_id_str: String = row.get("product_id");
-        let product_id = Uuid::parse_str(&product_id_str)
-            .map_err(|e| ContractError::Internal(format!("Corrupt UUID in variant product_id: {}", e)))?;
+        let product_id = Uuid::parse_str(&product_id_str).map_err(|e| {
+            ContractError::Internal(format!("Corrupt UUID in variant product_id: {}", e))
+        })?;
 
         let variant_name: String = row.get("variant_name");
         let variant_value: String = row.get("variant_value");
@@ -325,7 +328,10 @@ impl CatalogContract for CatalogModule {
         })
     }
 
-    async fn list_variants(&self, product_id: Uuid) -> Result<Vec<ProductVariantDto>, ContractError> {
+    async fn list_variants(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductVariantDto>, ContractError> {
         let rows = sqlx::query(
             "SELECT id, product_id, variant_name, variant_value, sku, price_override, stock_quantity, is_active, created_at, updated_at
              FROM product_variants
@@ -353,7 +359,10 @@ impl CatalogContract for CatalogModule {
 
         match row {
             Some(r) => Self::variant_row_to_dto(&r),
-            None => Err(ContractError::NotFound(format!("Product Variant {}", variant_id))),
+            None => Err(ContractError::NotFound(format!(
+                "Product Variant {}",
+                variant_id
+            ))),
         }
     }
 
@@ -391,7 +400,10 @@ impl CatalogContract for CatalogModule {
             .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         if prod.is_none() {
-            return Err(ContractError::NotFound(format!("Catalog item {}", product_id)));
+            return Err(ContractError::NotFound(format!(
+                "Catalog item {}",
+                product_id
+            )));
         }
 
         // Check duplicate
@@ -414,7 +426,10 @@ impl CatalogContract for CatalogModule {
 
         let id = Uuid::new_v4();
         let now = Utc::now();
-        let sku = req.sku.map(|s| s.trim().to_uppercase()).filter(|s| !s.is_empty());
+        let sku = req
+            .sku
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
 
         sqlx::query(
             "INSERT INTO product_variants (id, product_id, variant_name, variant_value, sku, price_override, stock_quantity, is_active, created_at, updated_at)
@@ -501,7 +516,10 @@ impl CatalogContract for CatalogModule {
         }
 
         let now = Utc::now();
-        let sku = req.sku.map(|s| s.trim().to_uppercase()).filter(|s| !s.is_empty());
+        let sku = req
+            .sku
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
         let is_active = req.is_active.unwrap_or(existing.is_active);
 
         sqlx::query(
@@ -543,7 +561,10 @@ impl CatalogContract for CatalogModule {
             .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         if res.rows_affected() == 0 {
-            return Err(ContractError::NotFound(format!("Product Variant {}", variant_id)));
+            return Err(ContractError::NotFound(format!(
+                "Product Variant {}",
+                variant_id
+            )));
         }
 
         Ok(())
@@ -726,4 +747,3 @@ mod tests {
         assert!(dup.is_err());
     }
 }
-

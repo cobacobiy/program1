@@ -60,6 +60,7 @@ async fn setup_test_app() -> (axum::Router, String, String) {
         false,
     ));
     let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let state = AppState {
         store_name: "Test Store".to_string(),
@@ -77,6 +78,7 @@ async fn setup_test_app() -> (axum::Router, String, String) {
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -173,7 +175,10 @@ async fn test_upload_valid_jpeg_returns_200_and_serves_static() {
 
     assert!(json["url"].as_str().unwrap().starts_with("/uploads/"));
     assert!(json["filename"].as_str().unwrap().ends_with(".jpg"));
-    assert_eq!(json["size_bytes"].as_u64().unwrap(), jpeg_bytes.len() as u64);
+    assert_eq!(
+        json["size_bytes"].as_u64().unwrap(),
+        jpeg_bytes.len() as u64
+    );
 
     let file_url = json["url"].as_str().unwrap();
 
@@ -200,7 +205,8 @@ async fn test_upload_valid_png_and_webp() {
         0x52,
     ];
     let boundary_png = "---------------------------boundarypng";
-    let body_png = create_multipart_body(boundary_png, "image", "logo.png", "image/png", &png_bytes);
+    let body_png =
+        create_multipart_body(boundary_png, "image", "logo.png", "image/png", &png_bytes);
 
     let req_png = Request::builder()
         .method("POST")
@@ -287,13 +293,7 @@ async fn test_upload_over_5mb_fails_with_payload_too_large() {
     large_bytes.resize(5 * 1024 * 1024 + 200 * 1024, 0xAA);
 
     let boundary = "---------------------------boundarylarge";
-    let body = create_multipart_body(
-        boundary,
-        "image",
-        "huge.jpg",
-        "image/jpeg",
-        &large_bytes,
-    );
+    let body = create_multipart_body(boundary, "image", "huge.jpg", "image/jpeg", &large_bytes);
 
     let req = Request::builder()
         .method("POST")

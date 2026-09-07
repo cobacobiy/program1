@@ -114,6 +114,7 @@ async fn setup_buyer_test_app_with_pool() -> (
         false,
     ));
     let coupon_module = Arc::new(program1_module_coupon::CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -135,6 +136,7 @@ async fn setup_buyer_test_app_with_pool() -> (
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module,
+        review_contract: review_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test-google-client-id.apps.googleusercontent.com".to_string(),

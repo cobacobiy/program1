@@ -126,9 +126,9 @@ graph TD
 | # | Issue Guide | GitHub Issue | Prioritas | Estimasi | Dependency |
 |---|-------------|--------------|-----------|----------|------------|
 | 1 | [Product Variant Support](issue1-product-variant-support.md) | [#52 Product Variant Support](https://github.com/cobacobiy/program1/issues/52) | 🟡 HIGH | 3-4 hari | `[x]` DONE (In PR) |
-| 2 | [Wishlist / Favorite Products](issue2-wishlist-favorite-products.md) | [#53 Wishlist / Favorite Products](https://github.com/cobacobiy/program1/issues/53) | 🟢 MEDIUM | 2-3 hari | Independen |
+| 2 | [Wishlist / Favorite Products](issue2-wishlist-favorite-products.md) | [#53 Wishlist / Favorite Products](https://github.com/cobacobiy/program1/issues/53) | 🟢 MEDIUM | 2-3 hari | `[x]` DONE |
 | 3 | [Kupon Diskon & Promo Code](issue3-coupon-promo-code.md) | [#54 Coupon & Promo Code System](https://github.com/cobacobiy/program1/issues/54) | 🔴 CRITICAL | 3-4 hari | `[x]` DONE |
-| 4 | [Product Review & Rating](issue4-product-review-rating.md) | [#55 Product Review & Rating System](https://github.com/cobacobiy/program1/issues/55) | 🟡 HIGH | 3-4 hari | Order Delivered |
+| 4 | [Product Review & Rating](issue4-product-review-rating.md) | [#55 Product Review & Rating System](https://github.com/cobacobiy/program1/issues/55) | 🟡 HIGH | 3-4 hari | `[x]` DONE |
 | 5 | [Shipping & Ongkir (RajaOngkir)](issue5-shipping-ongkir-integration.md) | [#56 Shipping / Ongkir Integration](https://github.com/cobacobiy/program1/issues/56) | 🔴 CRITICAL | 4-5 hari | Buyer Address |
 | 6 | [Sales Report & Export CSV/PDF](issue6-sales-report-export.md) | [#57 Sales Report & Export CSV/PDF](https://github.com/cobacobiy/program1/issues/57) | 🟡 HIGH | 2-3 hari | Analytics Module |
 | 7 | [Product Category & Filtering](issue7-product-category-filtering.md) | [#58 Product Category & Filtering](https://github.com/cobacobiy/program1/issues/58) | 🟡 HIGH | 2-3 hari | Independen |

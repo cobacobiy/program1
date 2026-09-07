@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
-    ContractError, CouponContract, CouponDto, CreateCouponRequest, DiscountType,
-    ValidateCouponRequest, CouponValidationResult,
+    ContractError, CouponContract, CouponDto, CouponValidationResult, CreateCouponRequest,
+    DiscountType, ValidateCouponRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -128,7 +128,10 @@ impl CouponContract for CouponModule {
 
         match row {
             Some(r) => Self::row_to_dto(&r),
-            None => Err(ContractError::NotFound(format!("Coupon code {}", clean_code))),
+            None => Err(ContractError::NotFound(format!(
+                "Coupon code {}",
+                clean_code
+            ))),
         }
     }
 

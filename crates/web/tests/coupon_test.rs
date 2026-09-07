@@ -62,6 +62,7 @@ async fn setup_test_app() -> (axum::Router, String, Arc<CouponModule>) {
         false,
     ));
     let coupon_module = Arc::new(CouponModule::new(pool.clone()));
+    let review_module = Arc::new(program1_module_review::ReviewModule::new(pool.clone()));
 
     let _ = user_module.seed_default_users().await;
     let _ = catalog_module.seed_default_catalog().await;
@@ -83,6 +84,7 @@ async fn setup_test_app() -> (axum::Router, String, Arc<CouponModule>) {
         chat_contract: chat_module,
         payment_contract: payment_module,
         coupon_contract: coupon_module.clone(),
+        review_contract: review_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -281,7 +283,10 @@ async fn test_coupon_validations_and_lifecycle() {
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let val: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(val["is_valid"], false);
-    assert!(val["error_message"].as_str().unwrap().contains("Minimum order"));
+    assert!(val["error_message"]
+        .as_str()
+        .unwrap()
+        .contains("Minimum order"));
 
     // 3. Toggle inactive
     let req = Request::builder()
@@ -313,7 +318,10 @@ async fn test_coupon_validations_and_lifecycle() {
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let val: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(val["is_valid"], false);
-    assert!(val["error_message"].as_str().unwrap().contains("tidak aktif"));
+    assert!(val["error_message"]
+        .as_str()
+        .unwrap()
+        .contains("tidak aktif"));
 
     // 4. Toggle back to active
     let req = Request::builder()
@@ -329,7 +337,10 @@ async fn test_coupon_validations_and_lifecycle() {
 
     // 5. Simulate recording usage up to limit
     let cid = Uuid::parse_str(coupon_id).unwrap();
-    coupon_mod.record_usage(cid, None, None, 15000.0).await.unwrap();
+    coupon_mod
+        .record_usage(cid, None, None, 15000.0)
+        .await
+        .unwrap();
 
     // Validate rejected when limit exceeded
     let req = Request::builder()
@@ -349,7 +360,10 @@ async fn test_coupon_validations_and_lifecycle() {
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let val: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(val["is_valid"], false);
-    assert!(val["error_message"].as_str().unwrap().contains("Kuota pemakaian"));
+    assert!(val["error_message"]
+        .as_str()
+        .unwrap()
+        .contains("Kuota pemakaian"));
 
     // 6. Delete coupon
     let req = Request::builder()
@@ -380,7 +394,10 @@ async fn test_coupon_validations_and_lifecycle() {
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let val: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(val["is_valid"], false);
-    assert!(val["error_message"].as_str().unwrap().contains("tidak ditemukan"));
+    assert!(val["error_message"]
+        .as_str()
+        .unwrap()
+        .contains("tidak ditemukan"));
 }
 
 #[tokio::test]

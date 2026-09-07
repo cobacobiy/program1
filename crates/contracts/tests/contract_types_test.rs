@@ -325,9 +325,10 @@ fn test_static_frontend_store_js_contract_parity() {
         .or_else(|_| std::fs::read_to_string(static_dir.join("store.js")))
         .expect("Failed to read store-auth.js or store.js");
 
-    let checkout_content = std::fs::read_to_string(static_dir.join("store").join("store-checkout.js"))
-        .or_else(|_| std::fs::read_to_string(static_dir.join("store.js")))
-        .expect("Failed to read store-checkout.js or store.js");
+    let checkout_content =
+        std::fs::read_to_string(static_dir.join("store").join("store-checkout.js"))
+            .or_else(|_| std::fs::read_to_string(static_dir.join("store.js")))
+            .expect("Failed to read store-checkout.js or store.js");
 
     // 1. OTP verify must send field 'code' not 'otp_code'
     assert!(
@@ -353,6 +354,33 @@ fn test_static_frontend_store_js_contract_parity() {
             )
             || auth_content.contains("activeBuyer = result;"),
         "store-auth.js OTP verify must handle BuyerAccountDto directly rather than solely result.buyer"
+    );
+}
+
+#[test]
+fn test_buyer_orders_modal_review_routes_parity() {
+    let frontend_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("frontend")
+        .join("src")
+        .join("lib");
+
+    let modal_content = std::fs::read_to_string(frontend_dir.join("BuyerOrdersModal.svelte"))
+        .expect("Failed to read BuyerOrdersModal.svelte");
+
+    // All review fetch and submit calls in BuyerOrdersModal must target '/api/v1/buyer/reviews'
+    assert!(
+        modal_content.contains("'/api/v1/buyer/reviews'"),
+        "BuyerOrdersModal.svelte must target canonical endpoint '/api/v1/buyer/reviews'"
+    );
+
+    // Guard against bare un-prefixed '/buyer/reviews' path
+    assert!(
+        !modal_content.contains("'/buyer/reviews'"),
+        "BuyerOrdersModal.svelte must NOT use bare '/buyer/reviews' route without '/api/v1'"
     );
 }
 
@@ -509,3 +537,39 @@ fn test_order_status_transitions_and_validation() {
     assert!(cancel_req.validate().is_ok());
 }
 
+#[test]
+fn test_public_review_dto_privacy_minimization() {
+    use program1_contracts::PublicReviewDto;
+
+    let review_id = Uuid::new_v4();
+    let product_id = Uuid::new_v4();
+    let now = Utc::now();
+
+    let public_dto = PublicReviewDto {
+        id: review_id,
+        product_id,
+        buyer_name: "John Doe".to_string(),
+        rating: 5,
+        review_text: Some("Sangat bagus dan recommended!".to_string()),
+        created_at: now,
+        updated_at: now,
+    };
+
+    let serialized = serde_json::to_value(&public_dto).expect("Serialize PublicReviewDto");
+    // Verify privacy-safe fields are present
+    assert_eq!(serialized["id"], review_id.to_string());
+    assert_eq!(serialized["product_id"], product_id.to_string());
+    assert_eq!(serialized["buyer_name"], "John Doe");
+    assert_eq!(serialized["rating"], 5);
+    assert_eq!(serialized["review_text"], "Sangat bagus dan recommended!");
+    assert!(serialized.get("created_at").is_some());
+    assert!(serialized.get("updated_at").is_some());
+
+    // Verify sensitive and internal fields are completely absent
+    assert!(serialized.get("buyer_id").is_none());
+    assert!(serialized.get("order_id").is_none());
+    assert!(serialized.get("is_visible").is_none());
+    assert!(serialized.get("email").is_none());
+    assert!(serialized.get("phone").is_none());
+    assert!(serialized.get("phone_number").is_none());
+}

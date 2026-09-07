@@ -87,6 +87,8 @@ pub enum ContractError {
     NotFound(String),
     #[error("Validation failed: {0}")]
     ValidationError(String),
+    #[error("Resource already exists: {0}")]
+    AlreadyExists(String),
     #[error(
         "Insufficient stock for product {product_id}: requested {requested}, available {available}"
     )]
@@ -106,6 +108,7 @@ impl ContractError {
         match self {
             ContractError::NotFound(_) => ErrorCode::ResourceNotFound,
             ContractError::ValidationError(_) => ErrorCode::ValidationFailed,
+            ContractError::AlreadyExists(_) => ErrorCode::DuplicateResource,
             ContractError::InsufficientStock { .. } => ErrorCode::InsufficientStock,
             ContractError::ChannelSyncError(_) => ErrorCode::ChannelSyncFailed,
             ContractError::Internal(_) => ErrorCode::InternalError,
@@ -418,7 +421,10 @@ pub trait CatalogContract: Send + Sync {
     ) -> Result<CatalogItemDto, ContractError>;
 
     // --- Variant Management ---
-    async fn list_variants(&self, product_id: Uuid) -> Result<Vec<ProductVariantDto>, ContractError>;
+    async fn list_variants(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductVariantDto>, ContractError>;
     async fn get_variant(&self, variant_id: Uuid) -> Result<ProductVariantDto, ContractError>;
     async fn create_variant(
         &self,
@@ -504,6 +510,7 @@ impl DiscountType {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "percentage" => Some(Self::Percentage),
@@ -540,7 +547,11 @@ pub struct CreateCouponRequest {
     #[validate(length(max = 200, message = "Description max 200 characters"))]
     pub description: Option<String>,
     pub discount_type: DiscountType,
-    #[validate(range(min = 0.01, max = 999999999.0, message = "Discount value must be positive"))]
+    #[validate(range(
+        min = 0.01,
+        max = 999999999.0,
+        message = "Discount value must be positive"
+    ))]
     pub discount_value: f64,
     #[validate(range(min = 0.0, message = "Min order amount must be non-negative"))]
     pub min_order_amount: Option<f64>,
@@ -575,9 +586,16 @@ pub trait CouponContract: Send + Sync {
     async fn get_coupon(&self, id: Uuid) -> Result<CouponDto, ContractError>;
     async fn get_coupon_by_code(&self, code: &str) -> Result<CouponDto, ContractError>;
     async fn create_coupon(&self, req: CreateCouponRequest) -> Result<CouponDto, ContractError>;
-    async fn toggle_coupon_active(&self, id: Uuid, is_active: bool) -> Result<CouponDto, ContractError>;
+    async fn toggle_coupon_active(
+        &self,
+        id: Uuid,
+        is_active: bool,
+    ) -> Result<CouponDto, ContractError>;
     async fn delete_coupon(&self, id: Uuid) -> Result<(), ContractError>;
-    async fn validate_coupon(&self, req: ValidateCouponRequest) -> Result<CouponValidationResult, ContractError>;
+    async fn validate_coupon(
+        &self,
+        req: ValidateCouponRequest,
+    ) -> Result<CouponValidationResult, ContractError>;
     async fn record_usage(
         &self,
         coupon_id: Uuid,
@@ -586,8 +604,6 @@ pub trait CouponContract: Send + Sync {
         discount_amount: f64,
     ) -> Result<(), ContractError>;
 }
-
-
 
 // --- INVENTORY CONTRACT (Ginee OMS Multi-Stock) ---
 
@@ -844,6 +860,7 @@ impl OrderStatus {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "pending" => Some(Self::Pending),
@@ -1230,6 +1247,17 @@ pub struct UpdateBuyerAddressRequest {
     pub set_as_default: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct WishlistItemDto {
+    pub id: Uuid,
+    pub buyer_id: Uuid,
+    pub product_id: Uuid,
+    pub product_name: String,
+    pub product_price_cents: i64,
+    pub product_image_url: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[async_trait]
 pub trait BuyerContract: Send + Sync {
     async fn register(&self, req: RegisterBuyerRequest)
@@ -1294,6 +1322,21 @@ pub trait BuyerContract: Send + Sync {
         full_name: Option<String>,
         avatar_url: Option<String>,
     ) -> Result<BuyerAccountDto, ContractError>;
+
+    // --- Wishlist ---
+    async fn get_wishlist(&self, buyer_id: Uuid) -> Result<Vec<WishlistItemDto>, ContractError>;
+    async fn add_to_wishlist(
+        &self,
+        buyer_id: Uuid,
+        product_id: Uuid,
+    ) -> Result<WishlistItemDto, ContractError>;
+    async fn remove_from_wishlist(
+        &self,
+        buyer_id: Uuid,
+        product_id: Uuid,
+    ) -> Result<(), ContractError>;
+    async fn is_in_wishlist(&self, buyer_id: Uuid, product_id: Uuid)
+        -> Result<bool, ContractError>;
 }
 
 // --- LIVE CHAT & MESSAGING CONTRACT (FUTURE-PROOF ARCHITECTURE) ---
@@ -1418,4 +1461,109 @@ pub trait PaymentContract: Send + Sync {
 
     /// Get client-facing Midtrans configuration
     fn get_config(&self) -> PaymentConfigDto;
+}
+
+// --- PRODUCT REVIEW CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ProductReviewDto {
+    pub id: Uuid,
+    pub product_id: Uuid,
+    pub buyer_id: Uuid,
+    pub buyer_name: String, // Display name from buyer profile (full_name)
+    pub order_id: Uuid,
+    pub rating: i32,
+    pub review_text: Option<String>,
+    pub is_visible: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub type ProductReview = ProductReviewDto;
+
+/// Privacy-minimized public view of a product review (omits buyer_id, order_id, is_visible, and sensitive PII)
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PublicReviewDto {
+    pub id: Uuid,
+    pub product_id: Uuid,
+    pub buyer_name: String, // Privacy-safe display alias
+    pub rating: i32,
+    pub review_text: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub type PublicReview = PublicReviewDto;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateReviewRequest {
+    pub product_id: Uuid,
+    pub order_id: Uuid,
+    #[validate(range(min = 1, max = 5, message = "Rating must be between 1 and 5"))]
+    pub rating: i32,
+    #[validate(length(max = 1000, message = "Review text max 1000 characters"))]
+    pub review_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ProductRatingSummaryDto {
+    pub product_id: Uuid,
+    pub average_rating: f64,
+    pub total_reviews: u64,
+    pub rating_distribution: [u64; 5], // [1-star count, 2-star, 3-star, 4-star, 5-star]
+}
+
+pub type ProductRatingSummary = ProductRatingSummaryDto;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateReviewVisibilityRequest {
+    pub is_visible: bool,
+}
+
+#[async_trait]
+pub trait ReviewContract: Send + Sync {
+    /// Create review for a delivered product order by buyer
+    async fn create_review(
+        &self,
+        buyer_id: Uuid,
+        req: CreateReviewRequest,
+    ) -> Result<ProductReviewDto, ContractError>;
+
+    /// Public list of visible reviews for a product (paginated, privacy-minimized)
+    async fn get_reviews_for_product(
+        &self,
+        product_id: Uuid,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<PublicReviewDto>, ContractError>;
+
+    /// Public summary of visible ratings for a product
+    async fn get_rating_summary(
+        &self,
+        product_id: Uuid,
+    ) -> Result<ProductRatingSummaryDto, ContractError>;
+
+    /// List reviews created by a specific buyer
+    async fn list_buyer_reviews(
+        &self,
+        buyer_id: Uuid,
+    ) -> Result<Vec<ProductReviewDto>, ContractError>;
+
+    /// Admin list reviews with optional product_id and visibility filters
+    async fn admin_list_reviews(
+        &self,
+        product_id: Option<Uuid>,
+        is_visible: Option<bool>,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<ProductReviewDto>, ContractError>;
+
+    /// Admin toggle or set visibility for a review atomically with audit record
+    async fn admin_update_visibility(
+        &self,
+        review_id: Uuid,
+        is_visible: bool,
+        actor_id: Option<Uuid>,
+        actor_username: Option<String>,
+    ) -> Result<ProductReviewDto, ContractError>;
 }

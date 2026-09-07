@@ -74,6 +74,7 @@ impl From<ContractError> for ApiError {
             ContractError::ValidationError(msg) => {
                 ApiError::new(code, msg, StatusCode::BAD_REQUEST)
             }
+            ContractError::AlreadyExists(msg) => ApiError::new(code, msg, StatusCode::CONFLICT),
             ContractError::InsufficientStock {
                 product_id,
                 requested,
