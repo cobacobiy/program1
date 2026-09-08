@@ -1655,16 +1655,22 @@ impl BuyerContract for BuyerModule {
         .await;
 
         if let Err(e) = insert_res {
-            let err_str = e.to_string();
-            if err_str.contains("UNIQUE constraint failed")
-                || err_str.contains("code: 2067")
-                || err_str.contains("code: 1555")
-            {
+            let is_unique = e
+                .as_database_error()
+                .is_some_and(sqlx::error::DatabaseError::is_unique_violation)
+                || {
+                    let err_str = e.to_string();
+                    err_str.contains("UNIQUE constraint failed")
+                        || err_str.contains("code: 2067")
+                        || err_str.contains("code: 1555")
+                };
+
+            if is_unique {
                 return Err(ContractError::AlreadyExists(
-                    "Produk sudah ada di dalam wishlist".to_string(),
+                    "Product already in wishlist".to_string(),
                 ));
             } else {
-                return Err(ContractError::Internal(err_str));
+                return Err(ContractError::Internal(e.to_string()));
             }
         }
 
@@ -2569,6 +2575,14 @@ mod tests {
 
         // Add second time -> Conflict / AlreadyExists
         let err = module.add_to_wishlist(reg.buyer.id, prod_id).await;
-        assert!(matches!(err, Err(ContractError::AlreadyExists(_))));
+        match err {
+            Err(ContractError::AlreadyExists(msg)) => {
+                assert!(
+                    msg.contains("already in wishlist"),
+                    "Expected 'already in wishlist' in error message, got: {msg}"
+                );
+            }
+            other => panic!("Expected AlreadyExists error, got: {:?}", other),
+        }
     }
 }

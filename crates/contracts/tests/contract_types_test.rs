@@ -143,12 +143,16 @@ fn test_buyer_checkout_request_structure() {
             product_id,
             quantity: 2,
         }],
+        courier: None,
+        shipping_cost_cents: None,
     };
     assert!(valid_req.validate().is_ok());
 
     let empty_items_req = BuyerCheckoutRequest {
         address_id,
         items: vec![],
+        courier: None,
+        shipping_cost_cents: None,
     };
     assert!(empty_items_req.validate().is_err());
 }
@@ -573,3 +577,70 @@ fn test_public_review_dto_privacy_minimization() {
     assert!(serialized.get("phone").is_none());
     assert!(serialized.get("phone_number").is_none());
 }
+
+#[test]
+fn test_shipping_contract_types() {
+    use program1_contracts::{ShippingCity, ShippingCost, ShippingCostRequest, ShippingCourier, UpdateOrderTrackingRequest};
+    use validator::Validate;
+
+    // Valid ShippingCostRequest
+    let req = ShippingCostRequest {
+        destination_city_id: "152".to_string(),
+        weight_grams: 1000,
+        courier: "jne".to_string(),
+    };
+    assert!(req.validate().is_ok());
+
+    // Invalid weight
+    let invalid_weight = ShippingCostRequest {
+        destination_city_id: "152".to_string(),
+        weight_grams: 0,
+        courier: "jne".to_string(),
+    };
+    assert!(invalid_weight.validate().is_err());
+
+    // Empty city
+    let empty_city = ShippingCostRequest {
+        destination_city_id: "".to_string(),
+        weight_grams: 500,
+        courier: "jne".to_string(),
+    };
+    assert!(empty_city.validate().is_err());
+
+    // Update tracking request
+    let valid_tracking = UpdateOrderTrackingRequest {
+        tracking_number: "JNE12345678".to_string(),
+    };
+    assert!(valid_tracking.validate().is_ok());
+
+    let empty_tracking = UpdateOrderTrackingRequest {
+        tracking_number: "".to_string(),
+    };
+    assert!(empty_tracking.validate().is_err());
+
+    let courier = ShippingCourier {
+        code: "jne".to_string(),
+        name: "Jalur Nugraha Ekakurir".to_string(),
+    };
+    assert_eq!(courier.code, "jne");
+
+    let cost = ShippingCost {
+        courier_code: "jne".to_string(),
+        courier_name: "Jalur Nugraha Ekakurir".to_string(),
+        service: "REG".to_string(),
+        service_description: "Reguler".to_string(),
+        cost_cents: 18000,
+        etd: "2-3".to_string(),
+    };
+    assert_eq!(cost.cost_cents, 18000);
+
+    let city = ShippingCity {
+        city_id: "152".to_string(),
+        province_id: "6".to_string(),
+        province: "DKI Jakarta".to_string(),
+        city_name: "Jakarta Selatan".to_string(),
+        postal_code: "12000".to_string(),
+    };
+    assert_eq!(city.city_id, "152");
+}
+

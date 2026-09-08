@@ -21,6 +21,7 @@ use program1_contracts::{
     UpdatePromotionStockRequest, UpdateReviewVisibilityRequest, UpdateSafetyStockRequest,
     UpdateSpareStockRequest, UpdateUserPermissionsRequest, UpdateVariantRequest,
     UpdateWarehouseStockRequest, UserAccountDto, ValidateCouponRequest, WishlistItemDto,
+    ShippingCity, ShippingCost, ShippingCostRequest, ShippingCourier, UpdateOrderTrackingRequest,
 };
 
 struct SecurityAddon;
@@ -120,6 +121,10 @@ impl Modify for SecurityAddon {
         handlers::add_to_wishlist_handler,
         handlers::remove_from_wishlist_handler,
         handlers::check_wishlist_handler,
+        handlers::calculate_shipping_handler,
+        handlers::list_couriers_handler,
+        handlers::search_cities_handler,
+        handlers::update_order_tracking_handler,
     ),
     components(
         schemas(
@@ -190,6 +195,11 @@ impl Modify for SecurityAddon {
             UpdateReviewVisibilityRequest,
             handlers::AdminReviewQuery,
             WishlistItemDto,
+            ShippingCourier,
+            ShippingCost,
+            ShippingCostRequest,
+            ShippingCity,
+            UpdateOrderTrackingRequest,
         )
     ),
     tags(

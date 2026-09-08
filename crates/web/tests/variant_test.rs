@@ -75,6 +75,7 @@ async fn setup_test_app() -> (axum::Router, String, Uuid) {
             stock: 50,
             image_url: Some("https://example.com/tkl.jpg".to_string()),
             description: Some("Tenkeyless layout with RGB switches".to_string()),
+            weight_grams: 500,
         })
         .await
         .expect("Failed to create test catalog item");
@@ -96,6 +97,7 @@ async fn setup_test_app() -> (axum::Router, String, Uuid) {
         payment_contract: payment_module,
         coupon_contract: coupon_module,
         review_contract: review_module,
+        shipping_contract: Arc::new(program1_module_shipping::ShippingModule::new("".to_string(), "starter".to_string(), "152".to_string())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

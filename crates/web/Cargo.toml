@@ -27,6 +27,7 @@ program1-module-chat = { path = "../modules/chat" }
 program1-module-payment = { path = "../modules/payment" }
 program1-module-coupon = { path = "../modules/coupon" }
 program1-module-review = { path = "../modules/review" }
+program1-module-shipping = { path = "../modules/shipping" }
 
 
 async-trait.workspace = true

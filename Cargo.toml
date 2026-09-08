@@ -16,6 +16,7 @@ members = [
     "crates/modules/payment",
     "crates/modules/coupon",
     "crates/modules/review",
+    "crates/modules/shipping",
     "crates/web",
 ]
 

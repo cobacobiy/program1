@@ -53,6 +53,7 @@ async fn test_db_persistence_across_pool_reconnection() {
                 stock: 50,
                 image_url: None,
                 description: Some("Durable linear switches".to_string()),
+                weight_grams: 500,
             })
             .await
             .expect("Failed to create catalog product");
@@ -67,6 +68,8 @@ async fn test_db_persistence_across_pool_reconnection() {
                 customer_email: "buyer@persist.com".to_string(),
                 shipping_address: "Jakarta Barat".to_string(),
                 shipping_snapshot: None,
+                courier: None,
+                shipping_cost_cents: None,
                 items: vec![StorefrontOrderItemRequest {
                     product_id: product.id,
                     quantity: 3,

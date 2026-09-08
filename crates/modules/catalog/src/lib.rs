@@ -101,6 +101,7 @@ impl CatalogModule {
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|_| Utc::now());
+        let weight_grams: i64 = row.try_get("weight_grams").unwrap_or(500);
 
         Ok(CatalogItemDto {
             id,
@@ -112,6 +113,7 @@ impl CatalogModule {
             image_url,
             description,
             created_at,
+            weight_grams,
         })
     }
 
@@ -164,7 +166,7 @@ impl CatalogModule {
 impl CatalogContract for CatalogModule {
     async fn list_items(&self) -> Result<Vec<CatalogItemDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, name, sku, category, price, stock, image_url, description, created_at
+            "SELECT id, name, sku, category, price, stock, image_url, description, created_at, weight_grams
              FROM catalog_items ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -216,7 +218,7 @@ impl CatalogContract for CatalogModule {
         let total: i64 = count_row.get("total");
 
         let query_str = format!(
-            "SELECT id, name, sku, category, price, stock, image_url, description, created_at
+            "SELECT id, name, sku, category, price, stock, image_url, description, created_at, weight_grams
              FROM catalog_items
              WHERE ($1 IS NULL OR name LIKE '%' || $1 || '%' OR sku LIKE '%' || $1 || '%')
                AND ($2 IS NULL OR category = $2)
@@ -255,7 +257,7 @@ impl CatalogContract for CatalogModule {
 
     async fn get_item(&self, id: Uuid) -> Result<CatalogItemDto, ContractError> {
         let row = sqlx::query(
-            "SELECT id, name, sku, category, price, stock, image_url, description, created_at
+            "SELECT id, name, sku, category, price, stock, image_url, description, created_at, weight_grams
              FROM catalog_items WHERE id = $1",
         )
         .bind(id.to_string())
@@ -296,9 +298,15 @@ impl CatalogContract for CatalogModule {
             .unwrap_or_else(|| "Product description".to_string());
         let now = Utc::now();
 
+        let weight = if req.weight_grams > 0 {
+            req.weight_grams
+        } else {
+            500
+        };
+
         sqlx::query(
-            "INSERT INTO catalog_items (id, name, sku, category, price, stock, image_url, description, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO catalog_items (id, name, sku, category, price, stock, image_url, description, created_at, weight_grams)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
         .bind(id.to_string())
         .bind(&name)
@@ -309,11 +317,12 @@ impl CatalogContract for CatalogModule {
         .bind(&image_url)
         .bind(&description)
         .bind(now.to_rfc3339())
+        .bind(weight)
         .execute(&self.pool)
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        tracing::info!(id = %id, sku = %sku, "Catalog item created in database");
+        tracing::info!(id = %id, sku = %sku, weight = weight, "Catalog item created in database");
 
         Ok(CatalogItemDto {
             id,
@@ -325,6 +334,7 @@ impl CatalogContract for CatalogModule {
             image_url,
             description,
             created_at: now,
+            weight_grams: weight,
         })
     }
 
@@ -600,6 +610,7 @@ mod tests {
                 stock: 20,
                 image_url: None,
                 description: None,
+                weight_grams: 500,
             })
             .await
             .unwrap();

@@ -144,6 +144,8 @@ impl OrderModule {
             });
         let cancelled_by: Option<String> = row.try_get("cancelled_by").ok().flatten();
         let cancel_reason: Option<String> = row.try_get("cancel_reason").ok().flatten();
+        let courier: Option<String> = row.try_get("courier").ok().flatten();
+        let shipping_cost_cents: i64 = row.try_get("shipping_cost_cents").unwrap_or(0);
 
         Ok(OmniOrderDto {
             id,
@@ -163,6 +165,8 @@ impl OrderModule {
             cancelled_at,
             cancelled_by,
             cancel_reason,
+            courier,
+            shipping_cost_cents,
         })
     }
 }
@@ -171,7 +175,7 @@ impl OrderModule {
 impl OrderContract for OrderModule {
     async fn get_order(&self, id: Uuid) -> Result<OmniOrderDto, ContractError> {
         let row = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
              FROM orders WHERE id = $1",
         )
         .bind(id.to_string())
@@ -230,6 +234,11 @@ impl OrderContract for OrderModule {
             });
         }
 
+        let shipping_cost_cents = req.shipping_cost_cents.unwrap_or(0);
+        let shipping_fee = shipping_cost_cents as f64;
+        total_amount += shipping_fee;
+        let courier = req.courier.clone();
+
         let order_id = Uuid::new_v4();
         let now = Utc::now();
         let channel_str = "NativeWeb";
@@ -250,10 +259,10 @@ impl OrderContract for OrderModule {
         let snapshot_json = serde_json::to_string(&snapshot).unwrap_or_default();
         let buyer_id_str = req.buyer_id.map(|b| b.to_string());
 
-        // Insert order with immutable shipping snapshot
+        // Insert order with immutable shipping snapshot and shipping details
         sqlx::query(
-            "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+            "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json, courier, shipping_cost_cents)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
         )
         .bind(order_id.to_string())
         .bind(channel_str)
@@ -272,6 +281,8 @@ impl OrderContract for OrderModule {
         .bind(&snapshot.province)
         .bind(&snapshot.postal_code)
         .bind(&snapshot_json)
+        .bind(&courier)
+        .bind(shipping_cost_cents)
         .execute(&self.pool)
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
@@ -350,6 +361,8 @@ impl OrderContract for OrderModule {
             cancelled_at: None,
             cancelled_by: None,
             cancel_reason: None,
+            courier,
+            shipping_cost_cents,
         })
     }
 
@@ -386,8 +399,8 @@ impl OrderContract for OrderModule {
         let status_str = "processing";
 
         sqlx::query(
-            "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, '', $10, '', '', '', '', '')",
+            "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json, courier, shipping_cost_cents)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, '', $10, '', '', '', '', '', NULL, 0)",
         )
         .bind(order_id.to_string())
         .bind(&ch_str)
@@ -439,12 +452,14 @@ impl OrderContract for OrderModule {
             cancelled_at: None,
             cancelled_by: None,
             cancel_reason: None,
+            courier: None,
+            shipping_cost_cents: 0,
         })
     }
 
     async fn list_orders(&self) -> Result<Vec<OmniOrderDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
              FROM orders ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -497,7 +512,7 @@ impl OrderContract for OrderModule {
         let total: i64 = count_row.get("total");
 
         let query_str = format!(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
              FROM orders
              WHERE ($1 IS NULL OR status = $1)
              ORDER BY {} {}
@@ -664,7 +679,7 @@ impl OrderContract for OrderModule {
 
     async fn list_buyer_orders(&self, buyer_id: Uuid) -> Result<Vec<OmniOrderDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
              FROM orders WHERE buyer_id = $1 ORDER BY created_at DESC",
         )
         .bind(buyer_id.to_string())
@@ -680,6 +695,50 @@ impl OrderContract for OrderModule {
         }
 
         Ok(list)
+    }
+
+    async fn update_tracking_number(
+        &self,
+        order_id: Uuid,
+        tracking_number: &str,
+    ) -> Result<OmniOrderDto, ContractError> {
+        let t_clean = tracking_number.trim();
+        if t_clean.is_empty() {
+            return Err(ContractError::ValidationError(
+                "Nomor resi tidak boleh kosong".to_string(),
+            ));
+        }
+
+        let existing = self.get_order(order_id).await?;
+
+        // If currently processing, automatically transition status to shipped
+        let next_status = if existing.status.eq_ignore_ascii_case("processing") {
+            "shipped"
+        } else {
+            &existing.status
+        };
+
+        let now = Utc::now();
+        let shipped_at_val = if next_status == "shipped" && existing.shipped_at.is_none() {
+            Some(now.to_rfc3339())
+        } else {
+            existing.shipped_at.map(|dt| dt.to_rfc3339())
+        };
+
+        sqlx::query(
+            "UPDATE orders
+             SET tracking_number = $1, status = $2, shipped_at = COALESCE($3, shipped_at)
+             WHERE id = $4",
+        )
+        .bind(t_clean)
+        .bind(next_status)
+        .bind(shipped_at_val)
+        .bind(order_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        self.get_order(order_id).await
     }
 }
 
@@ -709,6 +768,8 @@ mod tests {
             }],
             buyer_id: None,
             shipping_snapshot: None,
+            courier: None,
+            shipping_cost_cents: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -751,6 +812,8 @@ mod tests {
             }],
             buyer_id: Some(buyer_id),
             shipping_snapshot: Some(snapshot.clone()),
+            courier: None,
+            shipping_cost_cents: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -786,6 +849,8 @@ mod tests {
             }],
             buyer_id: None,
             shipping_snapshot: None,
+            courier: None,
+            shipping_cost_cents: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -858,6 +923,8 @@ mod tests {
             }],
             buyer_id: None,
             shipping_snapshot: None,
+            courier: None,
+            shipping_cost_cents: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -899,6 +966,8 @@ mod tests {
             }],
             buyer_id: Some(buyer_id),
             shipping_snapshot: None,
+            courier: None,
+            shipping_cost_cents: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -935,5 +1004,43 @@ mod tests {
         assert_eq!(buyer_orders.len(), 1);
         assert_eq!(buyer_orders[0].id, order.id);
         assert_eq!(buyer_orders[0].status, "cancelled");
+    }
+
+    #[tokio::test]
+    async fn test_order_with_shipping_cost_and_tracking() {
+        let pool = init_database("sqlite::memory:").await.unwrap();
+        let catalog = Arc::new(CatalogModule::new(pool.clone()));
+        catalog.seed_default_catalog().await.unwrap();
+        let inventory = Arc::new(InventoryModule::new(pool.clone(), catalog.clone()));
+        let order_module = OrderModule::new(pool, catalog.clone(), inventory.clone());
+
+        let products = catalog.list_items().await.unwrap();
+        let item_price = products[0].price;
+
+        let req = StorefrontOrderRequest {
+            customer_name: "Shipping Buyer".to_string(),
+            customer_email: "shipping@test.com".to_string(),
+            shipping_address: "Jl. Sudirman 100".to_string(),
+            items: vec![StorefrontOrderItemRequest {
+                product_id: products[0].id,
+                quantity: 2,
+            }],
+            buyer_id: None,
+            shipping_snapshot: None,
+            courier: Some("jne - REG".to_string()),
+            shipping_cost_cents: Some(18000),
+        };
+
+        let order = order_module.create_storefront_order(req).await.unwrap();
+        assert_eq!(order.courier, Some("jne - REG".to_string()));
+        assert_eq!(order.shipping_cost_cents, 18000);
+        assert_eq!(order.total_amount, (item_price * 2.0) + 18000.0);
+
+        // Update tracking number
+        let updated = order_module
+            .update_tracking_number(order.id, "JNE-TEST-9988")
+            .await
+            .unwrap();
+        assert_eq!(updated.tracking_number, Some("JNE-TEST-9988".to_string()));
     }
 }

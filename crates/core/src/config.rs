@@ -29,6 +29,9 @@ pub struct AppConfig {
     pub smtp_password: Option<String>,
     pub smtp_from_name: String,
     pub smtp_from_email: String,
+    pub rajaongkir_api_key: String,
+    pub rajaongkir_type: String,
+    pub shipping_origin_city_id: String,
 }
 
 impl AppConfig {
@@ -139,6 +142,9 @@ impl AppConfig {
             smtp_password: std::env::var("SMTP_PASSWORD").ok(),
             smtp_from_name: env_or("SMTP_FROM_NAME", "AURA Storefront"),
             smtp_from_email: env_or("SMTP_FROM_EMAIL", "noreply@aura.co.id"),
+            rajaongkir_api_key: env_or("RAJAONGKIR_API_KEY", ""),
+            rajaongkir_type: env_or("RAJAONGKIR_TYPE", "starter"),
+            shipping_origin_city_id: env_or("SHIPPING_ORIGIN_CITY_ID", "152"),
         }
     }
 

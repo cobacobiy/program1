@@ -113,6 +113,8 @@ async fn test_storefront_order_lifecycle_emails() {
         }],
         buyer_id: None,
         shipping_snapshot: None,
+        courier: None,
+        shipping_cost_cents: None,
     };
 
     let order = order_module
@@ -280,6 +282,7 @@ async fn test_full_http_storefront_checkout_email_flow() {
         payment_contract: payment_module,
         coupon_contract: coupon_module,
         review_contract: review_module,
+        shipping_contract: Arc::new(program1_module_shipping::ShippingModule::new("".to_string(), "starter".to_string(), "152".to_string())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

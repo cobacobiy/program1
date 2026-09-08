@@ -13,7 +13,7 @@ use crate::rate_limit::IpRateLimiter;
 use program1_contracts::{
     AnalyticsContract, AuditContract, AuthContract, BuyerContract, CatalogContract,
     ChannelSyncContract, ChatContract, CouponContract, ErrorCode, InventoryContract, OrderContract,
-    PaymentContract, ReviewContract, UserContract,
+    PaymentContract, ReviewContract, ShippingContract, UserContract,
 };
 
 #[derive(Clone)]
@@ -34,6 +34,7 @@ pub struct AppState {
     pub payment_contract: Arc<dyn PaymentContract>,
     pub coupon_contract: Arc<dyn CouponContract>,
     pub review_contract: Arc<dyn ReviewContract>,
+    pub shipping_contract: Arc<dyn ShippingContract>,
     pub rate_limiter: Arc<IpRateLimiter>,
     pub started_at: std::time::Instant,
     pub google_client_id: String,

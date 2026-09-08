@@ -116,6 +116,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid) {
         payment_contract: payment_module,
         coupon_contract: coupon_module,
         review_contract: review_module,
+        shipping_contract: Arc::new(program1_module_shipping::ShippingModule::new("".to_string(), "starter".to_string(), "152".to_string())),
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

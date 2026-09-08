@@ -28,6 +28,7 @@ export interface Product {
   stock: number;
   image_url?: string | null;
   category?: string | null;
+  weight_grams?: number;
   created_at?: string;
 }
 
@@ -69,7 +70,9 @@ export interface CartItem {
 export interface CreateOrderPayload {
   items: { product_id: string; quantity: number }[];
   notes?: string;
-  shipping_address_id?: string;
+  address_id?: string;
+  courier?: string;
+  shipping_cost_cents?: number;
 }
 
 export interface CreateOrderResponse {
@@ -83,8 +86,10 @@ export interface CreateOrderResponse {
 export interface BuyerOrder {
   id: string;
   total_amount_cents: number;
-  status: 'PENDING_PAYMENT' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
+  status: string;
   tracking_number?: string | null;
+  courier?: string | null;
+  shipping_cost_cents?: number;
   items: {
     product_id: string;
     product_name: string;
@@ -197,12 +202,46 @@ export interface PaginatedPublicReviews {
 }
 
 export interface WishlistItem {
-  id: string;
-  buyer_id: string;
   product_id: string;
   product_name: string;
+  product_sku: string;
   product_price_cents: number;
-  product_image_url?: string | null;
-  created_at: string;
+  product_image_url: string;
+  stock: number;
+  added_at: string;
 }
 
+export interface BuyerAddress {
+  id: string;
+  recipient_name: string;
+  phone_number: string;
+  street_address: string;
+  subdistrict: string;
+  city: string;
+  province: string;
+  postal_code: string;
+  is_default: boolean;
+}
+
+export interface CourierRate {
+  courier_code: string;
+  courier_name: string;
+  service: string;
+  service_description: string;
+  cost_cents: number;
+  etd: string;
+}
+
+export interface ShippingCostRequest {
+  destination_city_id: string;
+  weight_grams: number;
+  courier: string;
+}
+
+export interface ShippingCity {
+  city_id: string;
+  province_id: string;
+  province: string;
+  city_name: string;
+  postal_code: string;
+}

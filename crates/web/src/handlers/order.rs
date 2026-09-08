@@ -13,7 +13,7 @@ use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, BuyerCheckoutRequest, ChannelType, ErrorCode, JwtClaims, MarketplaceOrderReq,
     OmniOrderDto, PaginatedResponse, PaginationParams, ShippingAddressSnapshot,
-    StorefrontOrderRequest,
+    StorefrontOrderRequest, UpdateOrderTrackingRequest,
 };
 
 /// List all omnichannel orders in history (Protected)
@@ -173,6 +173,8 @@ pub async fn create_storefront_order(
         items: payload.items,
         buyer_id: Some(buyer_id),
         shipping_snapshot: Some(shipping_snapshot),
+        courier: payload.courier,
+        shipping_cost_cents: payload.shipping_cost_cents,
     };
 
     let order = state
@@ -320,6 +322,67 @@ pub async fn update_order_status_handler(
                 "new_status": payload.new_status.as_str(),
                 "tracking_number": tracking_num,
                 "reason": reason,
+            })
+            .to_string(),
+            ip_address: None,
+        })
+        .await;
+
+    Ok(Json(updated_order))
+}
+
+/// Update shipping tracking/resi number for an order (Protected - Staff / Admin)
+#[utoipa::path(
+    patch,
+    path = "/api/v1/orders/{id}/tracking",
+    params(
+        ("id" = Uuid, Path, description = "Order identifier")
+    ),
+    request_body = UpdateOrderTrackingRequest,
+    responses(
+        (status = 200, description = "Order tracking number updated", body = OmniOrderDto),
+        (status = 400, description = "Validation error", body = ApiError),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Staff only"),
+        (status = 404, description = "Order not found", body = ApiError)
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Orders"
+)]
+pub async fn update_order_tracking_handler(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    ValidatedJson(payload): ValidatedJson<UpdateOrderTrackingRequest>,
+) -> Result<Json<OmniOrderDto>, ApiError> {
+    if claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Akses ditolak: pembaruan resi hanya untuk staf / penjual",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let updated_order = state
+        .order_contract
+        .update_tracking_number(id, &payload.tracking_number)
+        .await?;
+
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: claims.username.clone(),
+            action: "ORDER_TRACKING_UPDATED".to_string(),
+            resource_type: "order".to_string(),
+            resource_id: Some(id),
+            details: json!({
+                "tracking_number": payload.tracking_number,
+                "status": updated_order.status,
             })
             .to_string(),
             ip_address: None,

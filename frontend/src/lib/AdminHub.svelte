@@ -404,6 +404,21 @@
     }
   }
 
+  async function editTrackingNumber(orderId: string, currentResi: string | null | undefined) {
+    const newResi = prompt('Masukkan Nomor Resi Pengiriman Baru:', currentResi || '');
+    if (!newResi || newResi.trim() === '') return;
+    try {
+      await fetchAdmin(`/orders/${orderId}/tracking`, {
+        method: 'PATCH',
+        body: JSON.stringify({ tracking_number: newResi.trim() }),
+      });
+      toast.success('Nomor resi berhasil diperbarui');
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal memperbarui nomor resi');
+    }
+  }
+
   onMount(() => {
     if (adminAuth.token) {
       loadData();
@@ -578,6 +593,8 @@
                           <button class="btn-action" onclick={() => updateOrderStatus(o.id, 'PROCESSING')}>Proses</button>
                         {:else if o.status === 'PROCESSING'}
                           <button class="btn-action primary" onclick={() => updateOrderStatus(o.id, 'SHIPPED')}>Kirim & Input Resi</button>
+                        {:else if o.status === 'SHIPPED'}
+                          <button class="btn-action" onclick={() => editTrackingNumber(o.id, o.tracking_number)}>Edit Resi</button>
                         {:else}
                           <span class="done-mark">✓</span>
                         {/if}

@@ -204,7 +204,10 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/catalog/:id/rating",
             get(get_product_rating_handler),
         )
-        .route("/api/v1/coupons/validate", post(validate_coupon_handler));
+        .route("/api/v1/coupons/validate", post(validate_coupon_handler))
+        .route("/api/v1/shipping/cost", post(calculate_shipping_handler))
+        .route("/api/v1/shipping/couriers", get(list_couriers_handler))
+        .route("/api/v1/shipping/cities", get(search_cities_handler));
 
     // 2. Buyer protected routes (valid Buyer JWT required)
     let buyer_routes = Router::new()
@@ -322,6 +325,10 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/orders/:id/status",
             patch(update_order_status_handler).route_layer(order_limit_layer.clone()),
+        )
+        .route(
+            "/api/v1/orders/:id/tracking",
+            patch(update_order_tracking_handler).route_layer(order_limit_layer.clone()),
         )
         .route(
             "/api/v1/orders/marketplace",

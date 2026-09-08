@@ -132,6 +132,17 @@
                   <span class="status-pill {o.status.toLowerCase()}">{o.status}</span>
                 </div>
 
+                {#if o.courier || o.tracking_number}
+                  <div class="shipping-info-bar">
+                    {#if o.courier}
+                      <span class="courier-tag">🚚 {o.courier}</span>
+                    {/if}
+                    {#if o.tracking_number}
+                      <span class="resi-tag">Resi: <strong>{o.tracking_number}</strong></span>
+                    {/if}
+                  </div>
+                {/if}
+
                 <div class="items-summary">
                   {#each o.items as item}
                     <div class="item-line">
@@ -281,6 +292,13 @@
     background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1rem;
   }
   .box-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+  .shipping-info-bar {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    background: #0f172a; padding: 0.35rem 0.6rem; border-radius: 6px;
+    margin-bottom: 0.6rem; font-size: 0.78rem;
+  }
+  .courier-tag { color: #38bdf8; font-weight: 500; }
+  .resi-tag { color: #a7f3d0; background: #064e3b; padding: 0.15rem 0.4rem; border-radius: 4px; }
   .oid { font-weight: bold; color: #38bdf8; margin-right: 0.5rem; font-family: monospace; }
   .date { color: #94a3b8; }
   .status-pill {

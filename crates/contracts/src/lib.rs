@@ -362,6 +362,10 @@ impl PaginationParams {
     }
 }
 
+fn default_weight_grams() -> i64 {
+    500
+}
+
 // --- CATALOG CONTRACT ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -375,6 +379,8 @@ pub struct CatalogItemDto {
     pub image_url: String,
     pub description: String,
     pub created_at: DateTime<Utc>,
+    #[serde(default = "default_weight_grams")]
+    pub weight_grams: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -397,6 +403,9 @@ pub struct CreateCatalogItemRequest {
     pub image_url: Option<String>,
     #[validate(length(max = 2000, message = "Description max 2000 characters"))]
     pub description: Option<String>,
+    #[serde(default = "default_weight_grams")]
+    #[validate(range(min = 1, max = 1000000, message = "Weight must be 1g - 1,000,000g"))]
+    pub weight_grams: i64,
 }
 
 #[async_trait]
@@ -927,6 +936,10 @@ pub struct OmniOrderDto {
     pub cancelled_by: Option<String>,
     #[serde(default)]
     pub cancel_reason: Option<String>,
+    #[serde(default)]
+    pub courier: Option<String>,
+    #[serde(default)]
+    pub shipping_cost_cents: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -938,6 +951,12 @@ pub struct UpdateOrderStatusRequest {
     #[serde(alias = "cancel_reason")]
     #[validate(length(max = 500, message = "Alasan max 500 karakter"))]
     pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateOrderTrackingRequest {
+    #[validate(length(min = 1, max = 100, message = "Nomor resi 1-100 karakter"))]
+    pub tracking_number: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
@@ -972,6 +991,10 @@ pub struct StorefrontOrderRequest {
     pub items: Vec<StorefrontOrderItemRequest>,
     pub buyer_id: Option<Uuid>,
     pub shipping_snapshot: Option<ShippingAddressSnapshot>,
+    #[serde(default)]
+    pub courier: Option<String>,
+    #[serde(default)]
+    pub shipping_cost_cents: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -982,6 +1005,10 @@ pub struct BuyerCheckoutRequest {
         nested
     )]
     pub items: Vec<StorefrontOrderItemRequest>,
+    #[serde(default)]
+    pub courier: Option<String>,
+    #[serde(default)]
+    pub shipping_cost_cents: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -1040,6 +1067,13 @@ pub trait OrderContract: Send + Sync {
 
     /// List orders placed by a specific buyer
     async fn list_buyer_orders(&self, buyer_id: Uuid) -> Result<Vec<OmniOrderDto>, ContractError>;
+
+    /// Update tracking number for an existing order
+    async fn update_tracking_number(
+        &self,
+        order_id: Uuid,
+        tracking_number: &str,
+    ) -> Result<OmniOrderDto, ContractError>;
 }
 
 // --- ANALYTICS CONTRACT ---
@@ -1567,3 +1601,51 @@ pub trait ReviewContract: Send + Sync {
         actor_username: Option<String>,
     ) -> Result<ProductReviewDto, ContractError>;
 }
+
+// --- SHIPPING CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ShippingCourier {
+    pub code: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ShippingCost {
+    pub courier_code: String,
+    pub courier_name: String,
+    pub service: String,
+    pub service_description: String,
+    pub cost_cents: i64,
+    pub etd: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ShippingCity {
+    pub city_id: String,
+    pub province_id: String,
+    pub province: String,
+    pub city_name: String,
+    pub postal_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ShippingCostRequest {
+    #[validate(length(min = 1, message = "Kota tujuan wajib diisi"))]
+    pub destination_city_id: String,
+    #[validate(range(min = 1, max = 1000000, message = "Berat harus antara 1g dan 1,000,000g"))]
+    pub weight_grams: i32,
+    #[validate(length(min = 1, message = "Kode kurir wajib diisi"))]
+    pub courier: String,
+}
+
+#[async_trait]
+pub trait ShippingContract: Send + Sync {
+    async fn list_couriers(&self) -> Result<Vec<ShippingCourier>, ContractError>;
+    async fn calculate_cost(
+        &self,
+        req: ShippingCostRequest,
+    ) -> Result<Vec<ShippingCost>, ContractError>;
+    async fn search_cities(&self, query: &str) -> Result<Vec<ShippingCity>, ContractError>;
+}
+
