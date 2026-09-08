@@ -104,12 +104,6 @@
       isSubmittingReturn = false;
     }
   }
-    reviewTargetProductId = productId;
-    reviewTargetProductName = productName;
-    reviewRating = 5;
-    reviewText = '';
-    isReviewModalOpen = true;
-  }
 
   async function submitReview() {
     if (reviewRating < 1 || reviewRating > 5) {
