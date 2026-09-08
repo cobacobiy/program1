@@ -333,3 +333,38 @@ export interface NotificationCount {
   unread: number;
   total: number;
 }
+
+export interface ReturnRequest {
+  id: string;
+  order_id: string;
+  buyer_id: string;
+  reason: string;
+  description?: string | null;
+  evidence_urls: string[];
+  status: string;
+  refund_amount_cents: number;
+  admin_notes?: string | null;
+  processed_by?: string | null;
+  processed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateReturnPayload {
+  order_id: string;
+  reason: string;
+  description?: string;
+  evidence_urls?: string[];
+}
+
+export interface ProcessReturnPayload {
+  action: 'approve' | 'reject';
+  admin_notes?: string;
+  refund_amount_override?: number;
+}
+
+export interface UpdateReturnStatusPayload {
+  status: 'return_shipped' | 'received' | 'refunded';
+  admin_notes?: string;
+}
+

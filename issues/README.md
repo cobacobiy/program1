@@ -134,7 +134,7 @@ graph TD
 | 7 | [Product Category & Filtering](issue7-product-category-filtering.md) | [#58 Product Category & Filtering](https://github.com/cobacobiy/program1/issues/58) | 🟡 HIGH | 2-3 hari | `[x]` DONE |
 | 8 | [Multi-Language (i18n)](issue8-multi-language-i18n.md) | [#59 Multi-Language (i18n) Support](https://github.com/cobacobiy/program1/issues/59) | 🟢 MEDIUM | 2-3 hari | `[x]` DONE |
 | 9 | [Notification Center](issue9-notification-center.md) | [#60 Notification Center](https://github.com/cobacobiy/program1/issues/60) | 🟡 HIGH | 3-4 hari | `[x]` DONE |
-| 10 | [Return/Refund Management](issue10-return-refund-management.md) | [#61 Return & Refund Management](https://github.com/cobacobiy/program1/issues/61) | 🔴 CRITICAL | 4-5 hari | Order + Payment |
+| 10 | [Return/Refund Management](issue10-return-refund-management.md) | [#61 Return & Refund Management](https://github.com/cobacobiy/program1/issues/61) | 🔴 CRITICAL | 4-5 hari | `[x]` DONE |
 
 ### Urutan Pengerjaan Phase 2:
 
@@ -164,13 +164,13 @@ graph TD
 | B | #36, #39, #41 | 6-8 hari | ✅ DONE |
 | **Total Phase 1** | **9 issues** | **~19-25 hari** | ✅ **SELESAI** |
 
-### Phase 2 (IN PROGRESS ⏳)
+### Phase 2 (SELESAI ✅)
 
 | Batch | Issues | Estimasi Total | Bisa Parallel |
 |-------|--------|----------------|---------------|
 | A | Issue 1, 2, 3, 7, 8, 9 | 16-21 hari | ✅ Ya (6 agent) |
 | B | Issue 4, 5, 6, 10 | 13-17 hari | ⚠️ Sebagian |
-| **Total Phase 2** | **10 issues** | **~29-38 hari** | — |
+| **Total Phase 2** | **10 issues** | **~29-38 hari** | ✅ **SELESAI** |
 
 ---
 

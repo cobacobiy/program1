@@ -14,6 +14,7 @@ use program1_module_order::OrderModule;
 use program1_module_payment::PaymentModule;
 use program1_module_review::ReviewModule;
 use program1_module_shipping::ShippingModule;
+use program1_module_return::ReturnModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
 
@@ -140,6 +141,12 @@ async fn main() {
         config.rajaongkir_type.clone(),
         config.shipping_origin_city_id.clone(),
     ));
+    let return_module = Arc::new(
+        ReturnModule::new(db_pool.clone())
+            .with_inventory_contract(inventory_module.clone())
+            .with_notification_contract(notification_module.clone())
+            .with_audit_contract(audit_module.clone()),
+    );
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -168,6 +175,7 @@ async fn main() {
         review_contract: review_module,
         shipping_contract: shipping_module,
         notification_contract: notification_module,
+        return_contract: return_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

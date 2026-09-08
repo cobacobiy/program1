@@ -1899,6 +1899,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "program1-module-return"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "program1-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "program1-module-review"
 version = "0.1.0"
 dependencies = [
@@ -1968,6 +1984,7 @@ dependencies = [
  "program1-module-notification",
  "program1-module-order",
  "program1-module-payment",
+ "program1-module-return",
  "program1-module-review",
  "program1-module-shipping",
  "program1-module-user",

@@ -14,6 +14,7 @@ pub mod payment;
 pub mod review;
 pub mod shipping;
 pub mod notification;
+pub mod returns;
 pub mod upload;
 pub mod user;
 
@@ -31,6 +32,7 @@ pub use inventory::*;
 pub use notification::*;
 pub use order::*;
 pub use payment::*;
+pub use returns::*;
 pub use review::*;
 pub use shipping::*;
 pub use upload::*;

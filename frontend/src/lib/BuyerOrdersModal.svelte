@@ -3,7 +3,7 @@
   import { apiFetch } from './api';
   import { toast } from './toast.svelte';
   import { formatRupiah } from './currency';
-  import type { BuyerOrder, ProductReview, CreateReviewPayload } from './types';
+  import type { BuyerOrder, ProductReview, CreateReviewPayload, ReturnRequest, CreateReturnPayload } from './types';
 
   interface Props {
     isOpen: boolean;
@@ -13,6 +13,7 @@
   let { isOpen, onClose }: Props = $props();
   let orders = $state<BuyerOrder[]>([]);
   let buyerReviews = $state<ProductReview[]>([]);
+  let buyerReturns = $state<ReturnRequest[]>([]);
   let loading = $state(true);
 
   // Review Form Modal State
@@ -24,15 +25,25 @@
   let reviewText = $state('');
   let isSubmittingReview = $state(false);
 
+  // Return Form Modal State
+  let isReturnModalOpen = $state(false);
+  let returnTargetOrderId = $state('');
+  let returnReason = $state('defective');
+  let returnDescription = $state('');
+  let returnEvidenceUrl = $state('');
+  let isSubmittingReturn = $state(false);
+
   async function loadOrders() {
     loading = true;
     try {
-      const [ord, rev] = await Promise.all([
+      const [ord, rev, ret] = await Promise.all([
         apiFetch<BuyerOrder[]>('/api/v1/buyer/orders').catch(() => apiFetch<BuyerOrder[]>('/buyer/orders')),
         apiFetch<ProductReview[]>('/api/v1/buyer/reviews').catch(() => []),
+        apiFetch<ReturnRequest[]>('/api/v1/buyer/returns').catch(() => []),
       ]);
       orders = ord;
       buyerReviews = rev || [];
+      buyerReturns = ret || [];
     } catch (err: any) {
       toast.error(err.message || 'Gagal memuat riwayat pesanan.');
     } finally {
@@ -46,8 +57,53 @@
     );
   }
 
+  function getReturnForOrder(orderId: string): ReturnRequest | undefined {
+    return buyerReturns.find((r) => r.order_id === orderId);
+  }
+
   function openReviewModal(orderId: string, productId: string, productName: string) {
     reviewTargetOrderId = orderId;
+    reviewTargetProductId = productId;
+    reviewTargetProductName = productName;
+    reviewRating = 5;
+    reviewText = '';
+    isReviewModalOpen = true;
+  }
+
+  function openReturnModal(orderId: string) {
+    returnTargetOrderId = orderId;
+    returnReason = 'defective';
+    returnDescription = '';
+    returnEvidenceUrl = '';
+    isReturnModalOpen = true;
+  }
+
+  async function submitReturnRequest() {
+    if (!returnReason) {
+      toast.error('Pilih alasan retur');
+      return;
+    }
+    isSubmittingReturn = true;
+    try {
+      const payload: CreateReturnPayload = {
+        order_id: returnTargetOrderId,
+        reason: returnReason,
+        description: returnDescription.trim() ? returnDescription.trim() : undefined,
+        evidence_urls: returnEvidenceUrl.trim() ? [returnEvidenceUrl.trim()] : undefined,
+      };
+      await apiFetch<ReturnRequest>('/api/v1/buyer/returns', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      toast.success('Permintaan retur berhasil dikirim!');
+      isReturnModalOpen = false;
+      await loadOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mengajukan retur.');
+    } finally {
+      isSubmittingReturn = false;
+    }
+  }
     reviewTargetProductId = productId;
     reviewTargetProductName = productName;
     reviewRating = 5;
@@ -175,6 +231,17 @@
                     <button class="btn-confirm" onclick={() => confirmDelivery(o.id)}>
                       Konfirmasi Terima
                     </button>
+                  {:else if o.status.toUpperCase() === 'DELIVERED' || o.status.toUpperCase() === 'COMPLETED'}
+                    {#if getReturnForOrder(o.id)}
+                      {@const ret = getReturnForOrder(o.id)!}
+                      <span class="return-status-pill {ret.status.toLowerCase()}">
+                        🔄 Retur: {ret.status.toUpperCase()}
+                      </span>
+                    {:else}
+                      <button class="btn-request-return" onclick={() => openReturnModal(o.id)}>
+                        🔄 Ajukan Retur
+                      </button>
+                    {/if}
                   {/if}
                 </div>
               </div>
@@ -256,6 +323,82 @@
             disabled={isSubmittingReview}
           >
             {isSubmittingReview ? 'Mengirim...' : 'Kirim Ulasan ⭐'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if isReturnModalOpen}
+  <div
+    class="modal-overlay review-overlay"
+    onclick={() => (isReturnModalOpen = false)}
+    role="button"
+    tabindex="0"
+    onkeydown={(e) => e.key === 'Escape' && (isReturnModalOpen = false)}
+  >
+    <div
+      class="modal-card review-modal-card"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
+      <div class="modal-header">
+        <h3>🔄 Form Pengajuan Retur & Refund</h3>
+        <button class="close-btn" onclick={() => (isReturnModalOpen = false)}>&times;</button>
+      </div>
+
+      <div class="review-modal-body">
+        <div class="target-product-banner">
+          <small>Nomor Pesanan:</small>
+          <strong>#{returnTargetOrderId.slice(0, 12)}</strong>
+        </div>
+
+        <div class="form-group">
+          <label class="text-label" for="return-reason-select">Alasan Pengembalian:</label>
+          <select id="return-reason-select" class="return-select" bind:value={returnReason}>
+            <option value="defective">Barang Cacat / Rusak</option>
+            <option value="wrong_item">Barang Salah / Tidak Sesuai Pesanan</option>
+            <option value="not_as_described">Barang Tidak Sesuai Deskripsi</option>
+            <option value="other">Lainnya</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="text-label" for="return-desc-input">Penjelasan Alasan Retur:</label>
+          <textarea
+            id="return-desc-input"
+            bind:value={returnDescription}
+            placeholder="Jelaskan detail kendala atau kerusakan barang yang Anda terima..."
+            rows="3"
+          ></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="text-label" for="return-url-input">URL Foto Bukti (opsional):</label>
+          <input
+            id="return-url-input"
+            type="url"
+            class="input-url"
+            bind:value={returnEvidenceUrl}
+            placeholder="https://example.com/foto-bukti.jpg"
+          />
+        </div>
+
+        <div class="modal-footer-btns">
+          <button type="button" class="btn-modal-cancel" onclick={() => (isReturnModalOpen = false)}>
+            Batal
+          </button>
+          <button
+            type="button"
+            class="btn-modal-submit"
+            onclick={submitReturnRequest}
+            disabled={isSubmittingReturn}
+          >
+            {isSubmittingReturn ? 'Mengirim...' : 'Kirim Permintaan Retur'}
           </button>
         </div>
       </div>
@@ -365,4 +508,26 @@
   }
   .btn-modal-submit:hover:not(:disabled) { background: #1d4ed8; }
   .btn-modal-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .btn-request-return {
+    background: #d97706; color: #fff; border: none; padding: 0.45rem 0.85rem;
+    border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; transition: background 0.15s;
+  }
+  .btn-request-return:hover { background: #b45309; }
+
+  .return-status-pill {
+    padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.78rem; font-weight: bold;
+    border: 1px solid #334155; background: #1e293b; color: #f8fafc;
+  }
+  .return-status-pill.pending { color: #f59e0b; border-color: #d97706; }
+  .return-status-pill.approved { color: #38bdf8; border-color: #0284c7; }
+  .return-status-pill.received { color: #a7f3d0; border-color: #059669; }
+  .return-status-pill.refunded { color: #34d399; border-color: #10b981; }
+  .return-status-pill.rejected { color: #fca5a5; border-color: #dc2626; }
+
+  .return-select, .input-url {
+    background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 0.6rem;
+    color: #f8fafc; font-family: inherit; font-size: 0.85rem;
+  }
+  .return-select:focus, .input-url:focus { outline: none; border-color: #38bdf8; }
 </style>

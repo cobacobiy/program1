@@ -18,6 +18,7 @@ members = [
     "crates/modules/review",
     "crates/modules/shipping",
     "crates/modules/notification",
+    "crates/modules/return",
     "crates/web",
 ]
 

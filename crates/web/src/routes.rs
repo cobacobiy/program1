@@ -283,6 +283,18 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/buyer/notifications/count", get(buyer_notification_count_handler))
         .route("/api/v1/buyer/notifications/:id/read", post(buyer_mark_read_handler))
         .route("/api/v1/buyer/notifications/read-all", post(buyer_mark_all_read_handler))
+        .route(
+            "/api/v1/buyer/returns",
+            get(buyer_list_returns_handler).post(buyer_create_return_handler),
+        )
+        .route(
+            "/api/v1/buyer/returns/order/:order_id",
+            get(buyer_get_return_by_order_handler),
+        )
+        .route(
+            "/api/v1/buyer/returns/:id/status",
+            post(buyer_update_return_status_handler).put(buyer_update_return_status_handler),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_buyer_auth,
@@ -427,6 +439,15 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/admin/notifications/count", get(admin_notification_count_handler))
         .route("/api/v1/admin/notifications/:id/read", post(admin_mark_read_handler))
         .route("/api/v1/admin/notifications/read-all", post(admin_mark_all_read_handler))
+        .route("/api/v1/admin/returns", get(admin_list_returns_handler))
+        .route(
+            "/api/v1/admin/returns/:id/process",
+            post(admin_process_return_handler),
+        )
+        .route(
+            "/api/v1/admin/returns/:id/status",
+            post(admin_update_return_status_handler).put(admin_update_return_status_handler),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_admin,

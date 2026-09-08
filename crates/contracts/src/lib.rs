@@ -1837,3 +1837,97 @@ pub trait NotificationContract: Send + Sync {
     ) -> Result<(), ContractError>;
 }
 
+// --- RETURN & REFUND CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ReturnRequestDto {
+    pub id: String,
+    pub order_id: String,
+    pub buyer_id: String,
+    pub reason: String,
+    pub description: Option<String>,
+    pub evidence_urls: Vec<String>,
+    pub status: String,
+    pub refund_amount_cents: i64,
+    pub admin_notes: Option<String>,
+    pub processed_by: Option<String>,
+    pub processed_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateReturnRequest {
+    #[validate(length(min = 1, message = "Order ID wajib diisi"))]
+    pub order_id: String,
+    #[validate(length(min = 1, message = "Alasan retur wajib diisi"))]
+    pub reason: String,
+    #[validate(length(max = 1000, message = "Deskripsi maksimal 1000 karakter"))]
+    pub description: Option<String>,
+    pub evidence_urls: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ProcessReturnRequest {
+    #[validate(length(min = 1, message = "Aksi wajib diisi ('approve' atau 'reject')"))]
+    #[serde(alias = "status")]
+    pub action: String,
+    pub admin_notes: Option<String>,
+    #[serde(alias = "refund_amount_cents")]
+    pub refund_amount_override: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateReturnStatusRequest {
+    #[validate(length(min = 1, message = "Status baru wajib diisi"))]
+    pub status: String,
+    pub admin_notes: Option<String>,
+}
+
+#[async_trait]
+pub trait ReturnContract: Send + Sync {
+    /// Buyer: Create return request
+    async fn create_return_request(
+        &self,
+        buyer_id: &str,
+        req: CreateReturnRequest,
+    ) -> Result<ReturnRequestDto, ContractError>;
+
+    /// Buyer: List return requests for specific buyer
+    async fn list_buyer_returns(
+        &self,
+        buyer_id: &str,
+    ) -> Result<Vec<ReturnRequestDto>, ContractError>;
+
+    /// Get return request for a specific order
+    async fn get_return_by_order(
+        &self,
+        order_id: &str,
+    ) -> Result<Option<ReturnRequestDto>, ContractError>;
+
+    /// Admin: List all return requests (with optional status filter)
+    async fn list_all_returns(
+        &self,
+        status_filter: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<ReturnRequestDto>, ContractError>;
+
+    /// Admin: Process return (approve/reject)
+    async fn process_return(
+        &self,
+        return_id: &str,
+        admin_id: &str,
+        req: ProcessReturnRequest,
+    ) -> Result<ReturnRequestDto, ContractError>;
+
+    /// Admin: Update return status (e.g. return_shipped, received, refunded)
+    async fn update_return_status(
+        &self,
+        return_id: &str,
+        admin_id: &str,
+        req: UpdateReturnStatusRequest,
+    ) -> Result<ReturnRequestDto, ContractError>;
+}
+
+
