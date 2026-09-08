@@ -131,7 +131,7 @@ graph TD
 | 4 | [Product Review & Rating](issue4-product-review-rating.md) | [#55 Product Review & Rating System](https://github.com/cobacobiy/program1/issues/55) | 🟡 HIGH | 3-4 hari | `[x]` DONE |
 | 5 | [Shipping & Ongkir (RajaOngkir)](issue5-shipping-ongkir-integration.md) | [#56 Shipping / Ongkir Integration](https://github.com/cobacobiy/program1/issues/56) | 🔴 CRITICAL | 4-5 hari | `[x]` DONE |
 | 6 | [Sales Report & Export CSV/PDF](issue6-sales-report-export.md) | [#57 Sales Report & Export CSV/PDF](https://github.com/cobacobiy/program1/issues/57) | 🟡 HIGH | 2-3 hari | `[x]` DONE |
-| 7 | [Product Category & Filtering](issue7-product-category-filtering.md) | [#58 Product Category & Filtering](https://github.com/cobacobiy/program1/issues/58) | 🟡 HIGH | 2-3 hari | Independen |
+| 7 | [Product Category & Filtering](issue7-product-category-filtering.md) | [#58 Product Category & Filtering](https://github.com/cobacobiy/program1/issues/58) | 🟡 HIGH | 2-3 hari | `[x]` DONE |
 | 8 | [Multi-Language (i18n)](issue8-multi-language-i18n.md) | [#59 Multi-Language (i18n) Support](https://github.com/cobacobiy/program1/issues/59) | 🟢 MEDIUM | 2-3 hari | Independen |
 | 9 | [Notification Center](issue9-notification-center.md) | [#60 Notification Center](https://github.com/cobacobiy/program1/issues/60) | 🟡 HIGH | 3-4 hari | Independen |
 | 10 | [Return/Refund Management](issue10-return-refund-management.md) | [#61 Return & Refund Management](https://github.com/cobacobiy/program1/issues/61) | 🔴 CRITICAL | 4-5 hari | Order + Payment |

@@ -17,12 +17,12 @@ Issue ini menambahkan sistem kategori untuk organisasi produk yang lebih baik.
 
 ## 🎯 Acceptance Criteria
 
-- [ ] Admin bisa CRUD kategori (nama, deskripsi, icon/emoji)
-- [ ] Admin bisa assign produk ke kategori saat create/edit produk
-- [ ] Storefront menampilkan filter by kategori (sidebar atau tabs)
-- [ ] API catalog support query parameter `?category=electronics`
-- [ ] 1 produk bisa punya 1 kategori (simpel) atau banyak (many-to-many)
-- [ ] Unit test minimal 2 test case
+- [x] Admin bisa CRUD kategori (nama, deskripsi, icon/emoji)
+- [x] Admin bisa assign produk ke kategori saat create/edit produk
+- [x] Storefront menampilkan filter by kategori (sidebar atau tabs)
+- [x] API catalog support query parameter `?category=electronics`
+- [x] 1 produk bisa punya 1 kategori (simpel) atau banyak (many-to-many)
+- [x] Unit test minimal 2 test case
 
 ---
 

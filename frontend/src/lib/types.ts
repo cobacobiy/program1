@@ -28,8 +28,39 @@ export interface Product {
   stock: number;
   image_url?: string | null;
   category?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
   weight_grams?: number;
   created_at?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  sort_order: number;
+  is_active: boolean;
+  product_count: number;
+  created_at: string;
+}
+
+export interface CreateCategoryPayload {
+  name: string;
+  slug?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  sort_order?: number | null;
+}
+
+export interface UpdateCategoryPayload {
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  sort_order: number;
+  is_active: boolean;
 }
 
 export interface CatalogPageResponse {

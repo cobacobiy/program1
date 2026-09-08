@@ -26,12 +26,42 @@ function startFlashSaleTimer() {
 }
 
 // Category Pills Generator
-function renderCategoryPills() {
+async function renderCategoryPills() {
   const container = document.getElementById('category-bar');
   if (!container) return;
 
   const catalog = window.StoreState ? window.StoreState.catalog : (window.catalog || []);
   const activeCategory = window.StoreState ? window.StoreState.activeCategory : (window.activeCategory || "ALL");
+
+  let categoriesList = window.StoreState ? window.StoreState.categoriesList : window.categoriesList;
+  if (!categoriesList) {
+    try {
+      const res = await fetch('/api/v1/categories');
+      if (res.ok) {
+        categoriesList = await res.json();
+        if (window.StoreState) window.StoreState.categoriesList = categoriesList;
+        window.categoriesList = categoriesList;
+      }
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  if (categoriesList && categoriesList.length > 0) {
+    const allCount = categoriesList.reduce((s, c) => s + (c.product_count || 0), 0);
+    let html = `
+      <button class="category-pill ${activeCategory === 'ALL' ? 'active' : ''}" onclick="filterCategory('ALL')">
+        🔥 Semua Produk (${allCount})
+      </button>
+    `;
+    html += categoriesList.map(cat => `
+      <button class="category-pill ${cat.name === activeCategory || cat.slug === activeCategory ? 'active' : ''}" onclick="filterCategory('${cat.name}')">
+        ${cat.icon || '🏷️'} ${cat.name} (${cat.product_count || 0})
+      </button>
+    `).join('');
+    container.innerHTML = html;
+    return;
+  }
 
   const categories = ["ALL", ...new Set(catalog.map(p => p.category))];
 

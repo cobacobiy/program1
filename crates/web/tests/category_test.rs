@@ -5,7 +5,7 @@ use axum::{
     http::{header, Request, StatusCode},
 };
 use jsonwebtoken::{encode, EncodingKey, Header};
-use program1_contracts::{CatalogContract, JwtClaims};
+use program1_contracts::{CatalogItemDto, CategoryDto, JwtClaims, PaginatedResponse};
 use program1_core::init_database;
 use program1_module_analytics::AnalyticsModule;
 use program1_module_auth::AuthModule;
@@ -15,11 +15,11 @@ use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
-use serde_json::{json, Value};
+use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-async fn setup_test_app() -> (axum::Router, String, Uuid) {
+async fn setup_test_app() -> (axum::Router, String) {
     let secret = "test-jwt-secret-key-minimum-32-characters-length!".to_string();
     let pool = init_database("sqlite::memory:")
         .await
@@ -66,21 +66,6 @@ async fn setup_test_app() -> (axum::Router, String, Uuid) {
     let _ = catalog_module.seed_default_catalog().await;
     let _ = channel_module.seed_default_channels().await;
 
-    let test_item = catalog_module
-        .create_item(program1_contracts::CreateCatalogItemRequest {
-            name: "AURA Pro Mechanical Keyboard TKL".to_string(),
-            sku: "SKU-AURA-TKL99".to_string(),
-            category: "Peripherals".to_string(),
-            category_id: None,
-            price: 1200000.0,
-            stock: 50,
-            image_url: Some("https://example.com/tkl.jpg".to_string()),
-            description: Some("Tenkeyless layout with RGB switches".to_string()),
-            weight_grams: 500,
-        })
-        .await
-        .expect("Failed to create test catalog item");
-
     let state = AppState {
         store_name: "Aura Test Store".to_string(),
         store_currency: "IDR".to_string(),
@@ -122,108 +107,122 @@ async fn setup_test_app() -> (axum::Router, String, Uuid) {
     )
     .expect("Failed to encode seller test token");
 
-    (app, token, test_item.id)
+    (app, token)
 }
 
 #[tokio::test]
-async fn test_create_and_list_variants() {
-    let (app, token, product_id) = setup_test_app().await;
+async fn test_list_default_seeded_categories() {
+    let (app, _) = setup_test_app().await;
 
-    // 1. Create Variant S
-    let req = Request::builder()
-        .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
-        .body(Body::from(
-            json!({
-                "variant_name": "Ukuran",
-                "variant_value": "S",
-                "sku": "SKU-TKL-S",
-                "price_override": null,
-                "stock_quantity": 15
-            })
-            .to_string(),
-        ))
-        .unwrap();
-
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let v_s: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(v_s["variant_name"], "Ukuran");
-    assert_eq!(v_s["variant_value"], "S");
-    assert_eq!(v_s["stock_quantity"], 15);
-    let s_id = v_s["id"].as_str().unwrap().to_string();
-
-    // 2. Create Variant M with Price Override
-    let req = Request::builder()
-        .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
-        .body(Body::from(
-            json!({
-                "variant_name": "Ukuran",
-                "variant_value": "M",
-                "sku": "SKU-TKL-M",
-                "price_override": 1350000.0,
-                "stock_quantity": 20
-            })
-            .to_string(),
-        ))
-        .unwrap();
-
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-
-    // 3. Create Variant L
-    let req = Request::builder()
-        .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
-        .body(Body::from(
-            json!({
-                "variant_name": "Ukuran",
-                "variant_value": "L",
-                "sku": "SKU-TKL-L",
-                "price_override": 1500000.0,
-                "stock_quantity": 25
-            })
-            .to_string(),
-        ))
-        .unwrap();
-
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-
-    // 4. Public List variants -> should have 3
     let req = Request::builder()
         .method("GET")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
+        .uri("/api/v1/categories")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let categories: Vec<CategoryDto> = serde_json::from_slice(&body).unwrap();
+
+    assert!(!categories.is_empty());
+    assert!(categories.iter().any(|c| c.name == "Peripherals"));
+    assert!(categories.iter().any(|c| c.slug == "peripherals"));
+}
+
+#[tokio::test]
+async fn test_create_and_get_category() {
+    let (app, token) = setup_test_app().await;
+
+    // 1. Create Category
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/admin/categories")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::from(
+            json!({
+                "name": "Audio & Sound",
+                "slug": "audio-sound",
+                "description": "Headphones and DACs",
+                "icon": "🎧",
+                "sort_order": 15
+            })
+            .to_string(),
+        ))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let created: CategoryDto = serde_json::from_slice(&body).unwrap();
+    assert_eq!(created.name, "Audio & Sound");
+    assert_eq!(created.slug, "audio-sound");
+    assert_eq!(created.icon.as_deref(), Some("🎧"));
+
+    // 2. Get Category by ID
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/categories/{}", created.id))
         .body(Body::empty())
         .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let list: Vec<Value> = serde_json::from_slice(&body).unwrap();
-    assert_eq!(list.len(), 3);
 
-    // 5. Update Variant S
+    // 3. Get Category by Slug
     let req = Request::builder()
-        .method("PUT")
-        .uri(format!("/api/v1/catalog/{}/variants/{}", product_id, s_id))
+        .method("GET")
+        .uri("/api/v1/categories/audio-sound")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_update_category() {
+    let (app, token) = setup_test_app().await;
+
+    // 1. Create Category
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/admin/categories")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::from(
             json!({
-                "variant_name": "Ukuran",
-                "variant_value": "Small-Slim",
-                "sku": "SKU-TKL-S-SLIM",
-                "price_override": 1250000.0,
-                "stock_quantity": 30,
+                "name": "Smart Home",
+                "slug": "smart-home",
+                "description": "IoT gadgets",
+                "icon": "🏠",
+                "sort_order": 20
+            })
+            .to_string(),
+        ))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let created: CategoryDto = serde_json::from_slice(&body).unwrap();
+
+    // 2. Update Category
+    let req = Request::builder()
+        .method("PUT")
+        .uri(format!("/api/v1/admin/categories/{}", created.id))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::from(
+            json!({
+                "name": "Smart Home & IoT",
+                "slug": "smart-home-iot",
+                "description": "IoT devices and sensors",
+                "icon": "💡",
+                "sort_order": 22,
                 "is_active": true
             })
             .to_string(),
@@ -232,53 +231,74 @@ async fn test_create_and_list_variants() {
 
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let updated: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(updated["variant_value"], "Small-Slim");
-    assert_eq!(updated["stock_quantity"], 30);
 
-    // 6. Delete Variant S
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let updated: CategoryDto = serde_json::from_slice(&body).unwrap();
+    assert_eq!(updated.name, "Smart Home & IoT");
+    assert_eq!(updated.slug, "smart-home-iot");
+    assert_eq!(updated.icon.as_deref(), Some("💡"));
+}
+
+#[tokio::test]
+async fn test_filter_catalog_by_category() {
+    let (app, _) = setup_test_app().await;
+
+    // Filter by category name
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/catalog?category=Peripherals")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let response: PaginatedResponse<CatalogItemDto> = serde_json::from_slice(&body).unwrap();
+    assert!(!response.data.is_empty());
+    for item in &response.data {
+        assert_eq!(item.category, "Peripherals");
+    }
+
+    // Filter by slug
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/catalog?category=peripherals")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let response_slug: PaginatedResponse<CatalogItemDto> = serde_json::from_slice(&body).unwrap();
+    assert!(!response_slug.data.is_empty());
+}
+
+#[tokio::test]
+async fn test_category_delete_guard() {
+    let (app, token) = setup_test_app().await;
+
+    // Attempt to delete category that has products (Peripherals -> cat-002)
     let req = Request::builder()
         .method("DELETE")
-        .uri(format!("/api/v1/catalog/{}/variants/{}", product_id, s_id))
+        .uri("/api/v1/admin/categories/cat-002")
         .header(header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
-    // 7. Verify 2 variants remain
-    let req = Request::builder()
-        .method("GET")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
-        .body(Body::empty())
-        .unwrap();
-
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
-    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let list_after: Vec<Value> = serde_json::from_slice(&body).unwrap();
-    assert_eq!(list_after.len(), 2);
-}
-
-#[tokio::test]
-async fn test_variant_price_override() {
-    let (app, token, product_id) = setup_test_app().await;
-
-    // Create variant with price override
+    // Create a new empty category and delete it
     let req = Request::builder()
         .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
+        .uri("/api/v1/admin/categories")
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::from(
             json!({
-                "variant_name": "Switch Type",
-                "variant_value": "Linear Red",
-                "sku": "SKU-SW-RED",
-                "price_override": 1499000.0,
-                "stock_quantity": 40
+                "name": "Empty Category",
+                "slug": "empty-category"
             })
             .to_string(),
         ))
@@ -287,90 +307,48 @@ async fn test_variant_price_override() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let created: Value = serde_json::from_slice(&body).unwrap();
-    let vid = created["id"].as_str().unwrap();
+    let cat: CategoryDto = serde_json::from_slice(&body).unwrap();
 
-    // Fetch single variant
+    // Delete the empty category
     let req = Request::builder()
-        .method("GET")
-        .uri(format!("/api/v1/catalog/{}/variants/{}", product_id, vid))
+        .method("DELETE")
+        .uri(format!("/api/v1/admin/categories/{}", cat.id))
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
-    let fetched: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(fetched["price_override"], 1499000.0);
-    assert_eq!(fetched["variant_value"], "Linear Red");
+
+    // Verify it's gone
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/categories/{}", cat.id))
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn test_duplicate_variant_rejected() {
-    let (app, token, product_id) = setup_test_app().await;
+async fn test_category_admin_authorization() {
+    let (app, _) = setup_test_app().await;
 
-    // Create first variant
+    // Unauthorized category creation
     let req = Request::builder()
         .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
+        .uri("/api/v1/admin/categories")
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::from(
             json!({
-                "variant_name": "Color",
-                "variant_value": "Titanium Grey",
-                "sku": null,
-                "price_override": null,
-                "stock_quantity": 10
+                "name": "Unauthorized Cat",
+                "slug": "unauthorized-cat"
             })
             .to_string(),
         ))
         .unwrap();
 
-    let res = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-
-    // Try creating identical variant
-    let req_dup = Request::builder()
-        .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
-        .body(Body::from(
-            json!({
-                "variant_name": "Color",
-                "variant_value": "Titanium Grey",
-                "sku": null,
-                "price_override": null,
-                "stock_quantity": 5
-            })
-            .to_string(),
-        ))
-        .unwrap();
-
-    let res_dup = app.clone().oneshot(req_dup).await.unwrap();
-    assert_eq!(res_dup.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn test_variant_unauthorized_mutation() {
-    let (app, _token, product_id) = setup_test_app().await;
-
-    // Try POST without Authorization header
-    let req = Request::builder()
-        .method("POST")
-        .uri(format!("/api/v1/catalog/{}/variants", product_id))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            json!({
-                "variant_name": "Ukuran",
-                "variant_value": "XL",
-                "stock_quantity": 10
-            })
-            .to_string(),
-        ))
-        .unwrap();
-
-    let res = app.clone().oneshot(req).await.unwrap();
+    let res = app.oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 }

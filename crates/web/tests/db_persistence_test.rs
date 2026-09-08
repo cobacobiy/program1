@@ -49,6 +49,7 @@ async fn test_db_persistence_across_pool_reconnection() {
                 name: "Persistent Mechanical Switch Set".to_string(),
                 sku: "SKU-SWITCH-PERSIST".to_string(),
                 category: "Accessories".to_string(),
+                category_id: None,
                 price: 320000.0,
                 stock: 50,
                 image_url: None,

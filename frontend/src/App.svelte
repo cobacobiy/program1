@@ -9,6 +9,7 @@
     ProductRatingSummary,
     PaginatedPublicReviews,
     WishlistItem,
+    Category,
   } from './lib/types';
   import { formatRupiah } from './lib/currency';
   import { auth } from './lib/auth.svelte';
@@ -164,25 +165,44 @@
   let healthLoading = $state(false);
   let healthError = $state<string | null>(null);
 
-  // Catalog state
+  // Catalog & Category state
   let products = $state<Product[]>([]);
+  let categoriesList = $state<Category[]>([]);
+  let categoriesLoading = $state(false);
   let catalogLoading = $state(false);
   let catalogError = $state<string | null>(null);
   let searchQuery = $state('');
   let selectedCategory = $state<string>('all');
 
-  const categories = $derived(
-    ['all', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))] as string[]
+  const totalProductCount = $derived(
+    categoriesList.length > 0
+      ? categoriesList.reduce((acc, c) => acc + (c.product_count || 0), 0)
+      : products.length
   );
 
   const filteredProducts = $derived(
     products.filter(p => {
       const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           p.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      const matchCategory = selectedCategory === 'all' ||
+                            p.category === selectedCategory ||
+                            p.category_id === selectedCategory ||
+                            (p.category_name && p.category_name.toLowerCase() === selectedCategory.toLowerCase()) ||
+                            (categoriesList.find(c => c.slug === selectedCategory)?.name === p.category);
       return matchSearch && matchCategory;
     })
   );
+
+  async function fetchCategories() {
+    categoriesLoading = true;
+    try {
+      categoriesList = await apiFetch<Category[]>('/api/v1/categories');
+    } catch {
+      categoriesList = [];
+    } finally {
+      categoriesLoading = false;
+    }
+  }
 
   async function checkHealth() {
     healthLoading = true;
@@ -271,6 +291,7 @@
   onMount(() => {
     checkHealth();
     fetchCatalog();
+    fetchCategories();
   });
 </script>
 
@@ -372,15 +393,34 @@
             />
           </div>
 
-          {#if categories.length > 1}
-            <div class="category-pills">
-              {#each categories as cat}
+          {#if categoriesList.length > 0}
+            <div class="category-pills" role="tablist" aria-label="Filter kategori">
+              <button
+                class="pill-btn"
+                class:active={selectedCategory === 'all'}
+                onclick={() => selectedCategory = 'all'}
+                type="button"
+              >
+                <span class="pill-icon">🏷️</span>
+                <span class="pill-label">Semua Kategori</span>
+                {#if totalProductCount > 0}
+                  <span class="pill-count">{totalProductCount}</span>
+                {/if}
+              </button>
+              {#each categoriesList as cat (cat.id)}
                 <button
                   class="pill-btn"
-                  class:active={selectedCategory === cat}
-                  onclick={() => selectedCategory = cat}
+                  class:active={selectedCategory === cat.slug || selectedCategory === cat.name || selectedCategory === cat.id}
+                  onclick={() => selectedCategory = cat.name}
+                  type="button"
                 >
-                  {cat === 'all' ? 'Semua Kategori' : cat}
+                  {#if cat.icon}
+                    <span class="pill-icon">{cat.icon}</span>
+                  {/if}
+                  <span class="pill-label">{cat.name}</span>
+                  {#if cat.product_count > 0}
+                    <span class="pill-count">{cat.product_count}</span>
+                  {/if}
                 </button>
               {/each}
             </div>
@@ -952,9 +992,23 @@
   .category-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .pill-btn {
     background: #1e293b; color: #94a3b8; border: 1px solid #334155;
-    padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; cursor: pointer;
+    padding: 0.4rem 0.85rem; border-radius: 20px; font-size: 0.85rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.4rem; transition: all 0.15s ease;
   }
-  .pill-btn.active { background: #0284c7; color: #fff; border-color: #0284c7; font-weight: bold; }
+  .pill-btn:hover { background: #334155; color: #f1f5f9; border-color: #475569; }
+  .pill-btn.active {
+    background: #0284c7; color: #fff; border-color: #0284c7; font-weight: 600;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+  }
+  .pill-icon { font-size: 1rem; line-height: 1; }
+  .pill-label { line-height: 1; }
+  .pill-count {
+    background: rgba(255, 255, 255, 0.15); color: #cbd5e1; font-size: 0.72rem; font-weight: 700;
+    padding: 0.1rem 0.45rem; border-radius: 9999px; line-height: 1;
+  }
+  .pill-btn.active .pill-count {
+    background: rgba(255, 255, 255, 0.25); color: #ffffff;
+  }
 
   /* Catalog Grid */
   .catalog-grid {

@@ -369,6 +369,46 @@ fn default_weight_grams() -> i64 {
 // --- CATALOG CONTRACT ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CategoryDto {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub sort_order: i32,
+    pub is_active: bool,
+    pub product_count: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateCategoryRequest {
+    #[validate(length(min = 1, max = 100, message = "Nama kategori 1-100 karakter"))]
+    pub name: String,
+    #[validate(length(min = 1, max = 100, message = "Slug kategori 1-100 karakter"))]
+    pub slug: String,
+    #[validate(length(max = 500, message = "Deskripsi max 500 karakter"))]
+    pub description: Option<String>,
+    #[validate(length(max = 50, message = "Icon max 50 karakter"))]
+    pub icon: Option<String>,
+    pub sort_order: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateCategoryRequest {
+    #[validate(length(min = 1, max = 100, message = "Nama kategori 1-100 karakter"))]
+    pub name: String,
+    #[validate(length(min = 1, max = 100, message = "Slug kategori 1-100 karakter"))]
+    pub slug: String,
+    #[validate(length(max = 500, message = "Deskripsi max 500 karakter"))]
+    pub description: Option<String>,
+    #[validate(length(max = 50, message = "Icon max 50 karakter"))]
+    pub icon: Option<String>,
+    pub sort_order: Option<i32>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatalogItemDto {
     pub id: Uuid,
     pub name: String,
@@ -381,6 +421,10 @@ pub struct CatalogItemDto {
     pub created_at: DateTime<Utc>,
     #[serde(default = "default_weight_grams")]
     pub weight_grams: i64,
+    #[serde(default)]
+    pub category_id: Option<String>,
+    #[serde(default)]
+    pub category_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -406,6 +450,8 @@ pub struct CreateCatalogItemRequest {
     #[serde(default = "default_weight_grams")]
     #[validate(range(min = 1, max = 1000000, message = "Weight must be 1g - 1,000,000g"))]
     pub weight_grams: i64,
+    #[serde(default)]
+    pub category_id: Option<String>,
 }
 
 #[async_trait]
@@ -428,6 +474,20 @@ pub trait CatalogContract: Send + Sync {
         &self,
         req: CreateCatalogItemRequest,
     ) -> Result<CatalogItemDto, ContractError>;
+
+    // --- Category Management ---
+    async fn list_categories(&self) -> Result<Vec<CategoryDto>, ContractError>;
+    async fn get_category(&self, id_or_slug: &str) -> Result<CategoryDto, ContractError>;
+    async fn create_category(
+        &self,
+        req: CreateCategoryRequest,
+    ) -> Result<CategoryDto, ContractError>;
+    async fn update_category(
+        &self,
+        id: &str,
+        req: UpdateCategoryRequest,
+    ) -> Result<CategoryDto, ContractError>;
+    async fn delete_category(&self, id: &str) -> Result<(), ContractError>;
 
     // --- Variant Management ---
     async fn list_variants(
