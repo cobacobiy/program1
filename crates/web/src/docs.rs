@@ -22,6 +22,7 @@ use program1_contracts::{
     UpdateSpareStockRequest, UpdateUserPermissionsRequest, UpdateVariantRequest,
     UpdateWarehouseStockRequest, UserAccountDto, ValidateCouponRequest, WishlistItemDto,
     ShippingCity, ShippingCost, ShippingCostRequest, ShippingCourier, UpdateOrderTrackingRequest,
+    SalesReportItem, SalesReportQuery, SalesReportResponse, SalesReportRow, SalesReportSummary,
 };
 
 struct SecurityAddon;
@@ -88,6 +89,7 @@ impl Modify for SecurityAddon {
         handlers::get_buyer_profile_handler,
         handlers::update_buyer_profile_handler,
         handlers::get_analytics,
+        handlers::get_sales_report_handler,
         handlers::list_audit_logs,
         handlers::get_user_audit_logs,
         handlers::buyer_register_handler,
@@ -200,6 +202,11 @@ impl Modify for SecurityAddon {
             ShippingCostRequest,
             ShippingCity,
             UpdateOrderTrackingRequest,
+            SalesReportQuery,
+            SalesReportItem,
+            SalesReportRow,
+            SalesReportSummary,
+            SalesReportResponse,
         )
     ),
     tags(

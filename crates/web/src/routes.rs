@@ -404,6 +404,7 @@ pub fn create_app(state: AppState) -> Router {
             post(update_promotion_stock).route_layer(inventory_limit_layer),
         )
         .route("/api/v1/analytics", get(get_analytics))
+        .route("/api/v1/analytics/report", get(get_sales_report_handler))
         .route("/api/v1/audit/logs", get(list_audit_logs))
         .route("/api/v1/audit/logs/user/:id", get(get_user_audit_logs))
         .route("/api/v1/admin/reviews", get(admin_list_reviews_handler))

@@ -1094,9 +1094,57 @@ pub struct SalesAnalyticsDto {
     pub channel_breakdown: Vec<ChannelRevenueDto>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct SalesReportQuery {
+    pub date_from: Option<String>,
+    pub date_to: Option<String>,
+    pub status_filter: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SalesReportItem {
+    pub product_name: String,
+    pub quantity: i32,
+    pub unit_price_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SalesReportRow {
+    pub order_id: String,
+    pub order_date: String,
+    pub buyer_name: String,
+    pub buyer_email: Option<String>,
+    pub items: Vec<SalesReportItem>,
+    pub subtotal_cents: i64,
+    pub shipping_cents: i64,
+    pub discount_cents: i64,
+    pub total_cents: i64,
+    pub status: String,
+    pub payment_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SalesReportSummary {
+    pub total_revenue_cents: i64,
+    pub total_orders: i32,
+    pub average_order_value_cents: i64,
+    pub total_items_sold: i32,
+    pub orders_by_status: std::collections::HashMap<String, i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SalesReportResponse {
+    pub summary: SalesReportSummary,
+    pub rows: Vec<SalesReportRow>,
+}
+
 #[async_trait]
 pub trait AnalyticsContract: Send + Sync {
     async fn get_sales_analytics(&self) -> Result<SalesAnalyticsDto, ContractError>;
+    async fn generate_sales_report(
+        &self,
+        query: SalesReportQuery,
+    ) -> Result<SalesReportResponse, ContractError>;
 }
 
 // --- AUDIT LOGGING CONTRACT ---

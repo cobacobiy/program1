@@ -245,3 +245,42 @@ export interface ShippingCity {
   city_name: string;
   postal_code: string;
 }
+
+export interface SalesReportQuery {
+  date_from?: string;
+  date_to?: string;
+  status_filter?: string;
+}
+
+export interface SalesReportItem {
+  product_name: string;
+  quantity: number;
+  unit_price_cents: number;
+}
+
+export interface SalesReportRow {
+  order_id: string;
+  order_date: string;
+  buyer_name: string;
+  buyer_email?: string | null;
+  items: SalesReportItem[];
+  subtotal_cents: number;
+  shipping_cents: number;
+  discount_cents: number;
+  total_cents: number;
+  status: string;
+  payment_status: string;
+}
+
+export interface SalesReportSummary {
+  total_revenue_cents: number;
+  total_orders: number;
+  average_order_value_cents: number;
+  total_items_sold: number;
+  orders_by_status: Record<string, number>;
+}
+
+export interface SalesReportResponse {
+  summary: SalesReportSummary;
+  rows: SalesReportRow[];
+}

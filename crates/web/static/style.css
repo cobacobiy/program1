@@ -1197,4 +1197,12 @@ th {
   }
 }
 
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .sidebar, .nav-header, .report-filters button, .no-print, nav, .btn-sm { display: none !important; }
+  .report-table { width: 100% !important; border-collapse: collapse !important; }
+  .report-table th, .report-table td { border: 1px solid #000 !important; padding: 4px 8px !important; font-size: 10pt !important; color: #000 !important; }
+  .report-summary-card { border: 1px solid #000 !important; padding: 8px !important; color: #000 !important; }
+}
+
 
