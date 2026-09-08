@@ -3,6 +3,7 @@
   import { adminAuth } from './adminAuth.svelte';
   import { toast } from './toast.svelte';
   import { formatRupiah } from './currency';
+  import { i18n } from './i18n.svelte';
   import type { Product, ProductVariant, CreateVariantPayload, Coupon, CreateCouponPayload, DiscountType, ProductReview, PaginatedReviews, SalesReportResponse, Category, CreateCategoryPayload, UpdateCategoryPayload } from './types';
 
   interface AdminOrder {
@@ -647,23 +648,45 @@
     <div class="admin-container">
       <aside class="sidebar">
         <div class="side-header">
-          <h3>⚡ Admin Hub</h3>
+          <div class="side-brand-row">
+            <h3>⚡ {i18n.t('admin.hub_title', 'Admin Hub')}</h3>
+            <div class="admin-lang-pills" role="group" aria-label={i18n.t('common.language', 'Pilih Bahasa')}>
+              <button
+                class="btn-admin-lang"
+                class:active={i18n.current === 'id'}
+                onclick={() => i18n.setLanguage('id')}
+                type="button"
+                title="Bahasa Indonesia"
+              >
+                ID
+              </button>
+              <button
+                class="btn-admin-lang"
+                class:active={i18n.current === 'en'}
+                onclick={() => i18n.setLanguage('en')}
+                type="button"
+                title="English"
+              >
+                EN
+              </button>
+            </div>
+          </div>
           <span class="admin-name">User: <strong>{adminAuth.username}</strong></span>
         </div>
 
         <nav class="side-nav">
-          <button class:active={subTab === 'kpi'} onclick={() => subTab = 'kpi'}>📊 Ringkasan KPI</button>
-          <button class:active={subTab === 'reports'} onclick={() => { subTab = 'reports'; if (!salesReportData) loadSalesReport(); }}>📑 Laporan Penjualan</button>
-          <button class:active={subTab === 'catalog'} onclick={() => subTab = 'catalog'}>📦 Katalog Produk ({products.length})</button>
-          <button class:active={subTab === 'categories'} onclick={() => { subTab = 'categories'; fetchCategories(); }}>🏷️ Kategori Produk ({categories.length})</button>
-          <button class:active={subTab === 'inventory'} onclick={() => subTab = 'inventory'}>🏭 Stok & Inventori</button>
-          <button class:active={subTab === 'orders'} onclick={() => subTab = 'orders'}>🛒 Pesanan Masuk ({orders.length})</button>
-          <button class:active={subTab === 'coupons'} onclick={() => subTab = 'coupons'}>🏷️ Kupon Diskon ({coupons.length})</button>
-          <button class:active={subTab === 'reviews'} onclick={() => { subTab = 'reviews'; loadAdminReviews(1); }}>⭐ Moderasi Ulasan ({adminReviewsTotal})</button>
-          <button class:active={subTab === 'audit'} onclick={() => subTab = 'audit'}>📜 Audit Logs</button>
+          <button class:active={subTab === 'kpi'} onclick={() => subTab = 'kpi'}>📊 {i18n.t('admin.kpi_summary', 'Ringkasan KPI')}</button>
+          <button class:active={subTab === 'reports'} onclick={() => { subTab = 'reports'; if (!salesReportData) loadSalesReport(); }}>📑 {i18n.t('admin.sales_reports', 'Laporan Penjualan')}</button>
+          <button class:active={subTab === 'catalog'} onclick={() => subTab = 'catalog'}>📦 {i18n.t('admin.catalog_mgmt', 'Katalog Produk')} ({products.length})</button>
+          <button class:active={subTab === 'categories'} onclick={() => { subTab = 'categories'; fetchCategories(); }}>🏷️ {i18n.t('admin.category_mgmt', 'Kategori Produk')} ({categories.length})</button>
+          <button class:active={subTab === 'inventory'} onclick={() => subTab = 'inventory'}>🏭 {i18n.t('admin.inventory_mgmt', 'Stok & Inventori')}</button>
+          <button class:active={subTab === 'orders'} onclick={() => subTab = 'orders'}>🛒 {i18n.t('admin.orders_mgmt', 'Pesanan Masuk')} ({orders.length})</button>
+          <button class:active={subTab === 'coupons'} onclick={() => subTab = 'coupons'}>🏷️ {i18n.t('admin.coupons_mgmt', 'Kupon Diskon')} ({coupons.length})</button>
+          <button class:active={subTab === 'reviews'} onclick={() => { subTab = 'reviews'; loadAdminReviews(1); }}>⭐ {i18n.t('admin.reviews_mgmt', 'Moderasi Ulasan')} ({adminReviewsTotal})</button>
+          <button class:active={subTab === 'audit'} onclick={() => subTab = 'audit'}>📜 {i18n.t('admin.audit_logs', 'Audit Logs')}</button>
         </nav>
 
-        <button class="btn-logout" onclick={() => adminAuth.logout()}>🚪 Keluar</button>
+        <button class="btn-logout" onclick={() => adminAuth.logout()}>🚪 {i18n.t('nav.logout', 'Keluar')}</button>
       </aside>
 
       <section class="admin-main">
@@ -842,8 +865,8 @@
         {:else if subTab === 'catalog'}
           <div class="section-panel">
             <div class="panel-top">
-              <h2>📦 Manajemen Katalog Produk</h2>
-              <button class="btn-add-prod" onclick={() => isAddProductOpen = true}>+ Tambah Produk Baru</button>
+              <h2>📦 {i18n.t('admin.catalog_mgmt', 'Manajemen Katalog Produk')}</h2>
+              <button class="btn-add-prod" onclick={() => isAddProductOpen = true}>+ {i18n.t('admin.add_product', 'Tambah Produk Baru')}</button>
             </div>
 
             {#if loading}
@@ -890,10 +913,10 @@
           <div class="section-panel">
             <div class="panel-top">
               <div>
-                <h2>🏷️ Manajemen Kategori Produk</h2>
+                <h2>🏷️ {i18n.t('admin.category_mgmt', 'Manajemen Kategori Produk')}</h2>
                 <span class="panel-subtitle">Kelola taksonomi, ikon emoji, urutan, dan pengelompokan produk toko</span>
               </div>
-              <button class="btn-add-prod" onclick={() => isAddCategoryOpen = true}>+ Tambah Kategori Baru</button>
+              <button class="btn-add-prod" onclick={() => isAddCategoryOpen = true}>+ {i18n.t('admin.add_category', 'Tambah Kategori Baru')}</button>
             </div>
 
             {#if categoriesLoading || loading}
@@ -1059,8 +1082,8 @@
         {:else if subTab === 'coupons'}
           <div class="section-panel">
             <div class="panel-top">
-              <h2>🏷️ Manajemen Kupon & Kode Promo</h2>
-              <button class="btn-add-prod" onclick={() => isAddCouponOpen = true}>+ Buat Kupon Baru</button>
+              <h2>🏷️ {i18n.t('admin.coupons_mgmt', 'Manajemen Kupon & Kode Promo')}</h2>
+              <button class="btn-add-prod" onclick={() => isAddCouponOpen = true}>+ {i18n.t('admin.add_coupon', 'Buat Kupon Baru')}</button>
             </div>
 
             {#if loading}
@@ -1594,7 +1617,15 @@
     width: 220px; background: #0f172a; border: 1px solid #1e293b;
     border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;
   }
-  .side-header h3 { margin: 0 0 0.25rem; color: #38bdf8; font-size: 1.15rem; }
+  .side-header h3 { margin: 0; color: #38bdf8; font-size: 1.15rem; }
+  .side-brand-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+  .admin-lang-pills { display: flex; gap: 2px; background: #1e293b; border-radius: 12px; padding: 2px; border: 1px solid #334155; }
+  .btn-admin-lang {
+    background: transparent; border: none; color: #94a3b8; font-size: 0.7rem; font-weight: 700;
+    padding: 0.15rem 0.45rem; border-radius: 10px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-admin-lang:hover { color: #fff; }
+  .btn-admin-lang.active { background: #0284c7; color: #fff; }
   .admin-name { font-size: 0.8rem; color: #94a3b8; }
   .side-nav { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; }
   .side-nav button {

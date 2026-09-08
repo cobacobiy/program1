@@ -445,17 +445,27 @@ pub fn create_app(state: AppState) -> Router {
 
     // Static pages
     let admin_page = std::fs::read_to_string("crates/web/static/index.html")
+        .or_else(|_| std::fs::read_to_string("static/index.html"))
         .unwrap_or_else(|_| "<h1>Admin Hub</h1>".to_string());
     let store_page = std::fs::read_to_string("crates/web/static/store.html")
+        .or_else(|_| std::fs::read_to_string("static/store.html"))
         .unwrap_or_else(|_| "<h1>Storefront</h1>".to_string());
     let store_page_alt = store_page.clone();
 
     // Svelte SPA page support (if built)
-    let svelte_page = std::fs::read_to_string("crates/web/static/dist/index.html").ok();
+    let svelte_page = std::fs::read_to_string("crates/web/static/dist/index.html")
+        .or_else(|_| std::fs::read_to_string("static/dist/index.html"))
+        .ok();
     let root_page = svelte_page.clone().unwrap_or(store_page);
 
+    let (dist_assets_dir, static_dir) = if std::path::Path::new("crates/web/static").exists() {
+        ("crates/web/static/dist/assets", "crates/web/static")
+    } else {
+        ("static/dist/assets", "static")
+    };
+
     let assets_service =
-        ServeDir::new("crates/web/static/dist/assets").fallback(ServeDir::new("crates/web/static"));
+        ServeDir::new(dist_assets_dir).fallback(ServeDir::new(static_dir));
 
     let mut static_routes = Router::new()
         .route("/admin", get(move || async move { Html(admin_page) }))

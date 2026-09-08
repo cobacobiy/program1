@@ -13,6 +13,7 @@
   <script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="SB-Mid-client-xxx" id="midtrans-snap-script"></script>
   <!-- Store Modular Scripts -->
   <script src="/assets/store/store-toast.js" defer></script>
+  <script src="/assets/store/store-i18n.js" defer></script>
   <script src="/assets/store/store-main.js" defer></script>
   <script src="/assets/store/store-auth.js" defer></script>
   <script src="/assets/store/store-catalog.js" defer></script>
@@ -35,19 +36,24 @@
       <!-- DESKTOP SEARCH BAR -->
       <div class="search-container">
         <span class="search-icon">🔍</span>
-        <input type="text" id="search-input" class="search-input" placeholder="Cari produk impian Anda di Shopee Official Store...">
+        <input type="text" id="search-input" class="search-input" data-i18n-placeholder="catalog.search_placeholder" placeholder="Cari produk impian Anda di Shopee Official Store...">
       </div>
 
       <div class="header-actions">
         <!-- BUYER LOGIN BADGE / BUTTON -->
-        <button class="btn-login-store" onclick="openBuyerLoginModal()" id="btn-buyer-login">🔑 Masuk Pembeli</button>
+        <button class="btn-login-store" onclick="openBuyerLoginModal()" id="btn-buyer-login" data-i18n="auth.login_title">🔑 Masuk Pembeli</button>
         <div id="buyer-profile-badge" style="display:none" class="buyer-profile" onclick="openBuyerLoginModal()">
           <div class="buyer-avatar" id="buyer-avatar">P</div>
           <span id="buyer-name-label" style="font-size:0.8rem; font-weight:600; color:#fff">Pembeli</span>
         </div>
 
         <!-- BUYER ORDERS BUTTON -->
-        <button class="btn-login-store" id="btn-buyer-orders" style="display:none" onclick="openBuyerOrdersModal()">📦 Pesanan Saya</button>
+        <button class="btn-login-store" id="btn-buyer-orders" style="display:none" onclick="openBuyerOrdersModal()" data-i18n="order.title">📦 Pesanan Saya</button>
+
+        <!-- LANGUAGE TOGGLE BUTTON -->
+        <button class="theme-toggle-btn" id="store-lang-toggle" onclick="toggleStoreLanguage()" title="Ganti Bahasa (ID / EN)">
+          <span class="theme-icon" id="store-lang-icon">🇮🇩 ID</span>
+        </button>
 
         <!-- THEME TOGGLE BUTTON -->
         <button class="theme-toggle-btn" id="store-theme-toggle" onclick="toggleStoreTheme()" title="Ganti Tema (Gelap / Terang)">
@@ -55,7 +61,7 @@
         </button>
 
         <button class="cart-trigger" onclick="openCart()">
-          🛒 <span class="cart-label">Keranjang</span> <span class="cart-badge" id="cart-count">0</span>
+          🛒 <span class="cart-label" data-i18n="cart.title">Keranjang</span> <span class="cart-badge" id="cart-count">0</span>
         </button>
       </div>
     </div>

@@ -15,6 +15,7 @@
   import { auth } from './lib/auth.svelte';
   import { cart } from './lib/cart.svelte';
   import { toast } from './lib/toast.svelte';
+  import { i18n } from './lib/i18n.svelte';
   import { apiFetch } from './lib/api';
 
   import AuthModal from './lib/AuthModal.svelte';
@@ -332,13 +333,13 @@
 
       <nav class="nav-tabs">
         <button class:active={activeTab === 'store'} onclick={() => activeTab = 'store'}>
-          🏪 Katalog Toko
+          🏪 {i18n.t('nav.products', 'Katalog Toko')}
         </button>
         <button class:active={activeTab === 'admin'} onclick={() => activeTab = 'admin'}>
-          ⚙️ Admin Hub
+          ⚙️ {i18n.t('nav.admin', 'Admin Hub')}
         </button>
         <button class:active={activeTab === 'diagnostic'} onclick={() => activeTab = 'diagnostic'}>
-          🔍 Server Health
+          🔍 {i18n.t('nav.diagnostics', 'Server Health')}
           {#if healthData}
             <span class="status-dot green"></span>
           {:else}
@@ -348,8 +349,30 @@
       </nav>
 
       <div class="nav-user-actions">
-        <button class="btn-wishlist" onclick={openWishlistModal} title="Wishlist Saya">
-          ❤️ Wishlist
+        <!-- Language Switcher -->
+        <div class="lang-switch-pills" role="group" aria-label={i18n.t('common.language', 'Pilih Bahasa')}>
+          <button
+            class="lang-pill"
+            class:active={i18n.current === 'id'}
+            onclick={() => i18n.setLanguage('id')}
+            title="Bahasa Indonesia"
+            type="button"
+          >
+            🇮🇩 ID
+          </button>
+          <button
+            class="lang-pill"
+            class:active={i18n.current === 'en'}
+            onclick={() => i18n.setLanguage('en')}
+            title="English"
+            type="button"
+          >
+            🇬🇧 EN
+          </button>
+        </div>
+
+        <button class="btn-wishlist" onclick={openWishlistModal} title={i18n.t('nav.wishlist', 'Wishlist Saya')}>
+          ❤️ {i18n.t('nav.wishlist', 'Wishlist')}
           {#if wishlist.length > 0}
             <span class="wishlist-count">{wishlist.length}</span>
           {/if}
@@ -357,20 +380,20 @@
 
         {#if auth.user}
           <button class="btn-orders" onclick={() => isOrdersOpen = true}>
-            📦 Pesanan Saya
+            📦 {i18n.t('nav.orders', 'Pesanan Saya')}
           </button>
           <div class="user-pill">
             <span class="uname">👤 {auth.user.name}</span>
-            <button class="btn-logout" onclick={() => auth.logout()}>Keluar</button>
+            <button class="btn-logout" onclick={() => auth.logout()}>{i18n.t('nav.logout', 'Keluar')}</button>
           </div>
         {:else}
           <button class="btn-login" onclick={() => auth.isModalOpen = true}>
-            Masuk / Daftar
+            {i18n.t('auth.login_title', 'Masuk')} / {i18n.t('auth.register_title', 'Daftar')}
           </button>
         {/if}
 
         <button class="cart-trigger" onclick={() => cart.isOpen = true}>
-          🛒 Keranjang
+          🛒 {i18n.t('nav.cart', 'Keranjang')}
           {#if cart.totalItems > 0}
             <span class="cart-count">{cart.totalItems}</span>
           {/if}
@@ -388,7 +411,7 @@
             <span class="s-icon">🔍</span>
             <input
               type="text"
-              placeholder="Cari produk impianmu..."
+              placeholder={i18n.t('catalog.search_placeholder', 'Cari produk impianmu...')}
               bind:value={searchQuery}
             />
           </div>
@@ -402,7 +425,7 @@
                 type="button"
               >
                 <span class="pill-icon">🏷️</span>
-                <span class="pill-label">Semua Kategori</span>
+                <span class="pill-label">{i18n.t('catalog.all_categories', 'Semua Kategori')}</span>
                 {#if totalProductCount > 0}
                   <span class="pill-count">{totalProductCount}</span>
                 {/if}
@@ -435,12 +458,12 @@
           </div>
         {:else if catalogError}
           <div class="alert-box error">
-            <p><strong>Gagal Memuat Produk:</strong> {catalogError}</p>
-            <button class="btn-retry" onclick={fetchCatalog}>Coba Lagi</button>
+            <p><strong>{i18n.t('catalog.load_failed', 'Gagal Memuat Produk')}:</strong> {catalogError}</p>
+            <button class="btn-retry" onclick={fetchCatalog}>{i18n.t('catalog.retry', 'Coba Lagi')}</button>
           </div>
         {:else if filteredProducts.length === 0}
           <div class="empty-box">
-            <p>Produk tidak ditemukan untuk pencarian "{searchQuery}".</p>
+            <p>{i18n.t('catalog.empty_search', 'Produk tidak ditemukan untuk pencarian')} "{searchQuery}".</p>
           </div>
         {:else}
           <div class="catalog-grid">
@@ -459,7 +482,7 @@
                     <span class="placeholder-emoji">📦</span>
                   {/if}
                   {#if product.stock <= 0}
-                    <span class="badge-habis">Habis</span>
+                    <span class="badge-habis">{i18n.t('catalog.out_of_stock', 'Habis')}</span>
                   {/if}
                   <button
                     class="btn-fav-toggle"
@@ -496,7 +519,7 @@
                       <strong class="rating-score">{ratingSummaries[product.id].average_rating.toFixed(1)}</strong>
                       <span class="review-count">({ratingSummaries[product.id].total_reviews})</span>
                     {:else}
-                      <span class="rating-none">☆ Belum ada ulasan</span>
+                      <span class="rating-none">☆ {i18n.t('product.no_reviews', 'Belum ada ulasan')}</span>
                     {/if}
                   </button>
 
@@ -504,7 +527,7 @@
                   
                   <div class="item-meta">
                     <span class="price-value">{formatRupiah(product.price_cents)}</span>
-                    <small class="stock-value">Stok: {product.stock}</small>
+                    <small class="stock-value">{i18n.t('product.stock_available', 'Stok')}: {product.stock}</small>
                   </div>
 
                   <div class="card-actions-row">
@@ -513,14 +536,14 @@
                       onclick={() => openProductDetail(product)}
                       type="button"
                     >
-                      Detail & Ulasan
+                      {i18n.t('catalog.view_detail', 'Detail & Ulasan')}
                     </button>
                     <button
                       class="btn-add"
                       disabled={product.stock <= 0}
                       onclick={() => handleAddToCartClick(product)}
                     >
-                      {product.stock <= 0 ? 'Habis' : '+ Keranjang'}
+                      {product.stock <= 0 ? i18n.t('catalog.out_of_stock', 'Habis') : `+ ${i18n.t('catalog.add_to_cart', 'Keranjang')}`}
                     </button>
                   </div>
                 </div>
@@ -579,15 +602,15 @@
     >
       <div class="cart-drawer" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div class="drawer-header">
-          <h3>🛒 Keranjang ({cart.totalItems})</h3>
+          <h3>🛒 {i18n.t('cart.title', 'Keranjang')} ({cart.totalItems})</h3>
           <button class="close-drawer" onclick={() => cart.isOpen = false}>&times;</button>
         </div>
 
         <div class="drawer-body">
           {#if cart.items.length === 0}
             <div class="empty-cart-state">
-              <p>Keranjang Anda masih kosong.</p>
-              <button class="btn-explore" onclick={() => cart.isOpen = false}>Mulai Belanja</button>
+              <p>{i18n.t('cart.empty', 'Keranjang Anda masih kosong.')}</p>
+              <button class="btn-explore" onclick={() => cart.isOpen = false}>{i18n.t('cart.continue_shopping', 'Mulai Belanja')}</button>
             </div>
           {:else}
             <div class="cart-lines">
@@ -614,11 +637,11 @@
         {#if cart.items.length > 0}
           <div class="drawer-footer">
             <div class="total-bar">
-              <span>Total:</span>
+              <span>{i18n.t('cart.total', 'Total')}:</span>
               <strong class="total-text">{formatRupiah(cart.totalAmountCents)}</strong>
             </div>
             <button class="btn-checkout" onclick={handleStartCheckout}>
-              Lanjut ke Pembayaran 💳
+              {i18n.t('cart.checkout_btn', 'Lanjut ke Pembayaran')} 💳
             </button>
           </div>
         {/if}
@@ -632,14 +655,14 @@
       <div class="modal-card variant-picker-modal" onclick={(e) => e.stopPropagation()} role="dialog">
         <div class="modal-header">
           <div>
-            <h3>Pilih Varian Produk</h3>
+            <h3>{i18n.t('product.select_variant', 'Pilih Varian Produk')}</h3>
             <p class="picker-prod-name">{variantPickerProduct.name}</p>
           </div>
           <button class="close-btn" onclick={() => variantPickerProduct = null}>&times;</button>
         </div>
 
         <div class="picker-body">
-          <label class="picker-label">Pilihan Varian ({variantPickerProduct.name}):</label>
+          <label class="picker-label">{i18n.t('product.select_variant', 'Pilihan Varian')} ({variantPickerProduct.name}):</label>
           <div class="variant-chips">
             {#each availableVariants as v (v.id)}
               <button
@@ -651,21 +674,21 @@
                 {#if v.price_override && v.price_override > 0}
                   <small class="v-price">{formatRupiah(v.price_override)}</small>
                 {/if}
-                <small class="v-stock">Stok: {v.stock_quantity}</small>
+                <small class="v-stock">{i18n.t('product.stock_available', 'Stok')}: {v.stock_quantity}</small>
               </button>
             {/each}
           </div>
 
           <div class="picker-summary">
             <div class="summary-line">
-              <span>Harga:</span>
+              <span>{i18n.t('product.price', 'Harga')}:</span>
               <strong class="picker-price">
                 {formatRupiah(selectedVariant?.price_override && selectedVariant.price_override > 0 ? selectedVariant.price_override : variantPickerProduct.price_cents)}
               </strong>
             </div>
             <div class="summary-line">
-              <span>Stok Varian:</span>
-              <span>{selectedVariant ? selectedVariant.stock_quantity : variantPickerProduct.stock} unit</span>
+              <span>{i18n.t('product.stock_available', 'Stok Varian')}:</span>
+              <span>{selectedVariant ? selectedVariant.stock_quantity : variantPickerProduct.stock} {i18n.t('catalog.units', 'unit')}</span>
             </div>
           </div>
 
@@ -674,7 +697,7 @@
             disabled={selectedVariant ? selectedVariant.stock_quantity <= 0 : false}
             onclick={confirmAddVariantToCart}
           >
-            + Masukkan ke Keranjang
+            {i18n.t('product.confirm_variant', '+ Masukkan ke Keranjang')}
           </button>
         </div>
       </div>
@@ -719,10 +742,10 @@
               <div class="detail-price-line">
                 <span class="detail-price">{formatRupiah(selectedProductForDetail.price_cents)}</span>
                 <span class="detail-stock" class:out={selectedProductForDetail.stock <= 0}>
-                  {selectedProductForDetail.stock > 0 ? `Stok: ${selectedProductForDetail.stock} unit` : 'Stok Habis'}
+                  {selectedProductForDetail.stock > 0 ? `${i18n.t('product.stock_available', 'Stok')}: ${selectedProductForDetail.stock} ${i18n.t('catalog.units', 'unit')}` : i18n.t('catalog.out_of_stock', 'Stok Habis')}
                 </span>
               </div>
-              <p class="detail-desc">{selectedProductForDetail.description || 'Tidak ada deskripsi produk.'}</p>
+              <p class="detail-desc">{selectedProductForDetail.description || '-'}</p>
 
               <div class="detail-actions-row">
                 <button
@@ -734,7 +757,7 @@
                     }
                   }}
                 >
-                  {selectedProductForDetail.stock <= 0 ? 'Stok Habis' : '🛒 Masukkan ke Keranjang'}
+                  {selectedProductForDetail.stock <= 0 ? i18n.t('catalog.out_of_stock', 'Stok Habis') : `🛒 ${i18n.t('product.confirm_variant', 'Masukkan ke Keranjang')}`}
                 </button>
                 <button
                   class="btn-fav-detail"
@@ -746,7 +769,7 @@
                   }}
                   type="button"
                 >
-                  {isProductInWishlist(selectedProductForDetail.id) ? '❤️ Hapus dari Wishlist' : '🤍 Simpan ke Wishlist'}
+                  {isProductInWishlist(selectedProductForDetail.id) ? '❤️ Wishlist' : '🤍 Wishlist'}
                 </button>
               </div>
             </div>
@@ -754,7 +777,7 @@
 
           <!-- Reviews & Rating Section -->
           <div class="reviews-section">
-            <h4 class="reviews-heading">⭐ Ulasan & Penilaian Pembeli</h4>
+            <h4 class="reviews-heading">⭐ {i18n.t('product.reviews_title', 'Ulasan & Penilaian Pembeli')}</h4>
 
             <!-- Rating Summary Grid -->
             <div class="rating-summary-container">
@@ -771,7 +794,7 @@
                   {/if}
                 </div>
                 <small class="total-rev-text">
-                  {activeRatingSummary ? activeRatingSummary.total_reviews : 0} ulasan terverifikasi
+                  {activeRatingSummary ? activeRatingSummary.total_reviews : 0} {i18n.t('catalog.rating', 'ulasan')}
                 </small>
               </div>
 
@@ -795,11 +818,10 @@
             <!-- Review Cards List -->
             <div class="reviews-list-container">
               {#if reviewsLoading}
-                <p class="loading-revs">Memuat ulasan produk...</p>
+                <p class="loading-revs">{i18n.t('common.loading', 'Memuat ulasan...')}</p>
               {:else if activeReviews.length === 0}
                 <div class="empty-reviews">
-                  <p>Belum ada ulasan untuk produk ini.</p>
-                  <small>Jadilah yang pertama mencoba dan memberikan ulasan setelah pesanan terkirim!</small>
+                  <p>{i18n.t('product.no_reviews', 'Belum ada ulasan untuk produk ini.')}</p>
                 </div>
               {:else}
                 <div class="reviews-cards">
@@ -815,7 +837,7 @@
                             </div>
                           </div>
                         </div>
-                        <span class="rev-date">{new Date(r.created_at).toLocaleDateString('id-ID')}</span>
+                        <span class="rev-date">{new Date(r.created_at).toLocaleDateString(i18n.current === 'id' ? 'id-ID' : 'en-US')}</span>
                       </div>
 
                       {#if r.review_text}
@@ -935,6 +957,34 @@
   .status-dot.yellow { background: #f59e0b; }
 
   .nav-user-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .lang-switch-pills {
+    display: flex;
+    align-items: center;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 20px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .lang-pill {
+    background: transparent;
+    color: #94a3b8;
+    border: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .lang-pill:hover {
+    color: #fff;
+  }
+  .lang-pill.active {
+    background: #0284c7;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(2, 132, 199, 0.4);
+  }
   .user-pill {
     display: flex; align-items: center; gap: 0.5rem;
     background: #1e293b; padding: 0.35rem 0.75rem; border-radius: 20px; border: 1px solid #334155;
