@@ -100,6 +100,7 @@ async fn setup_test_app() -> (axum::Router, String, String, Uuid, Uuid) {
         coupon_contract: coupon_module,
         review_contract: review_module,
         shipping_contract: shipping_module,
+        notification_contract: Arc::new(program1_module_notification::NotificationModule::new(pool.clone())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

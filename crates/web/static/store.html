@@ -20,6 +20,7 @@
   <script src="/assets/store/store-cart.js" defer></script>
   <script src="/assets/store/store-checkout.js" defer></script>
   <script src="/assets/store/store-chat.js" defer></script>
+  <script src="/assets/store/store-notification.js" defer></script>
 </head>
 <body>
   <!-- SHOPEE STYLE HEADER TOPBAR -->
@@ -49,6 +50,23 @@
 
         <!-- BUYER ORDERS BUTTON -->
         <button class="btn-login-store" id="btn-buyer-orders" style="display:none" onclick="openBuyerOrdersModal()" data-i18n="order.title">📦 Pesanan Saya</button>
+
+        <!-- BUYER NOTIFICATION BELL -->
+        <div class="notification-container" id="buyer-notification-container" style="display:none">
+          <button class="theme-toggle-btn notif-bell-btn" id="buyer-notif-btn" onclick="toggleStoreNotifications()" title="Notifikasi" type="button">
+            <span class="theme-icon">🔔</span>
+            <span class="notif-badge" id="buyer-notif-badge" style="display:none">0</span>
+          </button>
+          <div class="notification-dropdown" id="buyer-notification-dropdown" style="display:none">
+            <div class="notif-dropdown-header">
+              <span style="font-weight:700; font-size:0.875rem">Notifikasi</span>
+              <button class="notif-mark-all" onclick="markAllStoreNotificationsRead()" type="button">Tandai sudah dibaca</button>
+            </div>
+            <div class="notif-list" id="buyer-notif-list">
+              <div class="notif-empty">Memuat notifikasi...</div>
+            </div>
+          </div>
+        </div>
 
         <!-- LANGUAGE TOGGLE BUTTON -->
         <button class="theme-toggle-btn" id="store-lang-toggle" onclick="toggleStoreLanguage()" title="Ganti Bahasa (ID / EN)">

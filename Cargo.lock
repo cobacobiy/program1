@@ -1845,6 +1845,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "program1-module-notification"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "program1-contracts",
+ "program1-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "program1-module-order"
 version = "0.1.0"
 dependencies = [
@@ -1949,6 +1965,7 @@ dependencies = [
  "program1-module-chat",
  "program1-module-coupon",
  "program1-module-inventory",
+ "program1-module-notification",
  "program1-module-order",
  "program1-module-payment",
  "program1-module-review",

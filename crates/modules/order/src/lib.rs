@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
-    CatalogContract, ChannelType, ContractError, InventoryContract, OmniOrderDto, OrderContract,
-    OrderItemDto, OrderStatus, PaginatedResponse, ShippingAddressSnapshot,
-    StorefrontOrderItemRequest, StorefrontOrderRequest,
+    CatalogContract, ChannelType, ContractError, InventoryContract, NotificationContract,
+    OmniOrderDto, OrderContract, OrderItemDto, OrderStatus, PaginatedResponse,
+    ShippingAddressSnapshot, StorefrontOrderItemRequest, StorefrontOrderRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -16,6 +16,7 @@ pub struct OrderModule {
     catalog_contract: Arc<dyn CatalogContract>,
     inventory_contract: Arc<dyn InventoryContract>,
     email_sender: Option<Arc<dyn program1_core::EmailSender>>,
+    notification_contract: Option<Arc<dyn NotificationContract>>,
     store_name: String,
 }
 
@@ -30,6 +31,7 @@ impl OrderModule {
             catalog_contract,
             inventory_contract,
             email_sender: None,
+            notification_contract: None,
             store_name: "AURA Storefront".to_string(),
         }
     }
@@ -41,6 +43,14 @@ impl OrderModule {
     ) -> Self {
         self.email_sender = Some(email_sender);
         self.store_name = store_name.into();
+        self
+    }
+
+    pub fn with_notification_contract(
+        mut self,
+        notification_contract: Arc<dyn NotificationContract>,
+    ) -> Self {
+        self.notification_contract = Some(notification_contract);
         self
     }
 
@@ -341,6 +351,43 @@ impl OrderContract for OrderModule {
                     }
                 });
             }
+        }
+
+        if let Some(ref notif) = self.notification_contract {
+            let notif = notif.clone();
+            let oid_str = order_id.to_string();
+            let c_name = req.customer_name.trim().to_string();
+            let b_id = req.buyer_id.clone();
+
+            tokio::spawn(async move {
+                // 1. Notify admin/seller of new order
+                let admin_title = "Pesanan Baru Masuk";
+                let admin_msg = format!("Pesanan baru #{} dibuat oleh {}.", &oid_str[..8.min(oid_str.len())], c_name);
+                let _ = notif.create_notification(
+                    "seller",
+                    "admin",
+                    admin_title,
+                    &admin_msg,
+                    "new_order",
+                    Some(&oid_str),
+                    Some("order"),
+                ).await;
+
+                // 2. Notify buyer if buyer_id exists
+                if let Some(ref buyer_id) = b_id {
+                    let buyer_title = "Pesanan Berhasil Dibuat";
+                    let buyer_msg = format!("Pesanan #{} berhasil dibuat. Silakan lakukan pembayaran.", &oid_str[..8.min(oid_str.len())]);
+                    let _ = notif.create_notification(
+                        "buyer",
+                        &buyer_id.to_string(),
+                        buyer_title,
+                        &buyer_msg,
+                        "order_status",
+                        Some(&oid_str),
+                        Some("order"),
+                    ).await;
+                }
+            });
         }
 
         Ok(OmniOrderDto {
@@ -672,6 +719,69 @@ impl OrderContract for OrderModule {
                     _ => {}
                 }
             }
+        }
+
+        if let Some(ref notif) = self.notification_contract {
+            let notif = notif.clone();
+            let oid_str = order_id.to_string();
+            let buyer_id = updated_order.buyer_id.clone();
+            let tracking = updated_order.tracking_number.clone().unwrap_or_else(|| "-".to_string());
+            let status_str = new_status.as_str().to_string();
+
+            tokio::spawn(async move {
+                let (title, message) = match status_str.as_str() {
+                    "PAID" => (
+                        "Pembayaran Terkonfirmasi",
+                        format!("Pembayaran untuk pesanan #{} telah kami terima dan diverifikasi.", &oid_str[..8.min(oid_str.len())]),
+                    ),
+                    "PROCESSING" => (
+                        "Pesanan Sedang Diproses",
+                        format!("Pesanan #{} sedang disiapkan oleh tim penjual.", &oid_str[..8.min(oid_str.len())]),
+                    ),
+                    "SHIPPED" => (
+                        "Pesanan Telah Dikirim",
+                        format!("Pesanan #{} telah diserahkan ke kurir. No. Resi: {}", &oid_str[..8.min(oid_str.len())], tracking),
+                    ),
+                    "DELIVERED" => (
+                        "Pesanan Telah Sampai",
+                        format!("Pesanan #{} telah sampai tujuan. Jangan lupa beri ulasan produk!", &oid_str[..8.min(oid_str.len())]),
+                    ),
+                    "CANCELLED" => (
+                        "Pesanan Dibatalkan",
+                        format!("Pesanan #{} telah dibatalkan.", &oid_str[..8.min(oid_str.len())]),
+                    ),
+                    _ => (
+                        "Pembaruan Status Pesanan",
+                        format!("Status pesanan #{} kini menjadi: {}.", &oid_str[..8.min(oid_str.len())], status_str),
+                    ),
+                };
+
+                // Notify buyer if buyer_id is present
+                if let Some(ref b_id) = buyer_id {
+                    let _ = notif.create_notification(
+                        "buyer",
+                        &b_id.to_string(),
+                        title,
+                        &message,
+                        "order_status",
+                        Some(&oid_str),
+                        Some("order"),
+                    ).await;
+                }
+
+                // Also notify seller/admin for major status changes
+                let admin_title = format!("Status Pesanan Diubah: {}", status_str);
+                let admin_msg = format!("Pesanan #{} statusnya kini {}.", &oid_str[..8.min(oid_str.len())], status_str);
+                let _ = notif.create_notification(
+                    "seller",
+                    "admin",
+                    &admin_title,
+                    &admin_msg,
+                    "order_status",
+                    Some(&oid_str),
+                    Some("order"),
+                ).await;
+            });
         }
 
         Ok(updated_order)

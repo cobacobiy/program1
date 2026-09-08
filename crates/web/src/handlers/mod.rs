@@ -13,6 +13,7 @@ pub mod order;
 pub mod payment;
 pub mod review;
 pub mod shipping;
+pub mod notification;
 pub mod upload;
 pub mod user;
 
@@ -27,6 +28,7 @@ pub use chat::*;
 pub use coupon::*;
 pub use health::*;
 pub use inventory::*;
+pub use notification::*;
 pub use order::*;
 pub use payment::*;
 pub use review::*;

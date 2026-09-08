@@ -4,7 +4,16 @@
   import { toast } from './toast.svelte';
   import { formatRupiah } from './currency';
   import { i18n } from './i18n.svelte';
+  import NotificationBell from './NotificationBell.svelte';
   import type { Product, ProductVariant, CreateVariantPayload, Coupon, CreateCouponPayload, DiscountType, ProductReview, PaginatedReviews, SalesReportResponse, Category, CreateCategoryPayload, UpdateCategoryPayload } from './types';
+
+  function handleAdminNotificationClick(item: any) {
+    if (item.notification_type === 'new_order' || item.reference_type === 'order') {
+      subTab = 'orders';
+    } else if (item.notification_type === 'low_stock' || item.reference_type === 'product') {
+      subTab = 'inventory';
+    }
+  }
 
   interface AdminOrder {
     id: string;
@@ -650,25 +659,28 @@
         <div class="side-header">
           <div class="side-brand-row">
             <h3>⚡ {i18n.t('admin.hub_title', 'Admin Hub')}</h3>
-            <div class="admin-lang-pills" role="group" aria-label={i18n.t('common.language', 'Pilih Bahasa')}>
-              <button
-                class="btn-admin-lang"
-                class:active={i18n.current === 'id'}
-                onclick={() => i18n.setLanguage('id')}
-                type="button"
-                title="Bahasa Indonesia"
-              >
-                ID
-              </button>
-              <button
-                class="btn-admin-lang"
-                class:active={i18n.current === 'en'}
-                onclick={() => i18n.setLanguage('en')}
-                type="button"
-                title="English"
-              >
-                EN
-              </button>
+            <div class="header-actions-right">
+              <NotificationBell role="admin" onNotificationClick={handleAdminNotificationClick} />
+              <div class="admin-lang-pills" role="group" aria-label={i18n.t('common.language', 'Pilih Bahasa')}>
+                <button
+                  class="btn-admin-lang"
+                  class:active={i18n.current === 'id'}
+                  onclick={() => i18n.setLanguage('id')}
+                  type="button"
+                  title="Bahasa Indonesia"
+                >
+                  ID
+                </button>
+                <button
+                  class="btn-admin-lang"
+                  class:active={i18n.current === 'en'}
+                  onclick={() => i18n.setLanguage('en')}
+                  type="button"
+                  title="English"
+                >
+                  EN
+                </button>
+              </div>
             </div>
           </div>
           <span class="admin-name">User: <strong>{adminAuth.username}</strong></span>
@@ -1619,6 +1631,7 @@
   }
   .side-header h3 { margin: 0; color: #38bdf8; font-size: 1.15rem; }
   .side-brand-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+  .header-actions-right { display: flex; align-items: center; gap: 0.5rem; }
   .admin-lang-pills { display: flex; gap: 2px; background: #1e293b; border-radius: 12px; padding: 2px; border: 1px solid #334155; }
   .btn-admin-lang {
     background: transparent; border: none; color: #94a3b8; font-size: 0.7rem; font-weight: 700;

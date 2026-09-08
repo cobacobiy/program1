@@ -315,3 +315,21 @@ export interface SalesReportResponse {
   summary: SalesReportSummary;
   rows: SalesReportRow[];
 }
+
+export interface NotificationItem {
+  id: string;
+  recipient_type: string;
+  recipient_id: string;
+  title: string;
+  message: string;
+  notification_type: string;
+  reference_id?: string | null;
+  reference_type?: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationCount {
+  unread: number;
+  total: number;
+}

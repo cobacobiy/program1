@@ -28,6 +28,7 @@ program1-module-payment = { path = "../modules/payment" }
 program1-module-coupon = { path = "../modules/coupon" }
 program1-module-review = { path = "../modules/review" }
 program1-module-shipping = { path = "../modules/shipping" }
+program1-module-notification = { path = "../modules/notification" }
 
 
 async-trait.workspace = true

@@ -279,6 +279,10 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/buyer/wishlist/:product_id/check",
             get(check_wishlist_handler),
         )
+        .route("/api/v1/buyer/notifications", get(buyer_list_notifications_handler))
+        .route("/api/v1/buyer/notifications/count", get(buyer_notification_count_handler))
+        .route("/api/v1/buyer/notifications/:id/read", post(buyer_mark_read_handler))
+        .route("/api/v1/buyer/notifications/read-all", post(buyer_mark_all_read_handler))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_buyer_auth,
@@ -419,6 +423,10 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/admin/categories/:id",
             put(update_category_handler).delete(delete_category_handler),
         )
+        .route("/api/v1/admin/notifications", get(admin_list_notifications_handler))
+        .route("/api/v1/admin/notifications/count", get(admin_notification_count_handler))
+        .route("/api/v1/admin/notifications/:id/read", post(admin_mark_read_handler))
+        .route("/api/v1/admin/notifications/read-all", post(admin_mark_all_read_handler))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::require_admin,

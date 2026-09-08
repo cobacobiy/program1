@@ -1757,3 +1757,83 @@ pub trait ShippingContract: Send + Sync {
     async fn search_cities(&self, query: &str) -> Result<Vec<ShippingCity>, ContractError>;
 }
 
+// --- NOTIFICATION CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NotificationDto {
+    pub id: String,
+    pub recipient_type: String, // "buyer" or "seller"
+    pub recipient_id: String,
+    pub title: String,
+    pub message: String,
+    pub notification_type: String, // "order_status", "new_order", "low_stock", "chat", "promo", "system"
+    pub reference_id: Option<String>,
+    pub reference_type: Option<String>,
+    pub is_read: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NotificationCountDto {
+    pub unread: i64,
+    pub total: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateNotificationPayload {
+    pub recipient_type: String,
+    pub recipient_id: String,
+    #[validate(length(min = 1, max = 255, message = "Judul notifikasi 1-255 karakter"))]
+    pub title: String,
+    #[validate(length(min = 1, max = 2000, message = "Pesan notifikasi 1-2000 karakter"))]
+    pub message: String,
+    pub notification_type: String,
+    pub reference_id: Option<String>,
+    pub reference_type: Option<String>,
+}
+
+#[async_trait]
+pub trait NotificationContract: Send + Sync {
+    /// Create a new notification
+    async fn create_notification(
+        &self,
+        recipient_type: &str,
+        recipient_id: &str,
+        title: &str,
+        message: &str,
+        notification_type: &str,
+        reference_id: Option<&str>,
+        reference_type: Option<&str>,
+    ) -> Result<NotificationDto, ContractError>;
+
+    /// List notifications for a recipient with pagination
+    async fn list_notifications(
+        &self,
+        recipient_type: &str,
+        recipient_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<NotificationDto>, ContractError>;
+
+    /// Get unread and total notification counts
+    async fn get_unread_count(
+        &self,
+        recipient_type: &str,
+        recipient_id: &str,
+    ) -> Result<NotificationCountDto, ContractError>;
+
+    /// Mark a single notification as read (with recipient ownership check)
+    async fn mark_as_read(
+        &self,
+        notification_id: &str,
+        recipient_id: &str,
+    ) -> Result<(), ContractError>;
+
+    /// Mark all notifications as read for a recipient
+    async fn mark_all_as_read(
+        &self,
+        recipient_type: &str,
+        recipient_id: &str,
+    ) -> Result<(), ContractError>;
+}
+

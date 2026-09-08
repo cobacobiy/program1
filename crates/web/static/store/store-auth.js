@@ -83,6 +83,9 @@ function renderBuyerHeaderState() {
   if (typeof updateFloatingChatWidget === "function") {
     updateFloatingChatWidget();
   }
+  if (typeof updateNotificationBadge === "function") {
+    updateNotificationBadge();
+  }
 }
 
 function openBuyerLoginModal() {

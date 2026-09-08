@@ -24,6 +24,7 @@
   import WishlistModal from './lib/WishlistModal.svelte';
   import LiveChat from './lib/LiveChat.svelte';
   import AdminHub from './lib/AdminHub.svelte';
+  import NotificationBell from './lib/NotificationBell.svelte';
 
   // Navigation & Modals state
   let activeTab = $state<'store' | 'admin' | 'diagnostic'>('store');
@@ -32,6 +33,12 @@
   let isWishlistOpen = $state(false);
   let wishlist = $state<WishlistItem[]>([]);
   let wishlistLoading = $state(false);
+
+  function handleNotificationClick(item: any) {
+    if (item.reference_type === 'order') {
+      isOrdersOpen = true;
+    }
+  }
 
   function isProductInWishlist(productId: string): boolean {
     return wishlist.some((item) => item.product_id === productId);
@@ -370,6 +377,8 @@
             🇬🇧 EN
           </button>
         </div>
+
+        <NotificationBell role="buyer" onNotificationClick={handleNotificationClick} />
 
         <button class="btn-wishlist" onclick={openWishlistModal} title={i18n.t('nav.wishlist', 'Wishlist Saya')}>
           ❤️ {i18n.t('nav.wishlist', 'Wishlist')}

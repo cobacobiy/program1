@@ -83,13 +83,18 @@ async fn main() {
             Arc::new(program1_core::ConsoleEmailSender::new())
         };
 
+    let notification_module = Arc::new(program1_module_notification::NotificationModule::new(
+        db_pool.clone(),
+    ));
+
     let order_module = Arc::new(
         OrderModule::new(
             db_pool.clone(),
             catalog_module.clone(),
             inventory_module.clone(),
         )
-        .with_email_sender(email_sender.clone(), config.store_name.clone()),
+        .with_email_sender(email_sender.clone(), config.store_name.clone())
+        .with_notification_contract(notification_module.clone()),
     );
     let analytics_module = Arc::new(AnalyticsModule::new(
         catalog_module.clone(),
@@ -162,6 +167,7 @@ async fn main() {
         coupon_contract: coupon_module,
         review_contract: review_module,
         shipping_contract: shipping_module,
+        notification_contract: notification_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),
