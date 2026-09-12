@@ -266,12 +266,26 @@
 
   async function openProductDetail(product: Product) {
     selectedProductForDetail = product;
+    if (typeof document !== 'undefined') {
+      document.title = `${product.name} | ${storeName || 'Program1'}`;
+      window.location.hash = `product-${product.id}`;
+    }
     reviewPage = 1;
     activeRatingSummary = ratingSummaries[product.id] || null;
     await Promise.all([
       fetchRatingSummary(product.id),
       fetchProductReviews(product.id, 1),
     ]);
+  }
+
+  function closeProductDetail() {
+    selectedProductForDetail = null;
+    if (typeof document !== 'undefined') {
+      document.title = `${storeName || 'Program1'} - Omnichannel Store`;
+      if (window.location.hash.startsWith('#product-')) {
+        history.pushState('', document.title, window.location.pathname + window.location.search);
+      }
+    }
   }
 
   async function fetchRatingSummary(productId: string) {
@@ -317,7 +331,22 @@
 
   onMount(() => {
     checkHealth();
-    fetchCatalog();
+    fetchCatalog().then(() => {
+      const hash = typeof window !== 'undefined' ? window.location.hash : '';
+      if (hash.startsWith('#product-')) {
+        const pId = hash.replace('#product-', '');
+        const found = products.find((p) => p.id === pId);
+        if (found) {
+          openProductDetail(found);
+        } else {
+          apiFetch<Product>(`/api/v1/catalog/${pId}`)
+            .then((p) => {
+              if (p) openProductDetail(p);
+            })
+            .catch(() => {});
+        }
+      }
+    });
     fetchCategories();
   });
 </script>
@@ -744,7 +773,7 @@
   {#if selectedProductForDetail}
     <div
       class="drawer-backdrop"
-      onclick={() => selectedProductForDetail = null}
+      onclick={closeProductDetail}
       role="presentation"
     >
       <div
@@ -760,7 +789,7 @@
             <h3>{selectedProductForDetail.name}</h3>
             <span class="badge-tag">{selectedProductForDetail.category || 'Umum'}</span>
           </div>
-          <button class="close-btn" onclick={() => selectedProductForDetail = null}>&times;</button>
+          <button class="close-btn" onclick={closeProductDetail}>&times;</button>
         </div>
 
         <div class="detail-body">

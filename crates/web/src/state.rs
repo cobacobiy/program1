@@ -11,7 +11,7 @@ use validator::Validate;
 use crate::error::ApiError;
 use crate::rate_limit::IpRateLimiter;
 use program1_contracts::{
-    AnalyticsContract, AuditContract, AuthContract, BuyerContract, CatalogContract,
+    AnalyticsContract, AuditContract, AuthContract, BackupContract, BuyerContract, CatalogContract,
     ChannelSyncContract, ChatContract, CouponContract, ErrorCode, InventoryContract,
     NotificationContract, OrderContract, PaymentContract, ReturnContract, ReviewContract,
     ShippingContract, UserContract,
@@ -38,6 +38,7 @@ pub struct AppState {
     pub shipping_contract: Arc<dyn ShippingContract>,
     pub notification_contract: Arc<dyn NotificationContract>,
     pub return_contract: Arc<dyn ReturnContract>,
+    pub backup_contract: Arc<dyn BackupContract>,
     pub rate_limiter: Arc<IpRateLimiter>,
     pub started_at: std::time::Instant,
     pub google_client_id: String,

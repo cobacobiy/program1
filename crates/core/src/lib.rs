@@ -1,9 +1,11 @@
 pub mod auth;
+pub mod backup;
 pub mod config;
 pub mod database;
 pub mod email;
 pub mod sanitize;
 pub use auth::{hash_password, verify_password};
+pub use backup::{BackupManager, BackupMetadata, BackupService};
 pub use config::AppConfig;
 pub use database::{init_database, DbPool};
 pub use email::{

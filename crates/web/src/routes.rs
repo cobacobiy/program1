@@ -209,7 +209,10 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/shipping/couriers", get(list_couriers_handler))
         .route("/api/v1/shipping/cities", get(search_cities_handler))
         .route("/api/v1/categories", get(list_categories_handler))
-        .route("/api/v1/categories/:id", get(get_category_handler));
+        .route("/api/v1/categories/:id", get(get_category_handler))
+        .route("/robots.txt", get(get_robots_txt))
+        .route("/sitemap.xml", get(get_sitemap_xml))
+        .route("/product/:id", get(get_product_page_handler));
 
     // 2. Buyer protected routes (valid Buyer JWT required)
     let buyer_routes = Router::new()
@@ -447,6 +450,22 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/admin/returns/:id/status",
             post(admin_update_return_status_handler).put(admin_update_return_status_handler),
+        )
+        .route(
+            "/api/v1/admin/database/backup",
+            post(create_backup_handler),
+        )
+        .route(
+            "/api/v1/admin/database/backups",
+            get(list_backups_handler),
+        )
+        .route(
+            "/api/v1/admin/database/backups/:filename/download",
+            get(download_backup_handler),
+        )
+        .route(
+            "/api/v1/admin/database/health",
+            get(check_database_health_handler),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),

@@ -184,6 +184,7 @@ async fn setup_test_context() -> TestContext {
         shipping_contract: shipping_module,
         notification_contract: notification_module,
         return_contract: return_module,
+        backup_contract: Arc::new(program1_core::backup::BackupService::new(pool.clone(), "./target/test_backups")),
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

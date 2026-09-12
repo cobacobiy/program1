@@ -42,7 +42,25 @@
   }
 
   // Active sub-tab
-  let subTab = $state<'kpi' | 'reports' | 'catalog' | 'categories' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews'>('kpi');
+  let subTab = $state<'kpi' | 'reports' | 'catalog' | 'categories' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews' | 'returns' | 'backup'>('kpi');
+
+  // Database Backup state
+  interface BackupFile {
+    filename: string;
+    size_bytes: number;
+    created_at: string;
+  }
+
+  interface DatabaseHealth {
+    status: string;
+    engine: string;
+    integrity: string;
+  }
+
+  let backups = $state<BackupFile[]>([]);
+  let dbHealth = $state<DatabaseHealth | null>(null);
+  let backupLoading = $state(false);
+  let creatingBackup = $state(false);
 
   // Sales report state
   let reportDateFrom = $state('');
@@ -416,11 +434,68 @@
       if (subTab === 'kpi' || subTab === 'returns') {
         await loadAdminReturns();
       }
+      if (subTab === 'backup') {
+        await loadBackupsAndHealth();
+      }
     } catch (err: any) {
       toast.error(err.message || 'Gagal memuat data admin');
     } finally {
       loading = false;
     }
+  }
+
+  async function loadBackupsAndHealth() {
+    backupLoading = true;
+    try {
+      const [bList, health] = await Promise.all([
+        fetchAdmin<BackupFile[]>('/api/v1/admin/database/backups').catch(() => []),
+        fetchAdmin<DatabaseHealth>('/api/v1/admin/database/health').catch(() => null)
+      ]);
+      backups = bList || [];
+      dbHealth = health || null;
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal memuat status database & backup');
+    } finally {
+      backupLoading = false;
+    }
+  }
+
+  async function handleCreateBackup() {
+    creatingBackup = true;
+    try {
+      const res = await fetchAdmin<BackupFile>('/api/v1/admin/database/backup', { method: 'POST' });
+      toast.success(`Backup berhasil dibuat: ${res.filename}`);
+      await loadBackupsAndHealth();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal membuat backup');
+    } finally {
+      creatingBackup = false;
+    }
+  }
+
+  function downloadBackup(filename: string) {
+    if (!adminAuth.token) return;
+    const url = `/api/v1/admin/database/backups/${encodeURIComponent(filename)}/download`;
+    fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${adminAuth.token}`
+      }
+    })
+    .then(async (res) => {
+      if (!res.ok) throw new Error('Gagal mendownload backup');
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    })
+    .catch((err) => {
+      toast.error(err.message || 'Gagal mendownload backup');
+    });
   }
 
   let adminReturns = $state<ReturnRequest[]>([]);
@@ -767,6 +842,7 @@
           <button class:active={subTab === 'coupons'} onclick={() => subTab = 'coupons'}>🏷️ {i18n.t('admin.coupons_mgmt', 'Kupon Diskon')} ({coupons.length})</button>
           <button class:active={subTab === 'reviews'} onclick={() => { subTab = 'reviews'; loadAdminReviews(1); }}>⭐ {i18n.t('admin.reviews_mgmt', 'Moderasi Ulasan')} ({adminReviewsTotal})</button>
           <button class:active={subTab === 'returns'} onclick={() => { subTab = 'returns'; loadAdminReturns(); }}>🔄 {i18n.t('admin.returns_mgmt', 'Retur & Refund')} ({adminReturns.length})</button>
+          <button class:active={subTab === 'backup'} onclick={() => { subTab = 'backup'; loadBackupsAndHealth(); }}>💾 {i18n.t('admin.database_backup', 'Database & Backup')}</button>
           <button class:active={subTab === 'audit'} onclick={() => subTab = 'audit'}>📜 {i18n.t('admin.audit_logs', 'Audit Logs')}</button>
         </nav>
 
@@ -1476,6 +1552,90 @@
                             <small style="color: #64748b;">Proses Selesai</small>
                           {/if}
                         </div>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        {:else if subTab === 'backup'}
+          <div class="card-panel">
+            <div class="panel-header">
+              <h2>💾 Database & Backup Manager</h2>
+              <div class="header-actions">
+                <button
+                  class="btn-refresh"
+                  onclick={loadBackupsAndHealth}
+                  disabled={backupLoading}
+                >
+                  {backupLoading ? 'Memeriksa...' : '🔄 Refresh Status'}
+                </button>
+                <button
+                  class="btn-add-prod"
+                  onclick={handleCreateBackup}
+                  disabled={creatingBackup}
+                >
+                  {creatingBackup ? 'Membuat Backup...' : '⚡ Buat Backup Sekarang'}
+                </button>
+              </div>
+            </div>
+
+            <!-- Health Status Banner -->
+            {#if dbHealth}
+              <div class="db-health-banner" style="display: flex; gap: 1.5rem; align-items: center; background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+                <div style="font-size: 2rem;">
+                  {dbHealth.status === 'healthy' ? '🟢' : '🟡'}
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 700; font-size: 1.05rem; color: #f8fafc; margin-bottom: 0.25rem;">
+                    Status Database: <span style="color: {dbHealth.status === 'healthy' ? '#4ade80' : '#facc15'}; text-transform: uppercase;">{dbHealth.status}</span>
+                  </div>
+                  <div style="font-size: 0.85rem; color: #94a3b8; display: flex; gap: 1.5rem;">
+                    <span>Engine: <strong style="color: #cbd5e1;">{dbHealth.engine}</strong></span>
+                    <span>Integritas: <strong style="color: #cbd5e1;">PRAGMA integrity_check = {dbHealth.integrity}</strong></span>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <h3 style="font-size: 1rem; color: #94a3b8; margin-bottom: 0.75rem;">📁 Riwayat Berkas Backup Snapshot ({backups.length})</h3>
+
+            {#if backupLoading}
+              <p>Memuat daftar backup...</p>
+            {:else if backups.length === 0}
+              <div class="empty-state" style="text-align: center; padding: 3rem 1rem; color: #64748b;">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">📭</div>
+                <p>Belum ada berkas backup yang tersimpan di server.</p>
+                <p style="font-size: 0.85rem;">Klik tombol "⚡ Buat Backup Sekarang" di kanan atas untuk membuat snapshot SQLite instan.</p>
+              </div>
+            {:else}
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Nama Berkas</th>
+                    <th>Ukuran</th>
+                    <th>Waktu Dibuat</th>
+                    <th style="text-align: right;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each backups as b (b.filename)}
+                    <tr>
+                      <td>
+                        <strong style="color: #38bdf8; font-family: monospace;">{b.filename}</strong>
+                      </td>
+                      <td>{(b.size_bytes / 1024).toFixed(1)} KB</td>
+                      <td>
+                        <small>{new Date(b.created_at).toLocaleString('id-ID')}</small>
+                      </td>
+                      <td style="text-align: right;">
+                        <button
+                          class="btn-action primary"
+                          onclick={() => downloadBackup(b.filename)}
+                        >
+                          ⬇️ Unduh Berkas
+                        </button>
                       </td>
                     </tr>
                   {/each}

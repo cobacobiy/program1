@@ -147,6 +147,10 @@ async fn main() {
             .with_notification_contract(notification_module.clone())
             .with_audit_contract(audit_module.clone()),
     );
+    let backup_service = Arc::new(program1_core::backup::BackupService::new(
+        db_pool.clone(),
+        "./data/backups",
+    ));
 
     // Ensure initial seed runs
     let _ = user_module.seed_default_users().await;
@@ -176,6 +180,7 @@ async fn main() {
         shipping_contract: shipping_module,
         notification_contract: notification_module,
         return_contract: return_module,
+        backup_contract: backup_service,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

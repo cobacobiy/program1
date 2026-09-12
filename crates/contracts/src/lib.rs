@@ -1,4 +1,4 @@
-use async_trait::async_trait;
+pub use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -1929,5 +1929,30 @@ pub trait ReturnContract: Send + Sync {
         req: UpdateReturnStatusRequest,
     ) -> Result<ReturnRequestDto, ContractError>;
 }
+
+// --- BACKUP CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BackupFileDto {
+    pub filename: String,
+    pub size_bytes: u64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DatabaseHealthDto {
+    pub status: String,
+    pub engine: String,
+    pub integrity: String,
+}
+
+#[async_trait]
+pub trait BackupContract: Send + Sync {
+    async fn create_backup(&self) -> Result<BackupFileDto, ContractError>;
+    async fn list_backups(&self) -> Result<Vec<BackupFileDto>, ContractError>;
+    async fn get_backup_path(&self, filename: &str) -> Result<std::path::PathBuf, ContractError>;
+    async fn check_health(&self) -> Result<DatabaseHealthDto, ContractError>;
+}
+
 
 
