@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-09-12
+
+### 🎨 UI & UX Improvements
+- **Tactile Buy Button Feedback**: Added realistic press-down effect (`translateY(2px) scale(0.92)`), dynamic hover elevation, and smooth cubic-bezier transitions on all "Beli" / "Tambah ke Keranjang" action buttons across both Svelte 5 SPA and `/store` storefront.
+- **Post-Click Confirmation**: Implemented instant emerald green transition with animated `✓ Ditambahkan!` label feedback for 1 second upon adding items.
+- **Cart Badge Animation**: Added dynamic bounce & shake micro-animations to the cart trigger and count badge upon successful cart additions.
+- **Wishlist & Modal Enhancements**: Applied enhanced tactile styles to product detail modals and wishlist cart action buttons.
+- **i18n Dictionary Parity**: Synchronized updated Indonesian and English translation dictionaries (`id.json`, `en.json`) across backend static assets and frontend SPA.
+
+---
+
 ## [1.0.0] - 2026-09-11
 
 ### 🎉 Initial Production Release

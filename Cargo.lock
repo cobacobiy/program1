@@ -1665,7 +1665,7 @@ dependencies = [
 
 [[package]]
 name = "program1-contracts"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1682,7 +1682,7 @@ dependencies = [
 
 [[package]]
 name = "program1-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1699,7 +1699,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-analytics"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1716,7 +1716,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-audit"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1732,7 +1732,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-auth"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1744,7 +1744,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-buyer"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1765,7 +1765,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-catalog"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1781,7 +1781,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-channel"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1797,7 +1797,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-chat"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-coupon"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1829,7 +1829,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-inventory"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1846,7 +1846,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-notification"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1862,7 +1862,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-order"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1880,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-payment"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-return"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1916,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-review"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1932,7 +1932,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-shipping"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1948,7 +1948,7 @@ dependencies = [
 
 [[package]]
 name = "program1-module-user"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "program1-web"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "axum",
