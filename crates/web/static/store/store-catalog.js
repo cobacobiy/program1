@@ -131,7 +131,7 @@ function renderCatalog() {
         </div>
         <div class="product-footer">
           <span class="product-price">Rp ${p.price.toLocaleString('id-ID')}</span>
-          <button class="btn-add-cart" onclick="addToCart('${p.id}')">+ Beli</button>
+          <button class="btn-add-cart" onclick="addToCart('${p.id}', event)">+ Beli</button>
         </div>
       </div>
     </div>

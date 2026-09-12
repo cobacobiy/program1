@@ -3,7 +3,7 @@
    File: /crates/web/static/store/store-cart.js
    ========================================================================== */
 
-function addToCart(productId) {
+function addToCart(productId, event) {
   const catalog = window.StoreState ? window.StoreState.catalog : (window.catalog || []);
   let cart = window.StoreState ? window.StoreState.cart : (window.cart || []);
 
@@ -21,6 +21,41 @@ function addToCart(productId) {
   window.cart = cart;
 
   updateCartUI();
+
+  // Instant tactile button feedback
+  let btn = event ? (event.currentTarget || event.target) : null;
+  if (!btn || !btn.classList) {
+    btn = document.activeElement;
+  }
+  if (btn && btn.classList && (btn.classList.contains('btn-add-cart') || btn.classList.contains('btn-add'))) {
+    btn.classList.add('added');
+    const prevHtml = btn.innerHTML;
+    btn.innerHTML = '✓ Ditambahkan!';
+    btn.style.pointerEvents = 'none';
+    setTimeout(() => {
+      btn.classList.remove('added');
+      btn.innerHTML = prevHtml || '+ Beli';
+      btn.style.pointerEvents = '';
+    }, 1000);
+  }
+
+  // Animate floating cart badge & trigger
+  const cartBadge = document.getElementById('cart-count');
+  const cartTrigger = document.querySelector('.cart-trigger');
+  if (cartBadge) {
+    cartBadge.classList.remove('cart-bounce');
+    void cartBadge.offsetWidth;
+    cartBadge.classList.add('cart-bounce');
+  }
+  if (cartTrigger) {
+    cartTrigger.classList.remove('cart-shake');
+    void cartTrigger.offsetWidth;
+    cartTrigger.classList.add('cart-shake');
+  }
+
+  if (typeof showToast === 'function') {
+    showToast(`"${item.name}" berhasil ditambahkan ke keranjang!`, 'success');
+  }
 }
 
 function updateQuantity(productId, delta) {

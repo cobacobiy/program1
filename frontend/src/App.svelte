@@ -97,6 +97,19 @@
     }
   }
 
+  function triggerAddToCartFeedback(productId: string) {
+    recentlyAddedId = productId;
+    cartBounceTrigger = true;
+    setTimeout(() => {
+      if (recentlyAddedId === productId) {
+        recentlyAddedId = null;
+      }
+    }, 1100);
+    setTimeout(() => {
+      cartBounceTrigger = false;
+    }, 550);
+  }
+
   function handleAddWishlistItemToCart(item: WishlistItem) {
     const matched = products.find((p) => p.id === item.product_id);
     const prod: Product = matched || {
@@ -108,6 +121,7 @@
       image_url: item.product_image_url,
     };
     cart.addItem(prod);
+    triggerAddToCartFeedback(prod.id);
   }
 
   function openWishlistModal() {
@@ -133,6 +147,8 @@
   let availableVariants = $state<ProductVariant[]>([]);
   let selectedVariant = $state<ProductVariant | null>(null);
   let variantLoading = $state(false);
+  let recentlyAddedId = $state<string | null>(null);
+  let cartBounceTrigger = $state(false);
 
   // Review & Rating State
   let ratingSummaries = $state<Record<string, ProductRatingSummary>>({});
@@ -160,12 +176,15 @@
       variantLoading = false;
     }
     cart.addItem(product);
+    triggerAddToCartFeedback(product.id);
   }
 
   function confirmAddVariantToCart() {
     if (!variantPickerProduct) return;
+    const productId = variantPickerProduct.id;
     cart.addItem(variantPickerProduct, 1, selectedVariant || undefined);
     variantPickerProduct = null;
+    triggerAddToCartFeedback(productId);
   }
 
   // Health state
@@ -401,10 +420,10 @@
           </button>
         {/if}
 
-        <button class="cart-trigger" onclick={() => cart.isOpen = true}>
+        <button class="cart-trigger" class:cart-bump={cartBounceTrigger} onclick={() => cart.isOpen = true}>
           🛒 {i18n.t('nav.cart', 'Keranjang')}
           {#if cart.totalItems > 0}
-            <span class="cart-count">{cart.totalItems}</span>
+            <span class="cart-count" class:count-pop={cartBounceTrigger}>{cart.totalItems}</span>
           {/if}
         </button>
       </div>
@@ -549,10 +568,18 @@
                     </button>
                     <button
                       class="btn-add"
+                      class:added={recentlyAddedId === product.id}
                       disabled={product.stock <= 0}
                       onclick={() => handleAddToCartClick(product)}
+                      type="button"
                     >
-                      {product.stock <= 0 ? i18n.t('catalog.out_of_stock', 'Habis') : `+ ${i18n.t('catalog.add_to_cart', 'Keranjang')}`}
+                      {#if recentlyAddedId === product.id}
+                        ✓ {i18n.t('catalog.added', 'Ditambahkan!')}
+                      {:else if product.stock <= 0}
+                        {i18n.t('catalog.out_of_stock', 'Habis')}
+                      {:else}
+                        + {i18n.t('catalog.buy_now', 'Beli')}
+                      {/if}
                     </button>
                   </div>
                 </div>
@@ -759,14 +786,22 @@
               <div class="detail-actions-row">
                 <button
                   class="btn-add-detail"
+                  class:added={selectedProductForDetail && recentlyAddedId === selectedProductForDetail.id}
                   disabled={selectedProductForDetail.stock <= 0}
                   onclick={() => {
                     if (selectedProductForDetail) {
                       handleAddToCartClick(selectedProductForDetail);
                     }
                   }}
+                  type="button"
                 >
-                  {selectedProductForDetail.stock <= 0 ? i18n.t('catalog.out_of_stock', 'Stok Habis') : `🛒 ${i18n.t('product.confirm_variant', 'Masukkan ke Keranjang')}`}
+                  {#if selectedProductForDetail && recentlyAddedId === selectedProductForDetail.id}
+                    ✓ {i18n.t('catalog.added', 'Berhasil Ditambahkan ke Keranjang!')}
+                  {:else if selectedProductForDetail.stock <= 0}
+                    {i18n.t('catalog.out_of_stock', 'Stok Habis')}
+                  {:else}
+                    🛒 {i18n.t('catalog.buy_now_long', 'Beli Sekarang / Masukkan ke Keranjang')}
+                  {/if}
                 </button>
                 <button
                   class="btn-fav-detail"
@@ -1026,9 +1061,24 @@
   .cart-trigger {
     background: #0284c7; color: #fff; border: none; padding: 0.5rem 1rem;
     border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+  }
+  .cart-trigger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+  }
+  .cart-trigger:active {
+    transform: translateY(1px) scale(0.95);
+  }
+  .cart-trigger.cart-bump {
+    animation: cartShake 0.5s ease-in-out;
   }
   .cart-count {
     background: #ef4444; color: white; font-size: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 999px;
+    transition: transform 0.2s ease;
+  }
+  .cart-count.count-pop {
+    animation: countPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
   /* Page Body */
@@ -1126,11 +1176,52 @@
   .price-value { font-size: 1.15rem; font-weight: bold; color: #38bdf8; }
   .stock-value { color: #64748b; }
   .btn-add {
-    background: #0284c7; color: #fff; border: none; padding: 0.65rem;
-    border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #fff;
+    border: none;
+    padding: 0.65rem 0.95rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.15s ease,
+                background 0.25s ease,
+                filter 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  .btn-add:hover:not(:disabled) { background: #0369a1; }
-  .btn-add:disabled { background: #475569; cursor: not-allowed; }
+  .btn-add:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.45);
+    filter: brightness(1.08);
+  }
+  .btn-add:active:not(:disabled) {
+    transform: translateY(2px) scale(0.92);
+    box-shadow: 0 1px 2px rgba(2, 132, 199, 0.2);
+    filter: brightness(0.9);
+    transition: transform 0.06s ease;
+  }
+  .btn-add.added {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.5) !important;
+    transform: scale(1.04);
+    animation: buttonPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .btn-add:disabled {
+    background: #475569;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
 
   /* Diagnostic View */
   .card-panel {
@@ -1280,12 +1371,72 @@
   .detail-desc { font-size: 0.88rem; color: #cbd5e1; line-height: 1.45; margin: 0; }
   .detail-actions-row { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
   .btn-add-detail {
-    background: #0284c7; color: #fff; border: none; padding: 0.65rem 1rem;
-    border-radius: 6px; font-weight: bold; cursor: pointer;
-    transition: background 0.2s;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #fff;
+    border: none;
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.15s ease,
+                background 0.25s ease,
+                filter 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  .btn-add-detail:hover { background: #0369a1; }
-  .btn-add-detail:disabled { background: #475569; cursor: not-allowed; }
+  .btn-add-detail:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 16px rgba(2, 132, 199, 0.45);
+    filter: brightness(1.08);
+  }
+  .btn-add-detail:active:not(:disabled) {
+    transform: translateY(2px) scale(0.94);
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.2);
+    filter: brightness(0.9);
+    transition: transform 0.06s ease;
+  }
+  .btn-add-detail.added {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.5) !important;
+    transform: scale(1.03);
+    animation: buttonPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .btn-add-detail:disabled {
+    background: #475569;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  @keyframes buttonPop {
+    0% { transform: scale(0.92); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1.04); }
+  }
+
+  @keyframes cartShake {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    20% { transform: rotate(-10deg) scale(1.08); }
+    40% { transform: rotate(10deg) scale(1.08); }
+    60% { transform: rotate(-5deg) scale(1.04); }
+    80% { transform: rotate(5deg) scale(1.02); }
+  }
+
+  @keyframes countPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.45); }
+    100% { transform: scale(1); }
+  }
   .btn-fav-detail {
     background: #1e293b; color: #f8fafc; border: 1px solid #334155;
     padding: 0.6rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.88rem;

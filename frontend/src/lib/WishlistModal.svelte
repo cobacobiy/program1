@@ -323,7 +323,7 @@
   }
 
   .btn-cart {
-    background: #059669;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
     color: #ffffff;
     border: none;
     border-radius: 6px;
@@ -332,11 +332,26 @@
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.15s;
+    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.15s ease,
+                background 0.2s ease,
+                filter 0.15s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .btn-cart:hover {
-    background: #047857;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.45);
+    filter: brightness(1.08);
+  }
+
+  .btn-cart:active {
+    transform: translateY(2px) scale(0.93);
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.2);
+    filter: brightness(0.9);
+    transition: transform 0.06s ease;
   }
 
   .btn-remove {
