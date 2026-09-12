@@ -214,5 +214,54 @@ graph TD
 - **Status:** ✅ **100% SELESAI & CLOSED DI GITHUB**
 - **Semua fitur telah terintegrasi di branch `main`**
 
+---
+
+### 🚀 Phase 4 — Enterprise Operations & Growth (Issue Guides #18 – #24)
+
+> Berfokus pada operasional ritel skala enterprise, program loyalitas retensi pembeli, mesin promosi flash sale, optimasi SEO organik, serta manajemen bencana & pencadangan database.
+
+| # | Issue Guide | Prioritas | Estimasi | Kesulitan | Prerequisite |
+|---|-------------|-----------|----------|-----------|--------------|
+| 18 | [Flash Sale & Limited-Time Campaigns](issue18-flash-sale-campaigns.md) | 🔴 CRITICAL | 3-4 hari | ⭐⭐⭐ Menengah | Catalog & Order |
+| 19 | [Customer Loyalty Points & Membership Tier](issue19-loyalty-points-rewards.md) | 🟡 HIGH | 3-4 hari | ⭐⭐⭐ Menengah | Order & Buyer Profile |
+| 20 | [Full-Text Search Autocomplete & Trending](issue20-fts-search-autocomplete.md) | 🟡 HIGH | 2-3 hari | ⭐⭐ Menengah | Catalog Search |
+| 21 | [Supplier Management & Automated Restocking PO](issue21-supplier-purchase-orders.md) | 🟡 HIGH | 3-4 hari | ⭐⭐⭐ Menengah | Inventory & Catalog |
+| 22 | [Automated Database Backup & Admin Recovery Manager](issue22-database-backup-manager.md) | 🔴 CRITICAL | 2-3 hari | ⭐⭐ Menengah | Core DB Persistence |
+| 23 | [Dynamic SEO, Open Graph & Sitemap Generator](issue23-dynamic-seo-sitemap.md) | 🟢 MEDIUM | 2 hari | ⭐⭐ Menengah | Catalog & SPA |
+| 24 | [Granular Staff Roles & Permission Matrix (RBAC)](issue24-granular-staff-rbac.md) | 🟡 HIGH | 3-4 hari | ⭐⭐⭐ Menengah | Auth & User Module |
+
+### 📐 Dependency Graph (Phase 4):
+
+```mermaid
+graph TD
+    I18["#18: Flash Sale Campaigns"]
+    I19["#19: Loyalty Points & Tiers"]
+    I20["#20: FTS Search Autocomplete"]
+    I21["#21: Supplier Restocking PO"]
+    I22["#22: Database Backup Manager"]
+    I23["#23: Dynamic SEO & Sitemap"]
+    I24["#24: Granular Staff RBAC"]
+
+    style I18 fill:#ff4444,color:#fff
+    style I22 fill:#ff4444,color:#fff
+    style I19 fill:#ffaa00,color:#000
+    style I20 fill:#ffaa00,color:#000
+    style I21 fill:#ffaa00,color:#000
+    style I24 fill:#ffaa00,color:#000
+    style I23 fill:#44bb44,color:#fff
+```
+
+### Urutan Pengerjaan yang Direkomendasikan:
+1. **Batch Keamanan & Keandalan (Kritis)**:
+   - **Issue 22** (Database Backup Manager) — Amankan data produksi terlebih dahulu.
+   - **Issue 18** (Flash Sale Campaigns) — Fitur utama pendorong penjualan dan omzet toko.
+2. **Batch Penjualan & Pertumbuhan**:
+   - **Issue 19** (Loyalty Points & Rewards) — Tingkatkan retensi pelanggan belanja berulang.
+   - **Issue 20** (FTS Search Autocomplete) — Percepat pembeli menemukan produk.
+   - **Issue 23** (Dynamic SEO & Sitemap) — Maksimalkan trafik organik Google & preview link WhatsApp.
+3. **Batch Operasional Toko & Pergudangan**:
+   - **Issue 21** (Supplier PO & Restocking) — Otomatisasi rantai pasok barang.
+   - **Issue 24** (Granular Staff RBAC) — Pembatasan wewenang staf gudang, CS, dan keuangan.
+
 
 
