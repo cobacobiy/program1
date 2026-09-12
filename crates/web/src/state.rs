@@ -12,9 +12,9 @@ use crate::error::ApiError;
 use crate::rate_limit::IpRateLimiter;
 use program1_contracts::{
     AnalyticsContract, AuditContract, AuthContract, BackupContract, BuyerContract, CatalogContract,
-    ChannelSyncContract, ChatContract, CouponContract, ErrorCode, InventoryContract,
-    NotificationContract, OrderContract, PaymentContract, ReturnContract, ReviewContract,
-    ShippingContract, UserContract,
+    ChannelSyncContract, ChatContract, CouponContract, ErrorCode, FlashSaleContract,
+    InventoryContract, NotificationContract, OrderContract, PaymentContract, ReturnContract,
+    ReviewContract, ShippingContract, UserContract,
 };
 
 #[derive(Clone)]
@@ -39,6 +39,7 @@ pub struct AppState {
     pub notification_contract: Arc<dyn NotificationContract>,
     pub return_contract: Arc<dyn ReturnContract>,
     pub backup_contract: Arc<dyn BackupContract>,
+    pub flash_sale_contract: Arc<dyn FlashSaleContract>,
     pub rate_limiter: Arc<IpRateLimiter>,
     pub started_at: std::time::Instant,
     pub google_client_id: String,

@@ -3,7 +3,8 @@ use chrono::{DateTime, Duration, Utc};
 use program1_contracts::{
     AuditContract, AuditLogEntry, AuthContract, BuyerAccountDto, BuyerAddressDto,
     BuyerAuthResponse, BuyerContract, BuyerLoginRequest, ContractError, CreateBuyerAddressRequest,
-    PaginatedResponse, RegisterBuyerRequest, UpdateBuyerAddressRequest, WishlistItemDto,
+    LoyaltyLedgerEntryDto, LoyaltySummaryDto, PaginatedResponse, RegisterBuyerRequest,
+    UpdateBuyerAddressRequest, WishlistItemDto,
 };
 use program1_core::database::DbPool;
 use rand::Rng;
@@ -495,6 +496,11 @@ impl BuyerModule {
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|_| Utc::now());
 
+        let points_balance: i64 = row.try_get("points_balance").unwrap_or(0);
+        let membership_tier: String = row
+            .try_get("membership_tier")
+            .unwrap_or_else(|_| "Classic".to_string());
+
         Ok(BuyerAccountDto {
             id,
             google_sub,
@@ -504,6 +510,8 @@ impl BuyerModule {
             phone_number,
             phone_verified: phone_verified != 0,
             is_active: is_active != 0,
+            points_balance,
+            membership_tier,
             created_at,
             updated_at,
         })
@@ -542,6 +550,18 @@ impl BuyerModule {
             is_default: is_default != 0,
             created_at,
         })
+    }
+
+    pub fn calculate_tier(total_earned: i64) -> &'static str {
+        if total_earned >= 100_000 {
+            "Platinum"
+        } else if total_earned >= 50_000 {
+            "Gold"
+        } else if total_earned >= 10_000 {
+            "Silver"
+        } else {
+            "Classic"
+        }
     }
 }
 
@@ -629,6 +649,8 @@ impl BuyerContract for BuyerModule {
             phone_number: None,
             phone_verified: false,
             is_active: true,
+            points_balance: 0,
+            membership_tier: "Classic".to_string(),
             created_at: now,
             updated_at: now,
         };
@@ -674,7 +696,7 @@ impl BuyerContract for BuyerModule {
         }
 
         let row_opt = sqlx::query(
-            "SELECT id, google_sub, email, password_hash, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, password_hash, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts WHERE email = $1",
         )
         .bind(&email)
@@ -753,7 +775,7 @@ impl BuyerContract for BuyerModule {
         let claims = self.google_verifier.verify(id_token).await?;
 
         let existing_row = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts WHERE google_sub = $1 OR email = $2",
         )
         .bind(&claims.sub)
@@ -836,6 +858,8 @@ impl BuyerContract for BuyerModule {
                     phone_number: None,
                     phone_verified: false,
                     is_active: true,
+                    points_balance: 0,
+                    membership_tier: "Classic".to_string(),
                     created_at: now,
                     updated_at: now,
                 }
@@ -1106,7 +1130,7 @@ impl BuyerContract for BuyerModule {
 
     async fn get_buyer_profile(&self, buyer_id: Uuid) -> Result<BuyerAccountDto, ContractError> {
         let row = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts WHERE id = $1",
         )
         .bind(buyer_id.to_string())
@@ -1366,7 +1390,7 @@ impl BuyerContract for BuyerModule {
 
     async fn list_all_buyers(&self) -> Result<Vec<BuyerAccountDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts
              ORDER BY created_at DESC",
         )
@@ -1405,7 +1429,7 @@ impl BuyerContract for BuyerModule {
         let total: i64 = count_row.get("total");
 
         let rows = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts
              WHERE ($1 IS NULL OR email LIKE '%' || $1 || '%' OR full_name LIKE '%' || $1 || '%' OR phone_number LIKE '%' || $1 || '%')
              ORDER BY created_at DESC
@@ -1477,7 +1501,7 @@ impl BuyerContract for BuyerModule {
             .await;
 
         let updated_row = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts WHERE id = $1",
         )
         .bind(buyer_id.to_string())
@@ -1504,7 +1528,7 @@ impl BuyerContract for BuyerModule {
         }
 
         let current_row = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts WHERE id = $1",
         )
         .bind(buyer_id.to_string())
@@ -1560,7 +1584,7 @@ impl BuyerContract for BuyerModule {
             .await;
 
         let updated_row = sqlx::query(
-            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, created_at, updated_at
+            "SELECT id, google_sub, email, full_name, avatar_url, phone_number, phone_verified, is_active, points_balance, membership_tier, created_at, updated_at
              FROM buyer_accounts WHERE id = $1",
         )
         .bind(buyer_id.to_string())
@@ -1725,6 +1749,208 @@ impl BuyerContract for BuyerModule {
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         Ok(row.is_some())
+    }
+
+    // --- Loyalty Points & Membership ---
+    async fn get_loyalty_summary(
+        &self,
+        buyer_id: Uuid,
+    ) -> Result<LoyaltySummaryDto, ContractError> {
+        let buyer = self.get_buyer_profile(buyer_id).await?;
+
+        let rows = sqlx::query(
+            "SELECT id, points_delta, balance_after, description, created_at
+             FROM loyalty_point_ledgers
+             WHERE buyer_id = $1
+             ORDER BY created_at DESC
+             LIMIT 50",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut ledgers = Vec::new();
+        for r in rows {
+            ledgers.push(LoyaltyLedgerEntryDto {
+                id: r.get("id"),
+                points_delta: r.get("points_delta"),
+                balance_after: r.get("balance_after"),
+                description: r.get("description"),
+                created_at: r.get("created_at"),
+            });
+        }
+
+        let sum_row = sqlx::query(
+            "SELECT COALESCE(SUM(points_delta), 0) as total_earned
+             FROM loyalty_point_ledgers
+             WHERE buyer_id = $1 AND points_delta > 0",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let all_time_earned: i64 = sum_row.get("total_earned");
+
+        Ok(LoyaltySummaryDto {
+            points_balance: buyer.points_balance,
+            membership_tier: buyer.membership_tier,
+            total_earned_all_time: all_time_earned,
+            ledgers,
+        })
+    }
+
+    async fn credit_points(
+        &self,
+        buyer_id: Uuid,
+        order_id: Option<Uuid>,
+        points: i64,
+        description: &str,
+    ) -> Result<i64, ContractError> {
+        if points <= 0 {
+            let buyer = self.get_buyer_profile(buyer_id).await?;
+            return Ok(buyer.points_balance);
+        }
+
+        let buyer = self.get_buyer_profile(buyer_id).await?;
+        let new_balance = buyer.points_balance + points;
+
+        let sum_row = sqlx::query(
+            "SELECT COALESCE(SUM(points_delta), 0) as total_earned
+             FROM loyalty_point_ledgers
+             WHERE buyer_id = $1 AND points_delta > 0",
+        )
+        .bind(buyer_id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+        let prev_earned: i64 = sum_row.get("total_earned");
+        let new_tier = Self::calculate_tier(prev_earned + points);
+
+        sqlx::query(
+            "UPDATE buyer_accounts SET points_balance = $1, membership_tier = $2 WHERE id = $3",
+        )
+        .bind(new_balance)
+        .bind(new_tier)
+        .bind(buyer_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let ledger_id = Uuid::new_v4().to_string();
+        let order_id_str = order_id.map(|u| u.to_string());
+        sqlx::query(
+            "INSERT INTO loyalty_point_ledgers (id, buyer_id, order_id, points_delta, balance_after, description, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+        )
+        .bind(&ledger_id)
+        .bind(buyer_id.to_string())
+        .bind(&order_id_str)
+        .bind(points)
+        .bind(new_balance)
+        .bind(description)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(new_balance)
+    }
+
+    async fn redeem_points(
+        &self,
+        buyer_id: Uuid,
+        order_id: Option<Uuid>,
+        points: i64,
+        description: &str,
+    ) -> Result<i64, ContractError> {
+        if points <= 0 {
+            let buyer = self.get_buyer_profile(buyer_id).await?;
+            return Ok(buyer.points_balance);
+        }
+
+        let buyer = self.get_buyer_profile(buyer_id).await?;
+        if buyer.points_balance < points {
+            return Err(ContractError::ValidationError(format!(
+                "Saldo poin tidak mencukupi: tersedia {}, diminta {}",
+                buyer.points_balance, points
+            )));
+        }
+
+        let new_balance = buyer.points_balance - points;
+
+        sqlx::query("UPDATE buyer_accounts SET points_balance = $1 WHERE id = $2")
+            .bind(new_balance)
+            .bind(buyer_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let ledger_id = Uuid::new_v4().to_string();
+        let order_id_str = order_id.map(|u| u.to_string());
+        sqlx::query(
+            "INSERT INTO loyalty_point_ledgers (id, buyer_id, order_id, points_delta, balance_after, description, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+        )
+        .bind(&ledger_id)
+        .bind(buyer_id.to_string())
+        .bind(&order_id_str)
+        .bind(-points)
+        .bind(new_balance)
+        .bind(description)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(new_balance)
+    }
+
+    async fn rollback_order_points(
+        &self,
+        buyer_id: Uuid,
+        order_id: Uuid,
+    ) -> Result<(), ContractError> {
+        let order_id_str = order_id.to_string();
+        let rows = sqlx::query(
+            "SELECT points_delta FROM loyalty_point_ledgers WHERE buyer_id = $1 AND order_id = $2",
+        )
+        .bind(buyer_id.to_string())
+        .bind(&order_id_str)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        for r in rows {
+            let delta: i64 = r.get("points_delta");
+            if delta < 0 {
+                let refund_pts = -delta;
+                self.credit_points(
+                    buyer_id,
+                    Some(order_id),
+                    refund_pts,
+                    &format!(
+                        "Pengembalian poin pesanan dibatalkan #{}",
+                        &order_id_str[..8.min(order_id_str.len())]
+                    ),
+                )
+                .await?;
+            } else if delta > 0 {
+                let clawback_pts = delta;
+                let _ = self
+                    .redeem_points(
+                        buyer_id,
+                        Some(order_id),
+                        clawback_pts,
+                        &format!(
+                            "Penarikan poin pesanan dibatalkan #{}",
+                            &order_id_str[..8.min(order_id_str.len())]
+                        ),
+                    )
+                    .await;
+            }
+        }
+
+        Ok(())
     }
 }
 

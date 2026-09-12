@@ -10,6 +10,8 @@ export interface BuyerProfile {
   email: string;
   phone: string;
   is_phone_verified: boolean;
+  points_balance?: number;
+  membership_tier?: string;
   created_at: string;
 }
 
@@ -366,5 +368,95 @@ export interface ProcessReturnPayload {
 export interface UpdateReturnStatusPayload {
   status: 'return_shipped' | 'received' | 'refunded';
   admin_notes?: string;
+}
+
+// ----------------------------------------------------
+// Issue 20: SQLite FTS5 Search & Autocomplete Types
+// ----------------------------------------------------
+export interface ProductSuggestionItem {
+  id: string;
+  name: string;
+  price_cents: number;
+  category: string;
+  image_url?: string | null;
+}
+
+export interface PopularSearchKeyword {
+  keyword: string;
+  search_count: number;
+}
+
+export interface SearchSuggestionResult {
+  query: string;
+  product_suggestions: ProductSuggestionItem[];
+  category_suggestions: string[];
+}
+
+// ----------------------------------------------------
+// Issue 18: Flash Sale Campaigns Types
+// ----------------------------------------------------
+export interface FlashSaleItemDto {
+  id: string;
+  session_id: string;
+  product_id: string;
+  product_name: string;
+  product_image_url?: string | null;
+  original_price: number;
+  discount_price: number;
+  discount_percentage: number;
+  stock_allocated: number;
+  stock_sold: number;
+  stock_remaining: number;
+  is_sold_out: boolean;
+}
+
+export interface FlashSaleSessionDto {
+  id: string;
+  title: string;
+  description?: string | null;
+  banner_url?: string | null;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+  is_current: boolean;
+  time_remaining_seconds: number;
+  items: FlashSaleItemDto[];
+  created_at: string;
+}
+
+export interface CreateFlashSaleSessionPayload {
+  title: string;
+  description?: string | null;
+  banner_url?: string | null;
+  start_time: string;
+  end_time: string;
+}
+
+export interface AddFlashSaleItemPayload {
+  product_id: string;
+  discount_price: number;
+  stock_allocated: number;
+}
+
+// ----------------------------------------------------
+// Issue 19: Loyalty Points & Rewards Types
+// ----------------------------------------------------
+export interface LoyaltyLedgerEntryDto {
+  id: string;
+  buyer_id: string;
+  order_id?: string | null;
+  points_change: number;
+  balance_after: number;
+  description: string;
+  created_at: string;
+}
+
+export interface LoyaltySummaryDto {
+  buyer_id: string;
+  points_balance: number;
+  membership_tier: string;
+  points_to_next_tier: number;
+  next_tier?: string | null;
+  ledgers: LoyaltyLedgerEntryDto[];
 }
 

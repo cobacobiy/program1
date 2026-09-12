@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
-    CatalogContract, ChannelType, ContractError, InventoryContract, NotificationContract,
-    OmniOrderDto, OrderContract, OrderItemDto, OrderStatus, PaginatedResponse,
-    ShippingAddressSnapshot, StorefrontOrderItemRequest, StorefrontOrderRequest,
+    BuyerContract, CatalogContract, ChannelType, ContractError, InventoryContract,
+    NotificationContract, OmniOrderDto, OrderContract, OrderItemDto, OrderStatus,
+    PaginatedResponse, ShippingAddressSnapshot, StorefrontOrderItemRequest, StorefrontOrderRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -17,6 +17,7 @@ pub struct OrderModule {
     inventory_contract: Arc<dyn InventoryContract>,
     email_sender: Option<Arc<dyn program1_core::EmailSender>>,
     notification_contract: Option<Arc<dyn NotificationContract>>,
+    buyer_contract: Option<Arc<dyn BuyerContract>>,
     store_name: String,
 }
 
@@ -32,6 +33,7 @@ impl OrderModule {
             inventory_contract,
             email_sender: None,
             notification_contract: None,
+            buyer_contract: None,
             store_name: "AURA Storefront".to_string(),
         }
     }
@@ -51,6 +53,14 @@ impl OrderModule {
         notification_contract: Arc<dyn NotificationContract>,
     ) -> Self {
         self.notification_contract = Some(notification_contract);
+        self
+    }
+
+    pub fn with_buyer_contract(
+        mut self,
+        buyer_contract: Arc<dyn BuyerContract>,
+    ) -> Self {
+        self.buyer_contract = Some(buyer_contract);
         self
     }
 
@@ -156,6 +166,7 @@ impl OrderModule {
         let cancel_reason: Option<String> = row.try_get("cancel_reason").ok().flatten();
         let courier: Option<String> = row.try_get("courier").ok().flatten();
         let shipping_cost_cents: i64 = row.try_get("shipping_cost_cents").unwrap_or(0);
+        let points_redeemed: i64 = row.try_get("points_redeemed").unwrap_or(0);
 
         Ok(OmniOrderDto {
             id,
@@ -177,6 +188,7 @@ impl OrderModule {
             cancel_reason,
             courier,
             shipping_cost_cents,
+            points_redeemed,
         })
     }
 }
@@ -185,7 +197,7 @@ impl OrderModule {
 impl OrderContract for OrderModule {
     async fn get_order(&self, id: Uuid) -> Result<OmniOrderDto, ContractError> {
         let row = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents, points_redeemed
              FROM orders WHERE id = $1",
         )
         .bind(id.to_string())
@@ -267,12 +279,27 @@ impl OrderContract for OrderModule {
             },
         };
         let snapshot_json = serde_json::to_string(&snapshot).unwrap_or_default();
+        let mut points_redeemed: i64 = 0;
+        if req.use_points == Some(true) {
+            if let Some(buyer_id) = req.buyer_id {
+                if let Some(ref buyer_contract) = self.buyer_contract {
+                    if let Ok(profile) = buyer_contract.get_buyer_profile(buyer_id).await {
+                        let usable_points = profile.points_balance.min(total_amount as i64).max(0);
+                        if usable_points > 0 {
+                            points_redeemed = usable_points;
+                            total_amount = (total_amount - usable_points as f64).max(0.0);
+                        }
+                    }
+                }
+            }
+        }
+
         let buyer_id_str = req.buyer_id.map(|b| b.to_string());
 
         // Insert order with immutable shipping snapshot and shipping details
         sqlx::query(
-            "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json, courier, shipping_cost_cents)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+            "INSERT INTO orders (id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_recipient_name, shipping_phone_number, shipping_street_address, shipping_subdistrict, shipping_city, shipping_province, shipping_postal_code, shipping_snapshot_json, courier, shipping_cost_cents, points_redeemed)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
         )
         .bind(order_id.to_string())
         .bind(channel_str)
@@ -293,9 +320,30 @@ impl OrderContract for OrderModule {
         .bind(&snapshot_json)
         .bind(&courier)
         .bind(shipping_cost_cents)
+        .bind(points_redeemed)
         .execute(&self.pool)
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        // Deduct loyalty points from buyer account now that order exists (satisfies FK constraint)
+        if points_redeemed > 0 {
+            if let Some(buyer_id) = req.buyer_id {
+                if let Some(ref buyer_contract) = self.buyer_contract {
+                    let oid_str = order_id.to_string();
+                    if let Err(e) = buyer_contract
+                        .redeem_points(
+                            buyer_id,
+                            Some(order_id),
+                            points_redeemed,
+                            &format!("Penukaran poin pesanan #{}", &oid_str[..8.min(oid_str.len())]),
+                        )
+                        .await
+                    {
+                        tracing::error!(target: "loyalty", "Gagal mengurangi poin pembeli {}: {}", buyer_id, e);
+                    }
+                }
+            }
+        }
 
         // Insert order items
         for oi in &order_items {
@@ -410,6 +458,7 @@ impl OrderContract for OrderModule {
             cancel_reason: None,
             courier,
             shipping_cost_cents,
+            points_redeemed,
         })
     }
 
@@ -501,12 +550,13 @@ impl OrderContract for OrderModule {
             cancel_reason: None,
             courier: None,
             shipping_cost_cents: 0,
+            points_redeemed: 0,
         })
     }
 
     async fn list_orders(&self) -> Result<Vec<OmniOrderDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents, points_redeemed
              FROM orders ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -559,7 +609,7 @@ impl OrderContract for OrderModule {
         let total: i64 = count_row.get("total");
 
         let query_str = format!(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents, points_redeemed
              FROM orders
              WHERE ($1 IS NULL OR status = $1)
              ORDER BY {} {}
@@ -784,12 +834,55 @@ impl OrderContract for OrderModule {
             });
         }
 
+        if let Some(ref buyer_contract) = self.buyer_contract {
+            if let Some(buyer_id) = updated_order.buyer_id {
+                let oid_str = order_id.to_string();
+                let bc = buyer_contract.clone();
+                let pool = self.pool.clone();
+                let tot_amt = updated_order.total_amount;
+
+                match new_status {
+                    OrderStatus::Delivered | OrderStatus::Completed => {
+                        tokio::spawn(async move {
+                            let check = sqlx::query(
+                                "SELECT COUNT(*) as count FROM loyalty_point_ledgers WHERE buyer_id = $1 AND order_id = $2 AND points_delta > 0",
+                            )
+                            .bind(buyer_id.to_string())
+                            .bind(&oid_str)
+                            .fetch_one(&pool)
+                            .await;
+
+                            if let Ok(r) = check {
+                                let count: i64 = r.get("count");
+                                if count == 0 {
+                                    let earned = (tot_amt / 100.0).floor() as i64;
+                                    if earned > 0 {
+                                        let desc = format!(
+                                            "Cashback belanja pesanan #{}",
+                                            &oid_str[..8.min(oid_str.len())]
+                                        );
+                                        let _ = bc.credit_points(buyer_id, Some(order_id), earned, &desc).await;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    OrderStatus::Cancelled => {
+                        tokio::spawn(async move {
+                            let _ = bc.rollback_order_points(buyer_id, order_id).await;
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         Ok(updated_order)
     }
 
     async fn list_buyer_orders(&self, buyer_id: Uuid) -> Result<Vec<OmniOrderDto>, ContractError> {
         let rows = sqlx::query(
-            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents
+            "SELECT id, channel, customer_name, customer_email, shipping_address, total_amount, status, created_at, buyer_id, shipping_snapshot_json, tracking_number, shipped_at, delivered_at, cancelled_at, cancelled_by, cancel_reason, courier, shipping_cost_cents, points_redeemed
              FROM orders WHERE buyer_id = $1 ORDER BY created_at DESC",
         )
         .bind(buyer_id.to_string())
@@ -880,6 +973,7 @@ mod tests {
             shipping_snapshot: None,
             courier: None,
             shipping_cost_cents: None,
+            use_points: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -924,6 +1018,7 @@ mod tests {
             shipping_snapshot: Some(snapshot.clone()),
             courier: None,
             shipping_cost_cents: None,
+            use_points: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -961,6 +1056,7 @@ mod tests {
             shipping_snapshot: None,
             courier: None,
             shipping_cost_cents: None,
+            use_points: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -1035,6 +1131,7 @@ mod tests {
             shipping_snapshot: None,
             courier: None,
             shipping_cost_cents: None,
+            use_points: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -1078,6 +1175,7 @@ mod tests {
             shipping_snapshot: None,
             courier: None,
             shipping_cost_cents: None,
+            use_points: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();
@@ -1139,6 +1237,7 @@ mod tests {
             shipping_snapshot: None,
             courier: Some("jne - REG".to_string()),
             shipping_cost_cents: Some(18000),
+            use_points: None,
         };
 
         let order = order_module.create_storefront_order(req).await.unwrap();

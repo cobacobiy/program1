@@ -175,6 +175,7 @@ pub async fn create_storefront_order(
         shipping_snapshot: Some(shipping_snapshot),
         courier: payload.courier,
         shipping_cost_cents: payload.shipping_cost_cents,
+        use_points: payload.use_points,
     };
 
     let order = state

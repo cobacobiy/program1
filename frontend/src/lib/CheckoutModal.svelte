@@ -11,6 +11,7 @@
     Coupon,
     BuyerAddress,
     CourierRate,
+    LoyaltySummaryDto,
   } from './types';
 
   interface Props {
@@ -50,6 +51,19 @@
   let discountAmount = $state(0);
   let promoError = $state<string | null>(null);
 
+  // Loyalty Points State
+  let loyaltySummary = $state<LoyaltySummaryDto | null>(null);
+  let usePoints = $state(false);
+
+  async function loadLoyaltySummary() {
+    if (!auth.user) return;
+    try {
+      loyaltySummary = await apiFetch<LoyaltySummaryDto>('/api/v1/buyer/loyalty');
+    } catch {
+      loyaltySummary = null;
+    }
+  }
+
   // Weight calculation (grams)
   const totalWeightGrams = $derived(
     cart.items.reduce(
@@ -71,7 +85,13 @@
   const shippingCostCents = $derived(selectedCourier ? selectedCourier.cost_cents : 0);
 
   const effectiveSubtotal = $derived(Math.max(0, cart.totalAmountCents - discountAmount));
-  const finalGrandTotal = $derived(effectiveSubtotal + shippingCostCents);
+  const pointsDiscountCents = $derived(
+    usePoints && loyaltySummary && loyaltySummary.points_balance > 0
+      ? Math.min(loyaltySummary.points_balance * 100, effectiveSubtotal)
+      : 0,
+  );
+  const effectiveSubtotalWithPoints = $derived(Math.max(0, effectiveSubtotal - pointsDiscountCents));
+  const finalGrandTotal = $derived(effectiveSubtotalWithPoints + shippingCostCents);
 
   async function loadAddresses() {
     if (!auth.user) return;
@@ -237,6 +257,7 @@
         courier: courierDesc,
         shipping_cost_cents: shippingCostCents,
         notes: checkoutNotes,
+        use_points: usePoints,
       };
 
       const res = await apiFetch<CreateOrderResponse>('/api/v1/orders', {
@@ -289,6 +310,7 @@
   $effect(() => {
     if (isOpen && auth.user) {
       loadAddresses();
+      loadLoyaltySummary();
     }
   });
 </script>
@@ -454,11 +476,39 @@
           </span>
           <strong>{formatRupiah(shippingCostCents)}</strong>
         </div>
+        {#if pointsDiscountCents > 0}
+          <div class="summary-row discount-row">
+            <span>⭐ Potongan Poin:</span>
+            <strong class="discount-val">-{formatRupiah(pointsDiscountCents)}</strong>
+          </div>
+        {/if}
         <div class="summary-row total-highlight">
           <span>Total Tagihan:</span>
           <strong class="price">{formatRupiah(finalGrandTotal)}</strong>
         </div>
       </div>
+
+      <!-- Loyalty Points Redemption Box -->
+      {#if loyaltySummary && loyaltySummary.points_balance > 0}
+        <div class="loyalty-box">
+          <label class="loyalty-toggle-label">
+            <input type="checkbox" bind:checked={usePoints} class="loyalty-checkbox" />
+            <div class="loyalty-details">
+              <div class="loyalty-header-line">
+                <span class="loyalty-icon">⭐</span>
+                <strong>Tukarkan Poin Loyalitas</strong>
+                <span class="tier-pill">{loyaltySummary.membership_tier}</span>
+              </div>
+              <p class="loyalty-desc">
+                Saldo: <strong>{loyaltySummary.points_balance.toLocaleString('id-ID')} Poin</strong>
+                {#if usePoints}
+                  <span class="points-applied"> — Hemat {formatRupiah(pointsDiscountCents)}</span>
+                {/if}
+              </p>
+            </div>
+          </label>
+        </div>
+      {/if}
 
       <!-- Promo Code Box -->
       <div class="promo-box">
@@ -650,4 +700,61 @@
   }
   .btn-primary:hover:not(:disabled) { background: #0369a1; }
   .btn-primary:disabled { background: #475569; cursor: not-allowed; }
+
+  /* Loyalty Points Styles */
+  .loyalty-box {
+    background: rgba(234, 179, 8, 0.08);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s ease;
+  }
+  .loyalty-box:hover {
+    background: rgba(234, 179, 8, 0.12);
+    border-color: rgba(234, 179, 8, 0.5);
+  }
+  .loyalty-toggle-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    flex-direction: row;
+    user-select: none;
+  }
+  .loyalty-checkbox {
+    margin-top: 3px;
+    accent-color: #eab308;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+  .loyalty-details {
+    flex: 1;
+  }
+  .loyalty-header-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    color: #fef08a;
+  }
+  .tier-pill {
+    background: #eab308;
+    color: #1e1e24;
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  .loyalty-desc {
+    font-size: 0.78rem;
+    color: #cbd5e1;
+    margin: 3px 0 0 0;
+  }
+  .points-applied {
+    color: #34d399;
+    font-weight: 700;
+  }
 </style>

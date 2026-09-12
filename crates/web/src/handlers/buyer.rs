@@ -5,8 +5,8 @@ use axum::{
 };
 use program1_contracts::{
     AuditLogEntry, BuyerAccountDto, BuyerAddressDto, BuyerAuthResponse, BuyerLoginRequest,
-    CreateBuyerAddressRequest, ErrorCode, GoogleAuthRequest, JwtClaims, OtpRequest,
-    OtpVerifyRequest, PaginatedResponse, PaginationParams, RegisterBuyerRequest,
+    CreateBuyerAddressRequest, ErrorCode, GoogleAuthRequest, JwtClaims, LoyaltySummaryDto,
+    OtpRequest, OtpVerifyRequest, PaginatedResponse, PaginationParams, RegisterBuyerRequest,
     UpdateBuyerAddressRequest, UpdateBuyerProfileRequest, UpdateBuyerStatusRequest,
     WishlistItemDto,
 };
@@ -582,3 +582,31 @@ pub async fn check_wishlist_handler(
         .await?;
     Ok(Json(is_in))
 }
+
+/// Get loyalty points balance, tier, and history for authenticated buyer
+#[utoipa::path(
+    get,
+    path = "/api/v1/buyer/loyalty",
+    responses(
+        (status = 200, description = "Buyer loyalty points summary and ledgers", body = LoyaltySummaryDto),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Buyer Account"
+)]
+pub async fn get_loyalty_summary_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+) -> Result<Json<LoyaltySummaryDto>, ApiError> {
+    if !claims.is_buyer() {
+        return Err(ApiError::new(
+            ErrorCode::InsufficientPermissions,
+            "Loyalty points hanya dapat diakses oleh akun pembeli",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+    let summary = state.buyer_contract.get_loyalty_summary(claims.sub).await?;
+    Ok(Json(summary))
+}
+

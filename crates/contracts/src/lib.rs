@@ -506,6 +506,18 @@ pub trait CatalogContract: Send + Sync {
         req: UpdateVariantRequest,
     ) -> Result<ProductVariantDto, ContractError>;
     async fn delete_variant(&self, variant_id: Uuid) -> Result<(), ContractError>;
+
+    // --- Autocomplete & Search Suggestion ---
+    async fn search_suggestions(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<SearchSuggestionResult, ContractError>;
+    async fn get_popular_searches(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<PopularSearchKeyword>, ContractError>;
+    async fn record_search_query(&self, keyword: &str) -> Result<(), ContractError>;
 }
 
 /// Represents a product variant (e.g. Size, Color)
@@ -1000,6 +1012,8 @@ pub struct OmniOrderDto {
     pub courier: Option<String>,
     #[serde(default)]
     pub shipping_cost_cents: i64,
+    #[serde(default)]
+    pub points_redeemed: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -1055,6 +1069,8 @@ pub struct StorefrontOrderRequest {
     pub courier: Option<String>,
     #[serde(default)]
     pub shipping_cost_cents: Option<i64>,
+    #[serde(default)]
+    pub use_points: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -1069,6 +1085,8 @@ pub struct BuyerCheckoutRequest {
     pub courier: Option<String>,
     #[serde(default)]
     pub shipping_cost_cents: Option<i64>,
+    #[serde(default)]
+    pub use_points: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -1240,6 +1258,10 @@ fn default_true() -> bool {
     true
 }
 
+pub fn default_membership_tier() -> String {
+    "Classic".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct BuyerAccountDto {
     pub id: Uuid,
@@ -1252,6 +1274,10 @@ pub struct BuyerAccountDto {
     pub phone_verified: bool,
     #[serde(default = "default_true")]
     pub is_active: bool,
+    #[serde(default)]
+    pub points_balance: i64,
+    #[serde(default = "default_membership_tier")]
+    pub membership_tier: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1479,6 +1505,28 @@ pub trait BuyerContract: Send + Sync {
     ) -> Result<(), ContractError>;
     async fn is_in_wishlist(&self, buyer_id: Uuid, product_id: Uuid)
         -> Result<bool, ContractError>;
+
+    // --- Loyalty Points & Membership ---
+    async fn get_loyalty_summary(&self, buyer_id: Uuid) -> Result<LoyaltySummaryDto, ContractError>;
+    async fn credit_points(
+        &self,
+        buyer_id: Uuid,
+        order_id: Option<Uuid>,
+        points: i64,
+        description: &str,
+    ) -> Result<i64, ContractError>;
+    async fn redeem_points(
+        &self,
+        buyer_id: Uuid,
+        order_id: Option<Uuid>,
+        points: i64,
+        description: &str,
+    ) -> Result<i64, ContractError>;
+    async fn rollback_order_points(
+        &self,
+        buyer_id: Uuid,
+        order_id: Uuid,
+    ) -> Result<(), ContractError>;
 }
 
 // --- LIVE CHAT & MESSAGING CONTRACT (FUTURE-PROOF ARCHITECTURE) ---
@@ -1952,6 +2000,107 @@ pub trait BackupContract: Send + Sync {
     async fn list_backups(&self) -> Result<Vec<BackupFileDto>, ContractError>;
     async fn get_backup_path(&self, filename: &str) -> Result<std::path::PathBuf, ContractError>;
     async fn check_health(&self) -> Result<DatabaseHealthDto, ContractError>;
+}
+
+// --- SEARCH AUTOCOMPLETE DTOs ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SearchSuggestionResult {
+    pub query: String,
+    pub product_suggestions: Vec<ProductSuggestionItem>,
+    pub category_suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ProductSuggestionItem {
+    pub id: String,
+    pub name: String,
+    pub price_cents: i64,
+    pub category: String,
+    pub image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PopularSearchKeyword {
+    pub keyword: String,
+    pub search_count: i64,
+}
+
+// --- FLASH SALE CONTRACT & DTOs ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct FlashSaleSessionDto {
+    pub id: String,
+    pub title: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub banner_url: Option<String>,
+    pub is_active: bool,
+    pub items: Vec<FlashSaleItemDto>,
+    pub remaining_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct FlashSaleItemDto {
+    pub id: String,
+    pub session_id: String,
+    pub product_id: String,
+    pub product_name: String,
+    pub original_price_cents: i64,
+    pub flash_price_cents: i64,
+    pub allocated_quantity: i32,
+    pub sold_quantity: i32,
+    pub image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateFlashSaleSessionRequest {
+    #[validate(length(min = 1, max = 100, message = "Judul sesi 1-100 karakter"))]
+    pub title: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub banner_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct AddFlashSaleItemRequest {
+    #[validate(length(min = 1, message = "Product ID wajib diisi"))]
+    pub product_id: String,
+    #[validate(range(min = 100, message = "Harga flash sale minimal Rp 100"))]
+    pub flash_price_cents: i64,
+    #[validate(range(min = 1, message = "Alokasi kuota minimal 1"))]
+    pub allocated_quantity: i32,
+}
+
+#[async_trait]
+pub trait FlashSaleContract: Send + Sync {
+    async fn get_active_session(&self) -> Result<Option<FlashSaleSessionDto>, ContractError>;
+    async fn list_sessions(&self) -> Result<Vec<FlashSaleSessionDto>, ContractError>;
+    async fn get_session(&self, session_id: &str) -> Result<FlashSaleSessionDto, ContractError>;
+    async fn create_session(&self, req: CreateFlashSaleSessionRequest) -> Result<FlashSaleSessionDto, ContractError>;
+    async fn add_item_to_session(&self, session_id: &str, req: AddFlashSaleItemRequest) -> Result<FlashSaleItemDto, ContractError>;
+    async fn toggle_session(&self, session_id: &str) -> Result<FlashSaleSessionDto, ContractError>;
+    async fn check_flash_price(&self, product_id: &str) -> Result<Option<i64>, ContractError>;
+    async fn record_flash_sale_purchase(&self, product_id: &str, quantity: i32) -> Result<bool, ContractError>;
+}
+
+// --- LOYALTY POINTS DTOs ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LoyaltySummaryDto {
+    pub points_balance: i64,
+    pub membership_tier: String,
+    pub total_earned_all_time: i64,
+    pub ledgers: Vec<LoyaltyLedgerEntryDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LoyaltyLedgerEntryDto {
+    pub id: String,
+    pub points_delta: i64,
+    pub balance_after: i64,
+    pub description: String,
+    pub created_at: String,
 }
 
 

@@ -12,7 +12,8 @@ use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, CatalogItemDto, CreateCatalogItemRequest, CreateVariantRequest, ErrorCode,
-    PaginatedResponse, PaginationParams, ProductVariantDto, UpdateVariantRequest,
+    PaginatedResponse, PaginationParams, PopularSearchKeyword, ProductVariantDto,
+    SearchSuggestionResult, UpdateVariantRequest,
 };
 
 /// List product catalog items with pagination, search, category filter, and sorting
@@ -322,3 +323,60 @@ pub async fn delete_variant_handler(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SuggestQuery {
+    #[serde(alias = "query")]
+    pub q: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct PopularQuery {
+    pub limit: Option<i64>,
+}
+
+/// Autocomplete and instant search suggestion endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/catalog/suggest",
+    params(
+        ("q" = Option<String>, Query, description = "Search query keyword"),
+        ("limit" = Option<i64>, Query, description = "Maximum number of suggestions (default 10)")
+    ),
+    responses(
+        (status = 200, description = "Search suggestions result", body = SearchSuggestionResult)
+    ),
+    tag = "Catalog"
+)]
+pub async fn search_suggest_handler(
+    State(state): State<AppState>,
+    Query(params): Query<SuggestQuery>,
+) -> Result<Json<SearchSuggestionResult>, ApiError> {
+    let q = params.q.unwrap_or_default();
+    let limit = params.limit.unwrap_or(10);
+    let result = state.catalog_contract.search_suggestions(&q, limit).await?;
+    Ok(Json(result))
+}
+
+/// Popular search keywords endpoint
+#[utoipa::path(
+    get,
+    path = "/api/v1/catalog/popular-searches",
+    params(
+        ("limit" = Option<i64>, Query, description = "Maximum number of keywords (default 10)")
+    ),
+    responses(
+        (status = 200, description = "Popular search keywords", body = Vec<PopularSearchKeyword>)
+    ),
+    tag = "Catalog"
+)]
+pub async fn popular_searches_handler(
+    State(state): State<AppState>,
+    Query(params): Query<PopularQuery>,
+) -> Result<Json<Vec<PopularSearchKeyword>>, ApiError> {
+    let limit = params.limit.unwrap_or(10);
+    let result = state.catalog_contract.get_popular_searches(limit).await?;
+    Ok(Json(result))
+}
+

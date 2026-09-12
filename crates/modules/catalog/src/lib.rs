@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
     CatalogContract, CatalogItemDto, CategoryDto, ContractError, CreateCatalogItemRequest,
-    CreateCategoryRequest, CreateVariantRequest, PaginatedResponse, ProductVariantDto,
-    UpdateCategoryRequest, UpdateVariantRequest,
+    CreateCategoryRequest, CreateVariantRequest, PaginatedResponse, PopularSearchKeyword,
+    ProductSuggestionItem, ProductVariantDto, SearchSuggestionResult, UpdateCategoryRequest,
+    UpdateVariantRequest,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -817,6 +818,189 @@ impl CatalogContract for CatalogModule {
         if res.rows_affected() == 0 {
             return Err(ContractError::NotFound(format!("Category {}", id)));
         }
+
+        Ok(())
+    }
+
+    async fn search_suggestions(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<SearchSuggestionResult, ContractError> {
+        let limit = limit.clamp(1, 20);
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Ok(SearchSuggestionResult {
+                query: query.to_string(),
+                product_suggestions: vec![],
+                category_suggestions: vec![],
+            });
+        }
+
+        // Sanitize for SQLite FTS5 query
+        let sanitized_tokens: Vec<String> = trimmed
+            .split_whitespace()
+            .filter_map(|word| {
+                let clean: String = word.chars().filter(|c| c.is_alphanumeric()).collect();
+                if clean.is_empty() {
+                    None
+                } else {
+                    Some(format!("{}*", clean))
+                }
+            })
+            .collect();
+
+        if sanitized_tokens.is_empty() {
+            return Ok(SearchSuggestionResult {
+                query: query.to_string(),
+                product_suggestions: vec![],
+                category_suggestions: vec![],
+            });
+        }
+
+        let fts_query = sanitized_tokens.join(" ");
+
+        // Query FTS table joined with catalog_items via rowid
+        let mut rows = match sqlx::query(
+            "SELECT c.id, c.name, c.price, c.category, c.image_url
+             FROM catalog_fts f
+             JOIN catalog_items c ON c.rowid = f.rowid
+             WHERE catalog_fts MATCH $1
+             LIMIT $2",
+        )
+        .bind(&fts_query)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(target: "catalog", "FTS query failed, falling back to LIKE: {}", e);
+                vec![]
+            }
+        };
+
+        if rows.is_empty() {
+            // Fallback to LIKE for sub-token or substring matches
+            let like_pattern = format!("%{}%", trimmed);
+            if let Ok(fallback_rows) = sqlx::query(
+                "SELECT c.id, c.name, c.price, c.category, c.image_url
+                 FROM catalog_items c
+                 WHERE c.name LIKE $1 OR c.category LIKE $1
+                 LIMIT $2",
+            )
+            .bind(&like_pattern)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            {
+                rows = fallback_rows;
+            }
+        }
+
+        let mut product_suggestions = Vec::new();
+        for r in rows {
+            let id: String = r.get("id");
+            let name: String = r.get("name");
+            let price: f64 = r.get("price");
+            let category: String = r.get("category");
+            let image_url: String = r.get("image_url");
+
+            product_suggestions.push(ProductSuggestionItem {
+                id,
+                name,
+                price_cents: price as i64,
+                category,
+                image_url: if image_url.is_empty() {
+                    None
+                } else {
+                    Some(image_url)
+                },
+            });
+        }
+
+        // Also suggest matching categories
+        let cat_rows = sqlx::query(
+            "SELECT DISTINCT category FROM catalog_items 
+             WHERE category LIKE $1
+             LIMIT 5",
+        )
+        .bind(format!("%{}%", trimmed))
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        let category_suggestions: Vec<String> = cat_rows
+            .into_iter()
+            .map(|r| r.get::<String, _>("category"))
+            .collect();
+
+        // Record search query in analytics asynchronously
+        let pool = self.pool.clone();
+        let q_owned = trimmed.to_lowercase();
+        tokio::spawn(async move {
+            let _ = sqlx::query(
+                "INSERT INTO search_analytics (id, keyword, search_count, last_searched_at)
+                 VALUES ($1, $2, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                 ON CONFLICT(keyword) DO UPDATE SET
+                   search_count = search_count + 1,
+                   last_searched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(&q_owned)
+            .execute(&pool)
+            .await;
+        });
+
+        Ok(SearchSuggestionResult {
+            query: query.to_string(),
+            product_suggestions,
+            category_suggestions,
+        })
+    }
+
+    async fn get_popular_searches(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<PopularSearchKeyword>, ContractError> {
+        let limit = limit.clamp(1, 20);
+        let rows = sqlx::query(
+            "SELECT keyword, search_count FROM search_analytics
+             ORDER BY search_count DESC, last_searched_at DESC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(PopularSearchKeyword {
+                keyword: r.get("keyword"),
+                search_count: r.get("search_count"),
+            });
+        }
+        Ok(res)
+    }
+
+    async fn record_search_query(&self, keyword: &str) -> Result<(), ContractError> {
+        let trimmed = keyword.trim().to_lowercase();
+        if trimmed.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            "INSERT INTO search_analytics (id, keyword, search_count, last_searched_at)
+             VALUES ($1, $2, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+             ON CONFLICT(keyword) DO UPDATE SET
+               search_count = search_count + 1,
+               last_searched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&trimmed)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         Ok(())
     }

@@ -84,23 +84,6 @@ async fn main() {
             Arc::new(program1_core::ConsoleEmailSender::new())
         };
 
-    let notification_module = Arc::new(program1_module_notification::NotificationModule::new(
-        db_pool.clone(),
-    ));
-
-    let order_module = Arc::new(
-        OrderModule::new(
-            db_pool.clone(),
-            catalog_module.clone(),
-            inventory_module.clone(),
-        )
-        .with_email_sender(email_sender.clone(), config.store_name.clone())
-        .with_notification_contract(notification_module.clone()),
-    );
-    let analytics_module = Arc::new(AnalyticsModule::new(
-        catalog_module.clone(),
-        order_module.clone(),
-    ));
     let audit_module = Arc::new(AuditModule::new(db_pool.clone()));
 
     let google_verifier = Arc::new(program1_module_buyer::ProductionGoogleVerifier {
@@ -127,6 +110,25 @@ async fn main() {
         )
         .with_email_sender(email_sender.clone(), config.store_name.clone()),
     );
+
+    let notification_module = Arc::new(program1_module_notification::NotificationModule::new(
+        db_pool.clone(),
+    ));
+
+    let order_module = Arc::new(
+        OrderModule::new(
+            db_pool.clone(),
+            catalog_module.clone(),
+            inventory_module.clone(),
+        )
+        .with_email_sender(email_sender.clone(), config.store_name.clone())
+        .with_notification_contract(notification_module.clone())
+        .with_buyer_contract(buyer_module.clone()),
+    );
+    let analytics_module = Arc::new(AnalyticsModule::new(
+        catalog_module.clone(),
+        order_module.clone(),
+    ));
     let chat_module = Arc::new(ChatModule::new(db_pool.clone()));
     let payment_module = Arc::new(PaymentModule::new(
         db_pool.clone(),
@@ -150,6 +152,9 @@ async fn main() {
     let backup_service = Arc::new(program1_core::backup::BackupService::new(
         db_pool.clone(),
         "./data/backups",
+    ));
+    let flash_sale_module = Arc::new(program1_module_flash_sale::FlashSaleModule::new(
+        db_pool.clone(),
     ));
 
     // Ensure initial seed runs
@@ -181,6 +186,7 @@ async fn main() {
         notification_contract: notification_module,
         return_contract: return_module,
         backup_contract: backup_service,
+        flash_sale_contract: flash_sale_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

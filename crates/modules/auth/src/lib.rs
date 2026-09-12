@@ -185,6 +185,8 @@ mod tests {
             phone_number: Some("+628123456789".to_string()),
             phone_verified: true,
             is_active: true,
+            points_balance: 0,
+            membership_tier: "Classic".to_string(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

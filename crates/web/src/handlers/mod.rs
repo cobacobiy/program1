@@ -19,6 +19,7 @@ pub mod returns;
 pub mod seo;
 pub mod upload;
 pub mod user;
+pub mod flash_sale;
 
 pub use analytics::*;
 pub use audit::*;
@@ -30,6 +31,7 @@ pub use category::*;
 pub use channel::*;
 pub use chat::*;
 pub use coupon::*;
+pub use flash_sale::*;
 pub use health::*;
 pub use inventory::*;
 pub use notification::*;

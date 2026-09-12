@@ -18,6 +18,8 @@ fn test_buyer_contract_types_instantiation() {
         phone_number: Some("+628123456789".to_string()),
         phone_verified: true,
         is_active: true,
+        points_balance: 0,
+        membership_tier: "Classic".to_string(),
         created_at: now,
         updated_at: now,
     };
@@ -145,6 +147,7 @@ fn test_buyer_checkout_request_structure() {
         }],
         courier: None,
         shipping_cost_cents: None,
+        use_points: None,
     };
     assert!(valid_req.validate().is_ok());
 
@@ -153,6 +156,7 @@ fn test_buyer_checkout_request_structure() {
         items: vec![],
         courier: None,
         shipping_cost_cents: None,
+        use_points: None,
     };
     assert!(empty_items_req.validate().is_err());
 }

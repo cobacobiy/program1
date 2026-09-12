@@ -95,6 +95,7 @@ async fn setup_test_app() -> (axum::Router, String, String) {
         )),
         return_contract: Arc::new(program1_module_return::ReturnModule::new(pool.clone())),
         backup_contract: backup_service,
+        flash_sale_contract: Arc::new(program1_module_flash_sale::FlashSaleModule::new(pool.clone())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

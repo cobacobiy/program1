@@ -25,6 +25,9 @@
   import LiveChat from './lib/LiveChat.svelte';
   import AdminHub from './lib/AdminHub.svelte';
   import NotificationBell from './lib/NotificationBell.svelte';
+  import SearchDropdown from './lib/SearchDropdown.svelte';
+  import FlashSaleBanner from './lib/FlashSaleBanner.svelte';
+  import type { ProductSuggestionItem, FlashSaleItemDto } from './lib/types';
 
   // Navigation & Modals state
   let activeTab = $state<'store' | 'admin' | 'diagnostic'>('store');
@@ -200,6 +203,46 @@
   let catalogError = $state<string | null>(null);
   let searchQuery = $state('');
   let selectedCategory = $state<string>('all');
+  let isSearchDropdownOpen = $state(false);
+  let searchDropdownRef: any = $state(null);
+
+  function handleSelectSuggestionProduct(item: ProductSuggestionItem) {
+    const matched = products.find((p) => p.id === item.id);
+    if (matched) {
+      openDetailModal(matched);
+    } else {
+      searchQuery = item.name;
+    }
+  }
+
+  function handleSelectSuggestionKeyword(keyword: string) {
+    searchQuery = keyword;
+  }
+
+  function handleFlashSaleAddToCart(item: FlashSaleItemDto) {
+    const matched = products.find((p) => p.id === item.product_id);
+    const prod: Product = matched ? {
+      ...matched,
+      price_cents: Math.round(item.discount_price * 100),
+    } : {
+      id: item.product_id,
+      name: item.product_name,
+      description: '',
+      price_cents: Math.round(item.discount_price * 100),
+      stock: item.stock_remaining,
+      image_url: item.product_image_url,
+    };
+    cart.addItem(prod);
+    triggerAddToCartFeedback(prod.id);
+    toast.success(`⚡ ${item.product_name} (Flash Sale) ditambahkan ke keranjang!`);
+  }
+
+  function handleSelectFlashSaleProduct(productId: string) {
+    const matched = products.find((p) => p.id === productId);
+    if (matched) {
+      openDetailModal(matched);
+    }
+  }
 
   const totalProductCount = $derived(
     categoriesList.length > 0
@@ -440,7 +483,15 @@
             📦 {i18n.t('nav.orders', 'Pesanan Saya')}
           </button>
           <div class="user-pill">
-            <span class="uname">👤 {auth.user.name}</span>
+            <div class="user-badge-col">
+              <span class="uname">👤 {auth.user.name}</span>
+              <div class="loyalty-chips-mini">
+                <span class="user-tier-badge">👑 {auth.user.membership_tier || 'Classic'}</span>
+                {#if auth.user.points_balance !== undefined}
+                  <span class="user-points-badge">⭐ {auth.user.points_balance.toLocaleString('id-ID')} Poin</span>
+                {/if}
+              </div>
+            </div>
             <button class="btn-logout" onclick={() => auth.logout()}>{i18n.t('nav.logout', 'Keluar')}</button>
           </div>
         {:else}
@@ -463,13 +514,42 @@
   <main class="page-body">
     {#if activeTab === 'store'}
       <section class="store-view">
+        <!-- Flash Sale Campaign Banner -->
+        <FlashSaleBanner
+          onAddToCart={handleFlashSaleAddToCart}
+          onSelectProduct={handleSelectFlashSaleProduct}
+        />
+
         <div class="catalog-filters">
-          <div class="search-field">
-            <span class="s-icon">🔍</span>
-            <input
-              type="text"
-              placeholder={i18n.t('catalog.search_placeholder', 'Cari produk impianmu...')}
-              bind:value={searchQuery}
+          <div class="search-field-wrapper">
+            <div class="search-field">
+              <span class="s-icon">🔍</span>
+              <input
+                type="text"
+                placeholder={i18n.t('catalog.search_placeholder', 'Cari produk impianmu...')}
+                bind:value={searchQuery}
+                onfocus={() => isSearchDropdownOpen = true}
+                onkeydown={(e) => searchDropdownRef?.handleKeyDown(e)}
+              />
+              {#if searchQuery}
+                <button
+                  type="button"
+                  class="clear-query-btn"
+                  onclick={() => { searchQuery = ''; }}
+                  aria-label="Bersihkan pencarian"
+                >
+                  ✕
+                </button>
+              {/if}
+            </div>
+
+            <SearchDropdown
+              bind:this={searchDropdownRef}
+              bind:query={searchQuery}
+              bind:isOpen={isSearchDropdownOpen}
+              onSelectProduct={handleSelectSuggestionProduct}
+              onSelectKeyword={handleSelectSuggestionKeyword}
+              onClose={() => isSearchDropdownOpen = false}
             />
           </div>
 
@@ -1059,10 +1139,29 @@
     box-shadow: 0 1px 4px rgba(2, 132, 199, 0.4);
   }
   .user-pill {
-    display: flex; align-items: center; gap: 0.5rem;
+    display: flex; align-items: center; gap: 0.6rem;
     background: #1e293b; padding: 0.35rem 0.75rem; border-radius: 20px; border: 1px solid #334155;
   }
-  .uname { font-size: 0.85rem; color: #cbd5e1; }
+  .user-badge-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .uname { font-size: 0.85rem; color: #cbd5e1; line-height: 1.1; }
+  .loyalty-chips-mini {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+  }
+  .user-tier-badge {
+    color: #fde047;
+    font-weight: 700;
+  }
+  .user-points-badge {
+    color: #34d399;
+    font-weight: 600;
+  }
   .btn-logout {
     background: #475569; color: #fff; border: none; font-size: 0.75rem;
     padding: 0.2rem 0.5rem; border-radius: 4px; cursor: pointer;
@@ -1117,6 +1216,10 @@
 
   /* Catalog Filters */
   .catalog-filters { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.75rem; }
+  .search-field-wrapper {
+    position: relative;
+    width: 100%;
+  }
   .search-field {
     display: flex; align-items: center; background: #0f172a; border: 1px solid #334155;
     border-radius: 8px; padding: 0 0.85rem;
@@ -1127,6 +1230,21 @@
     color: #fff; font-size: 0.95rem;
   }
   .search-field input:focus { outline: none; }
+  .clear-query-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 50%;
+    line-height: 1;
+    transition: color 0.15s, background 0.15s;
+  }
+  .clear-query-btn:hover {
+    color: #f43f5e;
+    background: rgba(244, 63, 94, 0.15);
+  }
   .category-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .pill-btn {
     background: #1e293b; color: #94a3b8; border: 1px solid #334155;

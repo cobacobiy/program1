@@ -210,6 +210,9 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/shipping/cities", get(search_cities_handler))
         .route("/api/v1/categories", get(list_categories_handler))
         .route("/api/v1/categories/:id", get(get_category_handler))
+        .route("/api/v1/catalog/suggest", get(search_suggest_handler))
+        .route("/api/v1/catalog/popular-searches", get(popular_searches_handler))
+        .route("/api/v1/flash-sales/active", get(get_active_flash_sale_handler))
         .route("/robots.txt", get(get_robots_txt))
         .route("/sitemap.xml", get(get_sitemap_xml))
         .route("/product/:id", get(get_product_page_handler));
@@ -228,6 +231,7 @@ pub fn create_app(state: AppState) -> Router {
             "/api/v1/buyer/profile",
             get(get_buyer_profile_handler).put(update_buyer_profile_handler),
         )
+        .route("/api/v1/buyer/loyalty", get(get_loyalty_summary_handler))
         .route(
             "/api/v1/buyer/addresses",
             get(list_addresses_handler).post(create_address_handler),
@@ -466,6 +470,18 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/admin/database/health",
             get(check_database_health_handler),
+        )
+        .route(
+            "/api/v1/admin/flash-sales",
+            get(list_flash_sale_sessions_handler).post(create_flash_sale_session_handler),
+        )
+        .route(
+            "/api/v1/admin/flash-sales/:id/items",
+            post(add_flash_sale_item_handler),
+        )
+        .route(
+            "/api/v1/admin/flash-sales/:id/toggle",
+            put(toggle_flash_sale_session_handler),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
