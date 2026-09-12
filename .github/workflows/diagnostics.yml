@@ -14,44 +14,25 @@ jobs:
           docker ps -a --filter "name=program1"
           
           echo "=== 2. CONTAINER INSPECT (STATE & HEALTH) ==="
-          docker inspect program1-app --format 'Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}, Health: {{json .State.Health}}' || true
+          docker inspect program1-app --format 'Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}, Restarting: {{.State.Restarting}}, Health: {{json .State.Health}}' || true
           
-          echo "=== 3. CONTAINER LOGS (LAST 150 LINES) ==="
-          docker logs --tail 150 program1-app || true
+          echo "=== 3. CONTAINER LOGS (LAST 100 LINES) ==="
+          docker logs --tail 100 program1-app || true
           
           echo "=== 4. LISTENING PORTS (6090 / 8080) ==="
-          ss -tlpn | grep -E '6090|8080' || netstat -tlpn 2>/dev/null | grep -E '6090|8080' || true
+          ss -tlpn | grep -E '6090|8080' || true
           
           echo "=== 5. CURL LOCALHOST:6090/health ==="
           curl -ivs --max-time 5 http://localhost:6090/health || true
-          
-          echo "=== 6. CURL LOCALHOST:6090/api/v1/store/info ==="
-          curl -ivs --max-time 5 http://localhost:6090/api/v1/store/info || true
-          
-          echo "=== 7. DOCKER COMPOSE CONFIG & ENV CHECK ==="
-          if [ -f ".env" ]; then
-            echo ".env exists. Configured variables:"
-            grep -E '^[A-Z_]+=' .env | sed -E 's/=(.*)/=***/'
-          else
-            echo ".env does NOT exist in runner workspace."
-          fi
 
-          echo "=== 8. SQLITE DATABASE INSPECTION ==="
-          docker run --rm -v program1_data:/app/data alpine sh -c '
-            if [ -f /app/data/program1.db ]; then
-              echo "DB file size: $(ls -l /app/data/program1.db)"
-            else
-              echo "DB file /app/data/program1.db does NOT exist!"
-            fi
-          ' || true
-          docker run --rm -v program1_data:/app/data debian:bookworm-slim sh -c '
-            apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null 2>&1
-            if [ -f /app/data/program1.db ]; then
-              echo "--- _sqlx_migrations ---"
-              sqlite3 /app/data/program1.db "SELECT version, description, success, length(checksum) FROM _sqlx_migrations;" || true
-              echo "--- buyer_accounts schema ---"
-              sqlite3 /app/data/program1.db ".schema buyer_accounts" || true
-              echo "--- orders columns ---"
-              sqlite3 /app/data/program1.db "PRAGMA table_info(orders);" || true
-            fi
-          ' || true
+          echo "=== 6. AUTO-RECOVERY (DOCKER COMPOSE UP) IF DOWN ==="
+          if ! curl -fsS --max-time 3 http://localhost:6090/health >/dev/null 2>&1; then
+            echo "Health check failed! Attempting to restart container..."
+            docker compose up -d --force-recreate
+            sleep 4
+            docker ps -a --filter "name=program1"
+            docker logs --tail 50 program1-app || true
+            curl -ivs --max-time 5 http://localhost:6090/health || true
+          else
+            echo "App is healthy and responding on port 6090!"
+          fi
