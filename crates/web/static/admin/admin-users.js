@@ -200,6 +200,29 @@ function openEditPermissionsModal(userId) {
       </label>
     `}).join("");
   }
+
+  const actionPerms = [
+    { id: "orders:manage", label: "🛒 Kelola Status Pesanan (orders:manage)" },
+    { id: "inventory:manage", label: "🏭 Mutasi Stok & Inventori (inventory:manage)" },
+    { id: "catalog:write", label: "📦 Tambah / Edit Produk (catalog:write)" },
+    { id: "suppliers:manage", label: "🏢 Restock & Supplier PO (suppliers:manage)" },
+    { id: "promotions:manage", label: "🏷️ Kupon & Flash Sale (promotions:manage)" },
+    { id: "reports:view", label: "📑 Akses Laporan Penjualan (reports:view)" },
+    { id: "chat:support", label: "💬 Layanan CS Chat (chat:support)" },
+  ];
+  const userPerms = user.permissions || [];
+  const actionGrid = document.getElementById("action-perm-checkboxes-grid");
+  if (actionGrid) {
+    actionGrid.innerHTML = actionPerms.map(p => {
+      const isChecked = isAdmin || userPerms.includes(p.id) || userPerms.includes("*");
+      const isDisabled = isAdmin ? "disabled" : "";
+      return `
+      <label class="perm-item" style="${isAdmin ? 'opacity:0.75; cursor:not-allowed;' : ''}">
+        <input type="checkbox" name="perm_action" value="${p.id}" ${isChecked ? "checked" : ""} ${isDisabled}>
+        <span>${p.label}</span>
+      </label>
+    `}).join("");
+  }
   document.getElementById("edit-permissions-modal").style.display = "flex";
 }
 
@@ -393,17 +416,29 @@ document.addEventListener("DOMContentLoaded", () => {
         ? items.map(m => m.id)
         : Array.from(document.querySelectorAll('#perm-checkboxes-grid input[name="perm_menu"]:checked')).map(cb => cb.value);
 
-      const res = await authFetch(`/api/v1/users/accounts/${userId}/permissions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessible_menus: checked })
-      });
-      if (res.ok) {
-        alert("⚙️ Hak Akses User Berhasil Diperbarui!");
+      const actionChecked = isAdmin
+        ? ["*"]
+        : Array.from(document.querySelectorAll('#action-perm-checkboxes-grid input[name="perm_action"]:checked')).map(cb => cb.value);
+
+      const [resMenu, resPerm] = await Promise.all([
+        authFetch(`/api/v1/users/accounts/${userId}/permissions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessible_menus: checked })
+        }),
+        authFetch(`/api/v1/users/accounts/${userId}/staff-permissions`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ permissions: actionChecked })
+        })
+      ]);
+
+      if (resMenu.ok && resPerm.ok) {
+        alert("⚙️ Hak Akses Menu & Matriks Izin Staf Berhasil Diperbarui!");
         closeEditPermissionsModal();
         await fetchUserAccounts();
       } else {
-        const err = await res.json();
+        const err = !resMenu.ok ? await resMenu.json() : await resPerm.json();
         alert(`Gagal update permissions: ${err.error || JSON.stringify(err)}`);
       }
     };

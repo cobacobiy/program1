@@ -241,7 +241,7 @@ impl Modify for SecurityAddon {
     modifiers(&SecurityAddon),
     info(
         title = "Program1 — Omnichannel Commerce API",
-        version = "1.0.0",
+        version = "1.2.0",
         description = "High-performance modular monolith REST API engine for AURA Storefront."
     )
 )]

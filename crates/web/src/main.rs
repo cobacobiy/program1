@@ -9,12 +9,14 @@ use program1_module_catalog::CatalogModule;
 use program1_module_channel::ChannelSyncModule;
 use program1_module_chat::ChatModule;
 use program1_module_coupon::CouponModule;
+use program1_module_flash_sale::FlashSaleModule;
 use program1_module_inventory::InventoryModule;
 use program1_module_order::OrderModule;
 use program1_module_payment::PaymentModule;
+use program1_module_return::ReturnModule;
 use program1_module_review::ReviewModule;
 use program1_module_shipping::ShippingModule;
-use program1_module_return::ReturnModule;
+use program1_module_supplier::SupplierModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
 
@@ -153,7 +155,10 @@ async fn main() {
         db_pool.clone(),
         "./data/backups",
     ));
-    let flash_sale_module = Arc::new(program1_module_flash_sale::FlashSaleModule::new(
+    let flash_sale_module = Arc::new(FlashSaleModule::new(
+        db_pool.clone(),
+    ));
+    let supplier_module = Arc::new(SupplierModule::new(
         db_pool.clone(),
     ));
 
@@ -187,6 +192,7 @@ async fn main() {
         return_contract: return_module,
         backup_contract: backup_service,
         flash_sale_contract: flash_sale_module,
+        supplier_contract: supplier_module,
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: config.google_client_id.clone(),

@@ -146,6 +146,8 @@ pub struct UserAccountDto {
     pub accessible_menus: Vec<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 /// Request DTO untuk login
@@ -185,6 +187,8 @@ pub struct RegisterUserRequest {
     #[validate(length(max = 50))]
     pub role: String,
     pub accessible_menus: Vec<String>,
+    #[serde(default)]
+    pub permissions: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -203,11 +207,26 @@ pub struct CreateUserAccountRequest {
     #[validate(length(min = 1, max = 50, message = "Role required (max 50 characters)"))]
     pub role: String,
     pub accessible_menus: Vec<String>,
+    #[serde(default)]
+    pub permissions: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateUserPermissionsRequest {
     pub accessible_menus: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PermissionDto {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateStaffPermissionsRequest {
+    pub permissions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -276,6 +295,11 @@ pub trait UserContract: Send + Sync {
         reason: Option<String>,
     ) -> Result<BreakGlassStatusDto, ContractError>;
     async fn get_break_glass_status(&self) -> Result<BreakGlassStatusDto, ContractError>;
+
+    /// Granular Staff RBAC Permissions
+    async fn list_available_permissions(&self) -> Result<Vec<PermissionDto>, ContractError>;
+    async fn get_user_permissions(&self, user_id: Uuid) -> Result<Vec<String>, ContractError>;
+    async fn set_user_permissions(&self, user_id: Uuid, permissions: Vec<String>) -> Result<(), ContractError>;
 }
 
 // --- AUTH & JWT CONTRACT ---
@@ -295,6 +319,8 @@ pub struct JwtClaims {
     pub iat: i64, // issued at
     #[serde(default = "default_seller_user_type")]
     pub user_type: String, // "buyer" | "seller_staff"
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 impl JwtClaims {
@@ -304,6 +330,13 @@ impl JwtClaims {
 
     pub fn is_seller_staff(&self) -> bool {
         self.user_type == "seller_staff"
+    }
+
+    pub fn has_permission(&self, perm: &str) -> bool {
+        if self.role.to_lowercase().contains("admin") || self.permissions.iter().any(|p| p == "*") {
+            return true;
+        }
+        self.permissions.iter().any(|p| p == perm)
     }
 }
 
@@ -2102,6 +2135,103 @@ pub struct LoyaltyLedgerEntryDto {
     pub description: String,
     pub created_at: String,
 }
+
+// --- SUPPLIER & PURCHASE ORDER CONTRACT ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SupplierDto {
+    pub id: String,
+    pub name: String,
+    pub contact_person: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateSupplierRequest {
+    #[validate(length(min = 1, max = 200, message = "Nama supplier wajib diisi (1-200 karakter)"))]
+    pub name: String,
+    pub contact_person: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct UpdateSupplierRequest {
+    #[validate(length(min = 1, max = 200, message = "Nama supplier wajib diisi (1-200 karakter)"))]
+    pub name: String,
+    pub contact_person: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PurchaseOrderItemDto {
+    pub id: String,
+    pub po_id: String,
+    pub product_id: String,
+    pub product_name: Option<String>,
+    pub variant_id: Option<String>,
+    pub quantity: i64,
+    pub unit_cost_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PurchaseOrderDto {
+    pub id: String,
+    pub po_number: String,
+    pub supplier_id: String,
+    pub supplier_name: String,
+    pub status: String, // "draft", "ordered", "received", "cancelled"
+    pub total_cost_cents: i64,
+    pub expected_delivery_date: Option<String>,
+    pub notes: Option<String>,
+    pub items: Vec<PurchaseOrderItemDto>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct PurchaseOrderItemRequest {
+    pub product_id: String,
+    pub variant_id: Option<String>,
+    #[validate(range(min = 1, message = "Jumlah item minimal 1"))]
+    pub quantity: i64,
+    #[validate(range(min = 0, message = "Biaya unit minimal 0"))]
+    pub unit_cost_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreatePurchaseOrderRequest {
+    pub supplier_id: String,
+    pub expected_delivery_date: Option<String>,
+    pub notes: Option<String>,
+    #[validate(length(min = 1, message = "Minimal harus ada 1 item pesanan pembelian"))]
+    pub items: Vec<PurchaseOrderItemRequest>,
+}
+
+#[async_trait]
+pub trait SupplierContract: Send + Sync {
+    async fn list_suppliers(&self) -> Result<Vec<SupplierDto>, ContractError>;
+    async fn get_supplier(&self, id: &str) -> Result<SupplierDto, ContractError>;
+    async fn create_supplier(&self, req: CreateSupplierRequest) -> Result<SupplierDto, ContractError>;
+    async fn update_supplier(&self, id: &str, req: UpdateSupplierRequest) -> Result<SupplierDto, ContractError>;
+    async fn delete_supplier(&self, id: &str) -> Result<(), ContractError>;
+
+    async fn list_purchase_orders(&self, status_filter: Option<&str>) -> Result<Vec<PurchaseOrderDto>, ContractError>;
+    async fn get_purchase_order(&self, id: &str) -> Result<PurchaseOrderDto, ContractError>;
+    async fn create_purchase_order(&self, req: CreatePurchaseOrderRequest) -> Result<PurchaseOrderDto, ContractError>;
+    async fn receive_purchase_order(&self, id: &str) -> Result<PurchaseOrderDto, ContractError>;
+    async fn cancel_purchase_order(&self, id: &str) -> Result<PurchaseOrderDto, ContractError>;
+}
+
 
 
 

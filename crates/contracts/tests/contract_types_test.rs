@@ -63,6 +63,7 @@ fn test_jwt_claims_buyer_vs_seller() {
         exp: 9999999999,
         iat: 1000000000,
         user_type: "seller_staff".to_string(),
+        permissions: vec![],
     };
     assert!(seller_claims.is_seller_staff());
     assert!(!seller_claims.is_buyer());
@@ -75,6 +76,7 @@ fn test_jwt_claims_buyer_vs_seller() {
         exp: 9999999999,
         iat: 1000000000,
         user_type: "buyer".to_string(),
+        permissions: vec![],
     };
     assert!(buyer_claims.is_buyer());
     assert!(!buyer_claims.is_seller_staff());

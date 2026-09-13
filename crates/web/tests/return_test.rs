@@ -190,6 +190,7 @@ async fn setup_test_context() -> TestContext {
         return_contract: return_module,
         backup_contract: Arc::new(program1_core::backup::BackupService::new(pool.clone(), "./target/test_backups")),
         flash_sale_contract: Arc::new(program1_module_flash_sale::FlashSaleModule::new(pool.clone())),
+        supplier_contract: Arc::new(program1_module_supplier::SupplierModule::new(pool.clone())),
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),

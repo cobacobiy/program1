@@ -317,7 +317,12 @@ pub fn create_app(state: AppState) -> Router {
         )
         .route(
             "/api/v1/catalog",
-            post(create_catalog_item).route_layer(catalog_limit_layer.clone()),
+            post(create_catalog_item)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("catalog:write"),
+                ))
+                .route_layer(catalog_limit_layer.clone()),
         )
         .route(
             "/api/v1/catalog/:id/variants",
@@ -349,7 +354,12 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/orders/:id", get(get_order))
         .route(
             "/api/v1/orders/:id/status",
-            patch(update_order_status_handler).route_layer(order_limit_layer.clone()),
+            patch(update_order_status_handler)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("orders:manage"),
+                ))
+                .route_layer(order_limit_layer.clone()),
         )
         .route(
             "/api/v1/orders/:id/tracking",
@@ -391,6 +401,58 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/admin/payments/order/:order_id",
             get(get_payment_by_order_handler),
+        )
+        .route(
+            "/api/v1/admin/suppliers",
+            get(list_suppliers)
+                .post(create_supplier)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("suppliers:manage"),
+                )),
+        )
+        .route(
+            "/api/v1/admin/suppliers/:id",
+            get(get_supplier)
+                .put(update_supplier)
+                .delete(delete_supplier)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("suppliers:manage"),
+                )),
+        )
+        .route(
+            "/api/v1/admin/purchase-orders",
+            get(list_purchase_orders)
+                .post(create_purchase_order)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("suppliers:manage"),
+                )),
+        )
+        .route(
+            "/api/v1/admin/purchase-orders/:id",
+            get(get_purchase_order)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("suppliers:manage"),
+                )),
+        )
+        .route(
+            "/api/v1/admin/purchase-orders/:id/receive",
+            put(receive_purchase_order)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("suppliers:manage"),
+                )),
+        )
+        .route(
+            "/api/v1/admin/purchase-orders/:id/cancel",
+            put(cancel_purchase_order)
+                .route_layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::require_permission("suppliers:manage"),
+                )),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -482,6 +544,11 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/api/v1/admin/flash-sales/:id/toggle",
             put(toggle_flash_sale_session_handler),
+        )
+        .route("/api/v1/admin/permissions", get(list_available_permissions))
+        .route(
+            "/api/v1/users/accounts/:id/staff-permissions",
+            get(get_user_staff_permissions).put(update_user_staff_permissions),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),

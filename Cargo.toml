@@ -20,12 +20,13 @@ members = [
     "crates/modules/notification",
     "crates/modules/return",
     "crates/modules/flash_sale",
+    "crates/modules/supplier",
     "crates/web",
 ]
 
 
 [workspace.package]
-version = "1.0.1"
+version = "1.2.0"
 edition = "2021"
 authors = ["Program1 Maintainers"]
 license = "MIT"

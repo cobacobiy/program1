@@ -109,6 +109,7 @@ async fn setup_test_app() -> (
             "./target/test_backups",
         )),
         flash_sale_contract: flash_sale_module.clone(),
+        supplier_contract: Arc::new(program1_module_supplier::SupplierModule::new(pool.clone())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -125,6 +126,7 @@ async fn setup_test_app() -> (
         exp: now_ts + 3600,
         iat: now_ts,
         user_type: "seller_staff".to_string(),
+        permissions: vec!["*".to_string()],
     };
     let admin_token = encode(
         &Header::default(),
@@ -141,6 +143,7 @@ async fn setup_test_app() -> (
         exp: now_ts + 3600,
         iat: now_ts,
         user_type: "buyer".to_string(),
+        permissions: vec![],
     };
     let buyer_token = encode(
         &Header::default(),

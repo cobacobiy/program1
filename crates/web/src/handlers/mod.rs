@@ -20,6 +20,7 @@ pub mod seo;
 pub mod upload;
 pub mod user;
 pub mod flash_sale;
+pub mod supplier;
 
 pub use analytics::*;
 pub use audit::*;
@@ -41,5 +42,6 @@ pub use returns::*;
 pub use review::*;
 pub use seo::*;
 pub use shipping::*;
+pub use supplier::*;
 pub use upload::*;
 pub use user::*;

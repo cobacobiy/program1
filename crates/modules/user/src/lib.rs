@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use program1_contracts::{
     ActivateBreakGlassRequest, BreakGlassStatusDto, ContractError, CreateUserAccountRequest,
-    RegisterUserRequest, UserAccountDto, UserContract,
+    PermissionDto, RegisterUserRequest, UserAccountDto, UserContract,
 };
 use program1_core::database::DbPool;
 use sqlx::Row;
@@ -250,7 +250,31 @@ impl UserModule {
             accessible_menus,
             is_active: is_active != 0,
             created_at,
+            permissions: vec![],
         })
+    }
+
+    async fn fetch_permissions_for_user(&self, user_id: &str) -> Vec<String> {
+        let rows = sqlx::query(
+            "SELECT p.name FROM permissions p
+             JOIN user_permissions up ON up.permission_id = p.id
+             WHERE up.user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter().map(|r| r.get::<String, _>("name")).collect()
+    }
+
+    async fn enrich_user_dto(&self, mut dto: UserAccountDto) -> UserAccountDto {
+        if dto.role.to_lowercase().contains("admin") {
+            dto.permissions = vec!["*".to_string()];
+        } else {
+            dto.permissions = self.fetch_permissions_for_user(&dto.id.to_string()).await;
+        }
+        dto
     }
 }
 
@@ -306,7 +330,8 @@ impl UserContract for UserModule {
             ));
         }
 
-        Self::row_to_dto(&row)
+        let dto = Self::row_to_dto(&row)?;
+        Ok(self.enrich_user_dto(dto).await)
     }
 
     async fn get_account(&self, user_id: Uuid) -> Result<UserAccountDto, ContractError> {
@@ -320,7 +345,10 @@ impl UserContract for UserModule {
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
         match row {
-            Some(r) => Self::row_to_dto(&r),
+            Some(r) => {
+                let dto = Self::row_to_dto(&r)?;
+                Ok(self.enrich_user_dto(dto).await)
+            }
             None => Err(ContractError::NotFound(format!(
                 "User account with ID {} not found",
                 user_id
@@ -337,7 +365,12 @@ impl UserContract for UserModule {
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        rows.iter().map(Self::row_to_dto).collect()
+        let mut list = Vec::new();
+        for r in &rows {
+            let dto = Self::row_to_dto(r)?;
+            list.push(self.enrich_user_dto(dto).await);
+        }
+        Ok(list)
     }
 
     async fn create_account(
@@ -393,6 +426,10 @@ impl UserContract for UserModule {
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
+        if let Some(ref perms) = req.permissions {
+            let _ = self.set_user_permissions(new_id, perms.clone()).await;
+        }
+
         let mut final_menus = req.accessible_menus;
         if req.role.to_lowercase().contains("admin") {
             final_menus = vec![
@@ -415,7 +452,7 @@ impl UserContract for UserModule {
             ];
         }
 
-        Ok(UserAccountDto {
+        let dto = UserAccountDto {
             id: new_id,
             username: clean_username,
             full_name: req.full_name,
@@ -423,7 +460,10 @@ impl UserContract for UserModule {
             accessible_menus: final_menus,
             is_active: true,
             created_at: now,
-        })
+            permissions: req.permissions.unwrap_or_default(),
+        };
+
+        Ok(self.enrich_user_dto(dto).await)
     }
 
     async fn update_permissions(
@@ -509,7 +549,11 @@ impl UserContract for UserModule {
         .await
         .map_err(|e| ContractError::Internal(e.to_string()))?;
 
-        Ok(UserAccountDto {
+        if let Some(ref perms) = req.permissions {
+            let _ = self.set_user_permissions(new_id, perms.clone()).await;
+        }
+
+        let dto = UserAccountDto {
             id: new_id,
             username: clean_username,
             full_name: req.full_name,
@@ -517,7 +561,10 @@ impl UserContract for UserModule {
             accessible_menus: menus,
             is_active: true,
             created_at: now,
-        })
+            permissions: req.permissions.unwrap_or_default(),
+        };
+
+        Ok(self.enrich_user_dto(dto).await)
     }
 
     async fn activate_break_glass(
@@ -643,6 +690,62 @@ impl UserContract for UserModule {
             }),
         }
     }
+
+    async fn list_available_permissions(&self) -> Result<Vec<PermissionDto>, ContractError> {
+        let rows = sqlx::query(
+            "SELECT id, name, description, category FROM permissions ORDER BY category, name",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| PermissionDto {
+                id: r.get("id"),
+                name: r.get("name"),
+                description: r.get("description"),
+                category: r.get("category"),
+            })
+            .collect())
+    }
+
+    async fn get_user_permissions(&self, user_id: Uuid) -> Result<Vec<String>, ContractError> {
+        Ok(self.fetch_permissions_for_user(&user_id.to_string()).await)
+    }
+
+    async fn set_user_permissions(
+        &self,
+        user_id: Uuid,
+        permissions: Vec<String>,
+    ) -> Result<(), ContractError> {
+        let uid_str = user_id.to_string();
+        sqlx::query("DELETE FROM user_permissions WHERE user_id = $1")
+            .bind(&uid_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+        for perm in permissions {
+            let row = sqlx::query("SELECT id FROM permissions WHERE name = $1")
+                .bind(&perm)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ContractError::Internal(e.to_string()))?;
+
+            if let Some(r) = row {
+                let pid: String = r.get("id");
+                let _ = sqlx::query(
+                    "INSERT OR IGNORE INTO user_permissions (user_id, permission_id) VALUES ($1, $2)",
+                )
+                .bind(&uid_str)
+                .bind(&pid)
+                .execute(&self.pool)
+                .await;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -678,6 +781,7 @@ mod tests {
                 full_name: "Packing Staff".to_string(),
                 role: "Warehouse Operator".to_string(),
                 accessible_menus: vec!["logistics".to_string()],
+                permissions: None,
             })
             .await
             .unwrap();
@@ -709,6 +813,7 @@ mod tests {
                 full_name: "Empty User".to_string(),
                 role: "Staff".to_string(),
                 accessible_menus: vec![],
+                permissions: None,
             })
             .await;
 
@@ -776,6 +881,7 @@ mod tests {
             full_name: "New User".to_string(),
             role: "Staff".to_string(),
             accessible_menus: vec!["dashboard".to_string(), "orders".to_string()],
+            permissions: None,
         };
 
         let user = module
@@ -799,6 +905,7 @@ mod tests {
             full_name: "Another Admin".to_string(),
             role: "Super Admin".to_string(),
             accessible_menus: vec![],
+            permissions: None,
         };
 
         let result = module.register(req).await;

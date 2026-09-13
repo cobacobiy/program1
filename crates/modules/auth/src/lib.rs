@@ -32,6 +32,12 @@ impl AuthContract for AuthModule {
         let now = Utc::now().timestamp();
         let exp = now + (self.token_expiry_hours as i64 * 3600);
 
+        let permissions = if user.role.to_lowercase().contains("admin") {
+            vec!["*".to_string()]
+        } else {
+            user.permissions.clone()
+        };
+
         let claims = JwtClaims {
             sub: user.id,
             username: user.username.clone(),
@@ -40,6 +46,7 @@ impl AuthContract for AuthModule {
             exp,
             iat: now,
             user_type: "seller_staff".to_string(),
+            permissions,
         };
 
         let header = Header::new(jsonwebtoken::Algorithm::HS256);
@@ -64,6 +71,7 @@ impl AuthContract for AuthModule {
             exp,
             iat: now,
             user_type: "buyer".to_string(),
+            permissions: vec![],
         };
 
         let header = Header::new(jsonwebtoken::Algorithm::HS256);
@@ -109,6 +117,7 @@ mod tests {
             accessible_menus: vec!["dashboard".to_string(), "orders".to_string()],
             is_active: true,
             created_at: Utc::now(),
+            permissions: vec![],
         }
     }
 
@@ -149,6 +158,7 @@ mod tests {
             exp: now - 3600, // 1 hour in the past
             iat: now - 7200,
             user_type: "seller_staff".to_string(),
+            permissions: vec![],
         };
 
         let token = encode(

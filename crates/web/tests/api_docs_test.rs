@@ -84,6 +84,7 @@ async fn setup_test_app() -> axum::Router {
         return_contract: Arc::new(program1_module_return::ReturnModule::new(pool.clone())),
         backup_contract: Arc::new(program1_core::backup::BackupService::new(pool.clone(), "./target/test_backups")),
         flash_sale_contract: Arc::new(program1_module_flash_sale::FlashSaleModule::new(pool.clone())),
+        supplier_contract: Arc::new(program1_module_supplier::SupplierModule::new(pool.clone())),
         rate_limiter,
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -97,7 +98,7 @@ async fn test_openapi_spec_structure() {
     let spec = ApiDoc::openapi();
     let json_str = serde_json::to_string_pretty(&spec).unwrap();
     assert!(json_str.contains("Program1"));
-    assert!(json_str.contains("1.0.0"));
+    assert!(json_str.contains("1.2.0"));
     assert!(json_str.contains("/api/v1/catalog"));
     assert!(json_str.contains("/api/v1/orders"));
     assert!(json_str.contains("/api/v1/auth/login"));
@@ -122,7 +123,7 @@ async fn test_openapi_endpoint_returns_json() {
     let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let spec: Value = serde_json::from_slice(&bytes).unwrap();
 
-    assert_eq!(spec["info"]["version"], "1.0.0");
+    assert_eq!(spec["info"]["version"], "1.2.0");
     assert!(spec["paths"]["/api/v1/catalog"].is_object());
     assert!(spec["components"]["schemas"]["CatalogItemDto"].is_object());
 }
@@ -145,6 +146,6 @@ async fn test_x_api_version_header_returned() {
             .unwrap()
             .to_str()
             .unwrap(),
-        "1.0.0"
+        "1.2.0"
     );
 }

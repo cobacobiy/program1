@@ -237,6 +237,61 @@ pub async fn require_admin(
     }
 }
 
+/// Helper to verify required permission from claims
+pub fn check_permission(
+    claims: &JwtClaims,
+    perm: &str,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if !claims.has_permission(perm) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "insufficient_permissions",
+                "message": format!("Akses ditolak: membutuhkan izin '{}'", perm)
+            })),
+        ));
+    }
+    Ok(())
+}
+
+/// Middleware to enforce specific granular permission for staff (or Admin bypass)
+pub fn require_permission(
+    perm: &'static str,
+) -> impl Fn(
+    State<AppState>,
+    Request,
+    Next,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<Response, (StatusCode, Json<serde_json::Value>)>> + Send>,
+> + Clone {
+    move |State(state): State<AppState>, mut req: Request, next: Next| {
+        Box::pin(async move {
+            let claims = extract_and_validate_token(req.headers(), &state)?;
+            if !claims.is_seller_staff() {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "error": "insufficient_permissions",
+                        "message": "Akses ditolak: endpoint operasional seller tidak dapat diakses oleh akun pembeli."
+                    })),
+                ));
+            }
+            validate_dev_support_active(&claims, &state).await?;
+            if !claims.has_permission(perm) {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "error": "insufficient_permissions",
+                        "message": format!("Akses ditolak: membutuhkan izin '{}'", perm)
+                    })),
+                ));
+            }
+            req.extensions_mut().insert(claims);
+            Ok(next.run(req).await)
+        })
+    }
+}
+
 /// Middleware to enforce Merchant Owner / Super Admin only RBAC access (Break-Glass)
 pub async fn require_seller_owner(
     State(state): State<AppState>,
@@ -363,7 +418,7 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     // API Version header
     headers.insert(
         HeaderName::from_static("x-api-version"),
-        HeaderValue::from_static("1.0.0"),
+        HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
     );
 
     // Hardened Content Security Policy (supporting Google Identity Services GIS)

@@ -11,7 +11,8 @@ use crate::error::ApiError;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     ActivateBreakGlassRequest, AuditLogEntry, BreakGlassStatusDto, CreateUserAccountRequest,
-    DeactivateBreakGlassRequest, JwtClaims, UpdateUserPermissionsRequest, UserAccountDto,
+    DeactivateBreakGlassRequest, JwtClaims, PermissionDto, UpdateStaffPermissionsRequest,
+    UpdateUserPermissionsRequest, UserAccountDto,
 };
 
 /// List all registered user accounts with RBAC assignments (Admin only)
@@ -232,3 +233,54 @@ pub async fn get_break_glass_status(
     let status = state.user_contract.get_break_glass_status().await?;
     Ok(Json(status))
 }
+
+/// List all available staff permissions in the system (Admin only)
+pub async fn list_available_permissions(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<JwtClaims>,
+) -> Result<Json<Vec<PermissionDto>>, ApiError> {
+    let perms = state.user_contract.list_available_permissions().await?;
+    Ok(Json(perms))
+}
+
+/// Get granular permissions for a specific staff user (Admin only)
+pub async fn get_user_staff_permissions(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(_claims): Extension<JwtClaims>,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let perms = state.user_contract.get_user_permissions(id).await?;
+    Ok(Json(perms))
+}
+
+/// Update granular permissions for a specific staff user (Admin only)
+pub async fn update_user_staff_permissions(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Extension(claims): Extension<JwtClaims>,
+    Json(payload): Json<UpdateStaffPermissionsRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    state.user_contract.set_user_permissions(id, payload.permissions.clone()).await?;
+
+    let _ = state
+        .audit_contract
+        .log_action(AuditLogEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor_id: Some(claims.sub),
+            actor_username: claims.username,
+            action: "STAFF_PERMISSIONS_UPDATED".to_string(),
+            resource_type: "user_permissions".to_string(),
+            resource_id: Some(id),
+            details: json!({ "permissions": payload.permissions }).to_string(),
+            ip_address: None,
+        })
+        .await;
+
+    Ok(Json(json!({
+        "message": "Hak akses staf berhasil diperbarui",
+        "user_id": id,
+        "permissions": payload.permissions
+    })))
+}
+

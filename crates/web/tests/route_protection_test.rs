@@ -89,6 +89,7 @@ async fn setup_test_app() -> (axum::Router, Arc<AuthModule>, String) {
         return_contract: Arc::new(program1_module_return::ReturnModule::new(pool.clone())),
         backup_contract: Arc::new(program1_core::backup::BackupService::new(pool.clone(), "./target/test_backups")),
         flash_sale_contract: Arc::new(program1_module_flash_sale::FlashSaleModule::new(pool.clone())),
+        supplier_contract: Arc::new(program1_module_supplier::SupplierModule::new(pool.clone())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test".to_string(),
@@ -199,6 +200,7 @@ async fn test_protected_routes_accept_valid_token() {
         accessible_menus: vec!["stocks".to_string()],
         is_active: true,
         created_at: Utc::now(),
+        permissions: vec![],
     };
 
     let token = auth_module.generate_token(&staff_claims).unwrap();
@@ -226,6 +228,7 @@ async fn test_admin_routes_reject_non_admin_token() {
         accessible_menus: vec!["chat".to_string()],
         is_active: true,
         created_at: Utc::now(),
+        permissions: vec![],
     };
 
     let token = auth_module.generate_token(&staff_claims).unwrap();
@@ -257,6 +260,7 @@ async fn test_admin_routes_accept_admin_token() {
         accessible_menus: vec!["dashboard".to_string(), "reports".to_string()],
         is_active: true,
         created_at: Utc::now(),
+        permissions: vec![],
     };
 
     let token = auth_module.generate_token(&admin_claims).unwrap();
@@ -285,6 +289,7 @@ async fn test_expired_token_returns_token_expired_error() {
         accessible_menus: vec![],
         exp: now - 3600, // 1 hour in the past
         iat: now - 7200,
+        permissions: vec!["*".to_string()],
     };
 
     let expired_token = encode(
@@ -322,6 +327,7 @@ async fn test_multi_tier_accounts_and_user_list_access() {
         accessible_menus: vec!["chat".to_string(), "orders".to_string()],
         is_active: true,
         created_at: Utc::now(),
+        permissions: vec![],
     };
     let staff_token = auth_module.generate_token(&staff_claims).unwrap();
 
@@ -370,6 +376,7 @@ async fn test_multi_tier_accounts_and_user_list_access() {
         accessible_menus: vec![],
         is_active: true,
         created_at: Utc::now(),
+        permissions: vec![],
     };
     let admin_token = auth_module.generate_token(&admin_claims).unwrap();
 

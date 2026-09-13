@@ -142,6 +142,7 @@ async fn setup_buyer_test_app_with_pool() -> (
         return_contract: Arc::new(program1_module_return::ReturnModule::new(pool.clone())),
         backup_contract: Arc::new(program1_core::backup::BackupService::new(pool.clone(), "./target/test_backups")),
         flash_sale_contract: Arc::new(program1_module_flash_sale::FlashSaleModule::new(pool.clone())),
+        supplier_contract: Arc::new(program1_module_supplier::SupplierModule::new(pool.clone())),
         rate_limiter: Arc::new(program1_web::rate_limit::IpRateLimiter::new()),
         started_at: std::time::Instant::now(),
         google_client_id: "test-google-client-id.apps.googleusercontent.com".to_string(),
@@ -1290,6 +1291,7 @@ async fn test_admin_buyers_management_and_activity() {
         accessible_menus: vec!["customers".to_string()],
         is_active: true,
         created_at: Utc::now(),
+        permissions: vec![],
     };
     let staff_token = auth_module.generate_token(&staff_claims).unwrap();
 

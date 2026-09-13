@@ -37,6 +37,7 @@ async fn test_db_persistence_across_pool_reconnection() {
                 full_name: "Persistent User".to_string(),
                 role: "Staff".to_string(),
                 accessible_menus: vec!["orders".to_string()],
+                permissions: None,
             })
             .await
             .expect("Failed to create user");

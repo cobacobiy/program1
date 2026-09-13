@@ -14,7 +14,7 @@ use program1_contracts::{
     AnalyticsContract, AuditContract, AuthContract, BackupContract, BuyerContract, CatalogContract,
     ChannelSyncContract, ChatContract, CouponContract, ErrorCode, FlashSaleContract,
     InventoryContract, NotificationContract, OrderContract, PaymentContract, ReturnContract,
-    ReviewContract, ShippingContract, UserContract,
+    ReviewContract, ShippingContract, SupplierContract, UserContract,
 };
 
 #[derive(Clone)]
@@ -40,6 +40,7 @@ pub struct AppState {
     pub return_contract: Arc<dyn ReturnContract>,
     pub backup_contract: Arc<dyn BackupContract>,
     pub flash_sale_contract: Arc<dyn FlashSaleContract>,
+    pub supplier_contract: Arc<dyn SupplierContract>,
     pub rate_limiter: Arc<IpRateLimiter>,
     pub started_at: std::time::Instant,
     pub google_client_id: String,

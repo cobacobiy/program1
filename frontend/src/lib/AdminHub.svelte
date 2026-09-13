@@ -42,7 +42,56 @@
   }
 
   // Active sub-tab
-  let subTab = $state<'kpi' | 'reports' | 'catalog' | 'categories' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews' | 'returns' | 'backup'>('kpi');
+  let subTab = $state<'kpi' | 'reports' | 'catalog' | 'categories' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews' | 'returns' | 'backup' | 'suppliers'>('kpi');
+
+  // Supplier & Restock PO state
+  interface SupplierItem {
+    id: string;
+    name: string;
+    contact_person?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
+    is_active: boolean;
+    created_at: string;
+  }
+
+  interface PoItemDto {
+    id: string;
+    product_id: string;
+    quantity: number;
+    unit_cost_cents: number;
+    total_cost_cents: number;
+  }
+
+  interface PoRecord {
+    id: string;
+    po_number: string;
+    supplier_id: string;
+    supplier_name?: string | null;
+    status: string;
+    notes?: string | null;
+    total_cost_cents: number;
+    ordered_at: string;
+    received_at?: string | null;
+    items: PoItemDto[];
+  }
+
+  let suppliersList = $state<SupplierItem[]>([]);
+  let poList = $state<PoRecord[]>([]);
+  let supplierLoading = $state(false);
+  let isAddSupplierOpen = $state(false);
+  let isAddPoOpen = $state(false);
+  let newSupName = $state('');
+  let newSupContact = $state('');
+  let newSupPhone = $state('');
+  let newSupEmail = $state('');
+  let newSupAddress = $state('');
+  let newPoSupplierId = $state('');
+  let newPoProductId = $state('');
+  let newPoQuantity = $state(50);
+  let newPoUnitCost = $state(50000);
+  let newPoNotes = $state('');
 
   // Database Backup state
   interface BackupFile {
@@ -437,10 +486,109 @@
       if (subTab === 'backup') {
         await loadBackupsAndHealth();
       }
+      if (subTab === 'suppliers') {
+        await loadSuppliersAndPo();
+      }
     } catch (err: any) {
       toast.error(err.message || 'Gagal memuat data admin');
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadSuppliersAndPo() {
+    supplierLoading = true;
+    try {
+      const [sup, po] = await Promise.all([
+        fetchAdmin<SupplierItem[]>('/api/v1/admin/suppliers').catch(() => []),
+        fetchAdmin<PoRecord[]>('/api/v1/admin/purchase-orders').catch(() => [])
+      ]);
+      suppliersList = sup || [];
+      poList = po || [];
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal memuat supplier & PO');
+    } finally {
+      supplierLoading = false;
+    }
+  }
+
+  async function handleCreateSupplier(e: Event) {
+    e.preventDefault();
+    try {
+      await fetchAdmin('/api/v1/admin/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newSupName,
+          contact_person: newSupContact || null,
+          phone: newSupPhone || null,
+          email: newSupEmail || null,
+          address: newSupAddress || null
+        })
+      });
+      toast.success('Supplier baru berhasil didaftarkan');
+      isAddSupplierOpen = false;
+      newSupName = '';
+      newSupContact = '';
+      newSupPhone = '';
+      newSupEmail = '';
+      newSupAddress = '';
+      await loadSuppliersAndPo();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal mendaftarkan supplier');
+    }
+  }
+
+  async function handleCreatePo(e: Event) {
+    e.preventDefault();
+    if (!newPoSupplierId || !newPoProductId) {
+      toast.error('Pilih supplier dan produk terlebih dahulu');
+      return;
+    }
+    try {
+      await fetchAdmin('/api/v1/admin/purchase-orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          supplier_id: newPoSupplierId,
+          notes: newPoNotes || null,
+          items: [{
+            product_id: newPoProductId,
+            quantity: newPoQuantity,
+            unit_cost_cents: Math.round(newPoUnitCost * 100)
+          }]
+        })
+      });
+      toast.success('Purchase Order (PO) berhasil dibuat!');
+      isAddPoOpen = false;
+      newPoNotes = '';
+      await loadSuppliersAndPo();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal membuat Purchase Order');
+    }
+  }
+
+  async function handleReceivePo(poId: string) {
+    if (!confirm('Konfirmasi penerimaan barang untuk PO ini? Stok produk akan otomatis bertambah secara real-time.')) return;
+    try {
+      await fetchAdmin(`/api/v1/admin/purchase-orders/${poId}/receive`, {
+        method: 'POST'
+      });
+      toast.success('📦 Barang diterima & stok gudang otomatis diperbarui!');
+      await loadSuppliersAndPo();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal memproses penerimaan PO');
+    }
+  }
+
+  async function handleCancelPo(poId: string) {
+    if (!confirm('Batalkan Purchase Order ini?')) return;
+    try {
+      await fetchAdmin(`/api/v1/admin/purchase-orders/${poId}/cancel`, {
+        method: 'POST'
+      });
+      toast.success('Purchase Order berhasil dibatalkan.');
+      await loadSuppliersAndPo();
+    } catch (err: any) {
+      toast.error(err.message || 'Gagal membatalkan PO');
     }
   }
 
@@ -843,6 +991,7 @@
           <button class:active={subTab === 'reviews'} onclick={() => { subTab = 'reviews'; loadAdminReviews(1); }}>⭐ {i18n.t('admin.reviews_mgmt', 'Moderasi Ulasan')} ({adminReviewsTotal})</button>
           <button class:active={subTab === 'returns'} onclick={() => { subTab = 'returns'; loadAdminReturns(); }}>🔄 {i18n.t('admin.returns_mgmt', 'Retur & Refund')} ({adminReturns.length})</button>
           <button class:active={subTab === 'backup'} onclick={() => { subTab = 'backup'; loadBackupsAndHealth(); }}>💾 {i18n.t('admin.database_backup', 'Database & Backup')}</button>
+          <button class:active={subTab === 'suppliers'} onclick={() => { subTab = 'suppliers'; loadSuppliersAndPo(); }}>🏢 {i18n.t('admin.suppliers_mgmt', 'Supplier & Restock PO')}</button>
           <button class:active={subTab === 'audit'} onclick={() => subTab = 'audit'}>📜 {i18n.t('admin.audit_logs', 'Audit Logs')}</button>
         </nav>
 
@@ -1643,8 +1792,219 @@
               </table>
             {/if}
           </div>
+        {:else if subTab === 'suppliers'}
+          <div class="suppliers-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h2>🏢 Manajemen Supplier & Purchase Order (PO)</h2>
+                <p style="color:#94a3b8; font-size:0.9rem; margin-top:0.25rem;">Kelola data mitra pemasok dan otomatisasi penerimaan restock inventori gudang.</p>
+              </div>
+              <div style="display:flex; gap:0.6rem;">
+                <button class="btn-action" onclick={() => isAddSupplierOpen = true}>➕ Tambah Mitra Supplier</button>
+                <button class="btn-action primary" onclick={() => isAddPoOpen = true}>📦 Buat PO Restock</button>
+              </div>
+            </div>
+
+            <!-- List of Purchase Orders -->
+            <div style="margin-bottom: 2.5rem;">
+              <h3 style="font-size:1.15rem; margin-bottom:1rem; color:#f8fafc; display:flex; align-items:center; gap:0.5rem;">
+                📑 Riwayat Purchase Order (PO) ({poList.length})
+              </h3>
+              {#if supplierLoading}
+                <p style="color:#94a3b8;">Memuat riwayat PO...</p>
+              {:else if poList.length === 0}
+                <div style="padding:2rem; text-align:center; background:#1e293b; border-radius:8px; border:1px dashed #334155;">
+                  <p style="color:#94a3b8; margin:0;">Belum ada Purchase Order yang tercatat.</p>
+                </div>
+              {:else}
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>No. PO</th>
+                      <th>Pemasok (Supplier)</th>
+                      <th>Jumlah Item</th>
+                      <th>Total Biaya (HPP)</th>
+                      <th>Status PO</th>
+                      <th>Tanggal Pesan</th>
+                      <th style="text-align: right;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each poList as po (po.id)}
+                      <tr>
+                        <td><strong style="color:#38bdf8; font-family:monospace;">{po.po_number}</strong></td>
+                        <td>{po.supplier_name || 'Mitra Pemasok'}</td>
+                        <td>{po.items.reduce((acc, i) => acc + i.quantity, 0)} unit ({po.items.length} varian)</td>
+                        <td><strong>{formatRupiah(po.total_cost_cents / 100)}</strong></td>
+                        <td>
+                          {#if po.status === 'received'}
+                            <span style="background:#059669; color:#fff; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.75rem; font-weight:600;">✓ Diterima & Masuk Stok</span>
+                          {:else if po.status === 'ordered'}
+                            <span style="background:#d97706; color:#fff; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.75rem; font-weight:600;">⏳ Menunggu Pengiriman</span>
+                          {:else}
+                            <span style="background:#dc2626; color:#fff; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.75rem; font-weight:600;">✕ Dibatalkan</span>
+                          {/if}
+                        </td>
+                        <td><small>{new Date(po.ordered_at).toLocaleDateString('id-ID')}</small></td>
+                        <td style="text-align: right;">
+                          {#if po.status === 'ordered'}
+                            <button class="btn-action primary" onclick={() => handleReceivePo(po.id)} style="font-size:0.8rem; padding:0.35rem 0.65rem;">
+                              📥 Terima Barang
+                            </button>
+                            <button class="btn-action danger" onclick={() => handleCancelPo(po.id)} style="font-size:0.8rem; padding:0.35rem 0.65rem; margin-left:0.3rem;">
+                              ✕ Batal
+                            </button>
+                          {:else if po.status === 'received'}
+                            <small style="color:#10b981;">Selesai ({new Date(po.received_at || po.ordered_at).toLocaleDateString('id-ID')})</small>
+                          {:else}
+                            <small style="color:#94a3b8;">Tidak aktif</small>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              {/if}
+            </div>
+
+            <!-- List of Suppliers -->
+            <div>
+              <h3 style="font-size:1.15rem; margin-bottom:1rem; color:#f8fafc;">
+                🏭 Direktori Mitra Supplier ({suppliersList.length})
+              </h3>
+              {#if suppliersList.length === 0}
+                <div style="padding:2rem; text-align:center; background:#1e293b; border-radius:8px; border:1px dashed #334155;">
+                  <p style="color:#94a3b8; margin:0;">Belum ada supplier yang didaftarkan.</p>
+                </div>
+              {:else}
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Nama Perusahaan / Mitra</th>
+                      <th>Kontak Person (PIC)</th>
+                      <th>Telepon / WA</th>
+                      <th>Email</th>
+                      <th>Alamat Gudang / Pabrik</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each suppliersList as s (s.id)}
+                      <tr>
+                        <td><strong>{s.name}</strong></td>
+                        <td>{s.contact_person || '-'}</td>
+                        <td>{s.phone || '-'}</td>
+                        <td>{s.email || '-'}</td>
+                        <td><small>{s.address || '-'}</small></td>
+                        <td>
+                          {#if s.is_active}
+                            <span style="color:#10b981; font-weight:600; font-size:0.8rem;">● Aktif</span>
+                          {:else}
+                            <span style="color:#ef4444; font-weight:600; font-size:0.8rem;">● Nonaktif</span>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              {/if}
+            </div>
+          </div>
         {/if}
       </section>
+    </div>
+  {/if}
+
+  <!-- Add Supplier Modal -->
+  {#if isAddSupplierOpen}
+    <div class="modal-overlay" onclick={() => isAddSupplierOpen = false} role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (isAddSupplierOpen = false)}>
+      <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>🏢 Tambah Mitra Supplier Baru</h3>
+          <button class="close-btn" onclick={() => isAddSupplierOpen = false}>&times;</button>
+        </div>
+        <form onsubmit={handleCreateSupplier} style="display:flex; flex-direction:column; gap:0.9rem; margin-top:1rem;">
+          <label>
+            Nama Perusahaan Supplier / Distributor:
+            <input type="text" bind:value={newSupName} required placeholder="PT Sumber Logistik Prima" />
+          </label>
+          <div class="row-fields">
+            <label>
+              Contact Person (PIC):
+              <input type="text" bind:value={newSupContact} placeholder="Budi Santoso" />
+            </label>
+            <label>
+              Nomor Telepon / WhatsApp:
+              <input type="text" bind:value={newSupPhone} placeholder="+62812345678" />
+            </label>
+          </div>
+          <label>
+            Email Perusahaan:
+            <input type="email" bind:value={newSupEmail} placeholder="order@supplier.co.id" />
+          </label>
+          <label>
+            Alamat Gudang / Kantor:
+            <textarea bind:value={newSupAddress} rows="2" placeholder="Kawasan Industri MM2100, Cikarang Barat"></textarea>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" onclick={() => isAddSupplierOpen = false}>Batal</button>
+            <button type="submit" class="btn-save">Daftarkan Supplier</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Create PO Modal -->
+  {#if isAddPoOpen}
+    <div class="modal-overlay" onclick={() => isAddPoOpen = false} role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (isAddPoOpen = false)}>
+      <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style="max-width: 520px;">
+        <div class="modal-header">
+          <h3>📦 Buat Purchase Order (PO) Restock</h3>
+          <button class="close-btn" onclick={() => isAddPoOpen = false}>&times;</button>
+        </div>
+        <form onsubmit={handleCreatePo} style="display:flex; flex-direction:column; gap:0.9rem; margin-top:1rem;">
+          <label>
+            Pilih Mitra Supplier:
+            <select class="select-custom" bind:value={newPoSupplierId} required>
+              <option value="">-- Pilih Supplier --</option>
+              {#each suppliersList as s (s.id)}
+                <option value={s.id}>{s.name} {s.contact_person ? `(${s.contact_person})` : ''}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            Pilih Produk yang Direstock:
+            <select class="select-custom" bind:value={newPoProductId} required>
+              <option value="">-- Pilih Produk Katalog --</option>
+              {#each products as p (p.id)}
+                <option value={p.id}>{p.name} (Stok Saat Ini: {p.stock})</option>
+              {/each}
+            </select>
+          </label>
+          <div class="row-fields">
+            <label>
+              Jumlah Unit Restock:
+              <input type="number" bind:value={newPoQuantity} min="1" required />
+            </label>
+            <label>
+              Biaya Beli per Unit (Rp):
+              <input type="number" bind:value={newPoUnitCost} min="1000" step="1000" required />
+            </label>
+          </div>
+          <label>
+            Catatan PO (Opsional):
+            <textarea bind:value={newPoNotes} rows="2" placeholder="Pengiriman ekspedisi estimasi 2 hari"></textarea>
+          </label>
+          <div style="background:#1e293b; padding:0.75rem; border-radius:6px; font-size:0.85rem; color:#94a3b8;">
+            Total Estimasi Biaya PO: <strong style="color:#38bdf8;">{formatRupiah(newPoQuantity * newPoUnitCost)}</strong>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" onclick={() => isAddPoOpen = false}>Batal</button>
+            <button type="submit" class="btn-save">Terbitkan PO Restock</button>
+          </div>
+        </form>
+      </div>
     </div>
   {/if}
 
