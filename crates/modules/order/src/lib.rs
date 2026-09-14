@@ -244,14 +244,28 @@ impl OrderContract for OrderModule {
                 .reserve_stock(item.product_id, item.quantity)
                 .await?;
 
-            let item_total = product.price * (item.quantity as f64);
+            let (unit_price, product_name) = if let Some(vid) = item.variant_id {
+                tracing::info!(variant_id = %vid, product_id = %item.product_id, "Processing storefront order item with variant");
+                match self.catalog_contract.get_variant(vid).await {
+                    Ok(variant) => {
+                        let name = format!("{} ({}: {})", product.name, variant.variant_name, variant.variant_value);
+                        let price = variant.price_override.unwrap_or(product.price);
+                        (price, name)
+                    }
+                    Err(_) => (product.price, product.name),
+                }
+            } else {
+                (product.price, product.name)
+            };
+
+            let item_total = unit_price * (item.quantity as f64);
             total_amount += item_total;
 
             order_items.push(OrderItemDto {
                 product_id: product.id,
-                product_name: product.name,
+                product_name,
                 quantity: item.quantity,
-                unit_price: product.price,
+                unit_price,
                 total_price: item_total,
             });
         }
@@ -477,14 +491,27 @@ impl OrderContract for OrderModule {
                 .reserve_stock(item.product_id, item.quantity)
                 .await?;
 
-            let item_total = product.price * (item.quantity as f64);
+            let (unit_price, product_name) = if let Some(vid) = item.variant_id {
+                match self.catalog_contract.get_variant(vid).await {
+                    Ok(variant) => {
+                        let name = format!("{} ({}: {})", product.name, variant.variant_name, variant.variant_value);
+                        let price = variant.price_override.unwrap_or(product.price);
+                        (price, name)
+                    }
+                    Err(_) => (product.price, product.name),
+                }
+            } else {
+                (product.price, product.name)
+            };
+
+            let item_total = unit_price * (item.quantity as f64);
             total_amount += item_total;
 
             order_items.push(OrderItemDto {
                 product_id: product.id,
-                product_name: product.name,
+                product_name,
                 quantity: item.quantity,
-                unit_price: product.price,
+                unit_price,
                 total_price: item_total,
             });
         }
@@ -965,10 +992,7 @@ mod tests {
             customer_name: "Customer Jane".to_string(),
             customer_email: "jane@test.com".to_string(),
             shipping_address: "Jakarta Selatan".to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: products[0].id,
-                quantity: 2,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(products[0].id, 2)],
             buyer_id: None,
             shipping_snapshot: None,
             courier: None,
@@ -1010,10 +1034,7 @@ mod tests {
             customer_email: "budi@buyer.com".to_string(),
             shipping_address: "Jl. Sudirman Kav 52-53, Senayan, Jakarta Selatan, DKI Jakarta 12190"
                 .to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: products[0].id,
-                quantity: 1,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(products[0].id, 1)],
             buyer_id: Some(buyer_id),
             shipping_snapshot: Some(snapshot.clone()),
             courier: None,
@@ -1048,10 +1069,7 @@ mod tests {
             customer_name: "Customer Lifecycle".to_string(),
             customer_email: "lifecycle@test.com".to_string(),
             shipping_address: "Jl. Merdeka 1".to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: products[0].id,
-                quantity: 1,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(products[0].id, 1)],
             buyer_id: None,
             shipping_snapshot: None,
             courier: None,
@@ -1123,10 +1141,7 @@ mod tests {
             customer_name: "Customer Invalid".to_string(),
             customer_email: "invalid@test.com".to_string(),
             shipping_address: "Jl. Merdeka 2".to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: products[0].id,
-                quantity: 1,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(products[0].id, 1)],
             buyer_id: None,
             shipping_snapshot: None,
             courier: None,
@@ -1167,10 +1182,7 @@ mod tests {
             customer_name: "Customer Cancel".to_string(),
             customer_email: "cancel@test.com".to_string(),
             shipping_address: "Jl. Merdeka 3".to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: products[0].id,
-                quantity: 1,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(products[0].id, 1)],
             buyer_id: Some(buyer_id),
             shipping_snapshot: None,
             courier: None,
@@ -1229,10 +1241,7 @@ mod tests {
             customer_name: "Shipping Buyer".to_string(),
             customer_email: "shipping@test.com".to_string(),
             shipping_address: "Jl. Sudirman 100".to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: products[0].id,
-                quantity: 2,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(products[0].id, 2)],
             buyer_id: None,
             shipping_snapshot: None,
             courier: Some("jne - REG".to_string()),

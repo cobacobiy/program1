@@ -186,10 +186,7 @@ async fn test_staff_with_matching_permission_allowed() {
             customer_name: "Customer Satu".to_string(),
             customer_email: "cust1@example.com".to_string(),
             shipping_address: "Jl. Merdeka No 5".to_string(),
-            items: vec![StorefrontOrderItemRequest {
-                product_id: items[0].id,
-                quantity: 1,
-            }],
+            items: vec![StorefrontOrderItemRequest::new(items[0].id, 1)],
             buyer_id: None,
             shipping_snapshot: None,
             courier: None,

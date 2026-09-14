@@ -605,7 +605,7 @@ th {
   z-index: 200;
 }
 
-.modal-card {
+.modal-card, .modal-content {
   background: var(--bg);
   border: 1px solid var(--card-border);
   border-radius: 20px;

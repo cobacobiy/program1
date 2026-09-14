@@ -1075,8 +1075,28 @@ pub struct CancelOrderRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct StorefrontOrderItemRequest {
     pub product_id: Uuid,
+    #[serde(default)]
+    pub variant_id: Option<Uuid>,
     #[validate(range(min = 1, max = 9999, message = "Quantity must be 1-9999"))]
     pub quantity: u32,
+}
+
+impl StorefrontOrderItemRequest {
+    pub fn new(product_id: Uuid, quantity: u32) -> Self {
+        Self {
+            product_id,
+            variant_id: None,
+            quantity,
+        }
+    }
+
+    pub fn with_variant(product_id: Uuid, variant_id: Option<Uuid>, quantity: u32) -> Self {
+        Self {
+            product_id,
+            variant_id,
+            quantity,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]

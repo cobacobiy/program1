@@ -106,12 +106,12 @@ async function initStore() {
 
 // --- STORE NAVIGATION TABS ENGINE ---
 function switchStoreTab(tabId) {
-  const validTabs = ['home', 'orders', 'addresses', 'profile'];
+  const validTabs = ['home', 'orders', 'addresses', 'profile', 'wishlist'];
   if (!validTabs.includes(tabId)) tabId = 'home';
   StoreState.activeTab = tabId;
 
   // Check auth for protected buyer views
-  if ((tabId === 'orders' || tabId === 'addresses' || tabId === 'profile') && !StoreState.buyerToken) {
+  if ((tabId === 'orders' || tabId === 'addresses' || tabId === 'profile' || tabId === 'wishlist') && !StoreState.buyerToken) {
     if (typeof showToast === "function") {
       showToast("Silakan masuk terlebih dahulu untuk mengakses menu ini.", "warning");
     }
@@ -159,6 +159,8 @@ function switchStoreTab(tabId) {
     fetchBuyerAddressesDashboard();
   } else if (tabId === 'profile' && typeof renderBuyerProfileDashboard === "function") {
     renderBuyerProfileDashboard();
+  } else if (tabId === 'wishlist' && typeof renderWishlistTab === "function") {
+    renderWishlistTab();
   }
 }
 

@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-13
+
+### 🏭 Supplier & Procurement Management (Issue #21)
+- **Supplier Registry**: Full CRUD for supplier master data (`name`, `contact_person`, `phone`, `email`, `address`, `is_active`) via `crates/modules/supplier`.
+- **Purchase Order (PO) Lifecycle**: Draft → Ordered → Received / Cancelled workflow with auto-generated `PO-XXXXXXXX` numbers.
+- **PO Line Items**: Multi-item purchase orders linked to catalog products and variants with per-unit cost tracking.
+- **REST API**: `GET/POST /api/v1/admin/suppliers`, `GET/PUT/DELETE /api/v1/admin/suppliers/:id`, `GET/POST /api/v1/admin/purchase-orders`, `GET /api/v1/admin/purchase-orders/:id`, `PUT /api/v1/admin/purchase-orders/:id/receive`, `PUT /api/v1/admin/purchase-orders/:id/cancel`.
+- **Database Migrations**: `024_create_suppliers_and_po.sql` — `suppliers`, `purchase_orders`, `purchase_order_items` tables with foreign key constraints and indexes.
+
+### 🔐 Granular Staff RBAC & Permission System (Issue #24)
+- **Permission Table & Seeds**: `025_create_staff_permissions.sql` — `permissions` and `user_permissions` junction tables with 7 seeded permission types (`orders:manage`, `inventory:manage`, `catalog:write`, `chat:support`, `reports:view`, `promotions:manage`, `suppliers:manage`).
+- **Axum Permission Middleware**: `require_permission("perm_name")` middleware layer on protected routes — Super Admin bypasses all permission checks; Staff users must hold the specific permission.
+- **JWT Claims Extension**: `JwtClaims` now includes a `permissions: Vec<String>` field with `has_permission()` helper method for granular access control.
+- **Staff Permission Management API**: `GET /api/v1/admin/permissions` (list available permissions), `GET/PUT /api/v1/users/accounts/:id/staff-permissions` (view/update staff user permissions).
+- **Contract Integration**: `UserContract` extended with `list_permissions()`, `get_user_permissions()`, and `update_user_permissions()` methods; `SupplierContract` added to `crates/contracts`.
+
+### 🏗️ Architecture Improvements
+- **New Module**: `crates/modules/supplier` — implements `SupplierContract` with SQLx persistence.
+- **AppState Extension**: `supplier_contract: Arc<dyn SupplierContract>` added to the web orchestrator state.
+- **Admin Hub Integration**: Supplier management and staff RBAC permission panels integrated into the Svelte 5 SPA dashboard.
+
+---
+
+## [1.1.0] - 2026-09-12
+
+### ⚡ Flash Sale Campaigns (Issue #18)
+- **Session Management**: Create time-bound flash sale sessions with `start_time`, `end_time`, and `is_active` toggle.
+- **Flash Sale Items**: Add products to sessions with `flash_price`, `flash_stock`, and `sold_count` tracking.
+- **Storefront Integration**: Active flash sales auto-display on customer storefront with countdown timers.
+- **REST API**: `GET/POST /api/v1/admin/flash-sales`, `POST /api/v1/admin/flash-sales/:id/items`, `PUT /api/v1/admin/flash-sales/:id/toggle`.
+- **Database Migration**: `021_create_flash_sales.sql` — `flash_sale_sessions` and `flash_sale_items` tables.
+
+### 🎯 Loyalty Points & Rewards Program (Issue #19)
+- **Point Accumulation**: Automatic loyalty point credits on completed orders with configurable earning rate.
+- **Point Redemption**: Buyers can redeem accumulated points for order discounts.
+- **Points Ledger**: Full transaction history with `earn`, `redeem`, and `expire` event types.
+- **Database Migration**: `022_create_loyalty_points.sql` — `loyalty_points_ledger` table.
+
+### 🔍 Full-Text Search & Autocomplete (Issue #20)
+- **SQLite FTS5**: Content-sync FTS5 virtual table for instant product search across `name`, `description`, and `sku`.
+- **Search Autocomplete API**: `GET /api/v1/search?q=...` with relevance-ranked results and highlighting.
+- **Storefront Search Bar**: Integrated real-time search with autocomplete dropdown in the SPA.
+- **Database Migration**: `023_create_search_fts.sql` — FTS5 virtual table and content-sync triggers.
+
+### 💾 Database Backup & Recovery Manager (Issue #22)
+- **On-Demand Backup**: Create SQLite database snapshots with timestamped filenames via admin API.
+- **Backup Listing**: Browse available backups with file size and creation metadata.
+- **Backup Download**: Download backup files directly from the admin dashboard.
+- **Database Health Check**: Subsystem health verification endpoint reporting storage metrics.
+- **REST API**: `POST /api/v1/admin/database/backup`, `GET /api/v1/admin/database/backups`, `GET /api/v1/admin/database/backups/:filename/download`, `GET /api/v1/admin/database/health`.
+
+### 🌐 Dynamic SEO & Sitemap (Issue #23)
+- **Dynamic Sitemap.xml**: Auto-generated sitemap including product pages, category pages, and store URLs.
+- **SEO Meta Tags**: Server-side rendered `<title>`, `<meta description>`, and Open Graph tags for product and storefront pages.
+
+---
+
 ## [1.0.1] - 2026-09-12
 
 ### 🎨 UI & UX Improvements

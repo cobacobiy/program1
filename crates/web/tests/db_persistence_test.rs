@@ -73,10 +73,7 @@ async fn test_db_persistence_across_pool_reconnection() {
                 courier: None,
                 shipping_cost_cents: None,
                 use_points: None,
-                items: vec![StorefrontOrderItemRequest {
-                    product_id: product.id,
-                    quantity: 3,
-                }],
+                items: vec![StorefrontOrderItemRequest::new(product.id, 3)],
             })
             .await
             .expect("Failed to create order");

@@ -380,3 +380,43 @@ async fn test_variant_unauthorized_mutation() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_order_creation_with_variant() {
+    let (app, token, product_id) = setup_test_app().await;
+
+    // 1. Create a variant with price override (1,500,000 IDR instead of default 1,200,000 IDR)
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/catalog/{}/variants", product_id))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::from(
+            json!({
+                "variant_name": "Switch Type",
+                "variant_value": "Linear Red",
+                "sku": "SKU-SW-RED",
+                "price_override": 1500000.0,
+                "stock_quantity": 40
+            })
+            .to_string(),
+        ))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let created: Value = serde_json::from_slice(&body).unwrap();
+    let variant_id: Uuid = created["id"].as_str().unwrap().parse().unwrap();
+
+    // 2. Test StorefrontOrderItemRequest deserialization with variant_id
+    let json_payload = json!({
+        "product_id": product_id,
+        "variant_id": variant_id,
+        "quantity": 2
+    });
+    let item_req: program1_contracts::StorefrontOrderItemRequest = serde_json::from_value(json_payload).unwrap();
+    assert_eq!(item_req.variant_id, Some(variant_id));
+    assert_eq!(item_req.quantity, 2);
+}
+

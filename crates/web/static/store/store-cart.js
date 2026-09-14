@@ -3,18 +3,40 @@
    File: /crates/web/static/store/store-cart.js
    ========================================================================== */
 
-function addToCart(productId, event) {
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function addToCart(productId, event, variantId = null, variantLabel = null, overridePrice = null) {
   const catalog = window.StoreState ? window.StoreState.catalog : (window.catalog || []);
   let cart = window.StoreState ? window.StoreState.cart : (window.cart || []);
 
   const item = catalog.find(p => p.id === productId);
   if (!item) return;
 
-  const existing = cart.find(c => c.product_id === productId);
+  const itemPrice = (overridePrice !== null && overridePrice !== undefined && !isNaN(overridePrice))
+    ? overridePrice
+    : item.price;
+  const itemName = variantLabel ? `${item.name} (${variantLabel})` : item.name;
+
+  const existing = cart.find(c => c.product_id === productId && (c.variant_id || null) === (variantId || null));
   if (existing) {
     existing.quantity += 1;
   } else {
-    cart.push({ product_id: productId, name: item.name, price: item.price, quantity: 1 });
+    cart.push({
+      product_id: productId,
+      variant_id: variantId || null,
+      variant_label: variantLabel || null,
+      name: itemName,
+      price: itemPrice,
+      quantity: 1
+    });
   }
 
   if (window.StoreState) window.StoreState.cart = cart;
@@ -27,7 +49,7 @@ function addToCart(productId, event) {
   if (!btn || !btn.classList) {
     btn = document.activeElement;
   }
-  if (btn && btn.classList && (btn.classList.contains('btn-add-cart') || btn.classList.contains('btn-add'))) {
+  if (btn && btn.classList && (btn.classList.contains('btn-add-cart') || btn.classList.contains('btn-add') || btn.classList.contains('detail-add-btn'))) {
     btn.classList.add('added');
     const prevHtml = btn.innerHTML;
     btn.innerHTML = '✓ Ditambahkan!';
@@ -54,18 +76,18 @@ function addToCart(productId, event) {
   }
 
   if (typeof showToast === 'function') {
-    showToast(`"${item.name}" berhasil ditambahkan ke keranjang!`, 'success');
+    showToast(`"${itemName}" berhasil ditambahkan ke keranjang!`, 'success');
   }
 }
 
-function updateQuantity(productId, delta) {
+function updateQuantity(productId, delta, variantId = null) {
   let cart = window.StoreState ? window.StoreState.cart : (window.cart || []);
-  const item = cart.find(c => c.product_id === productId);
+  const item = cart.find(c => c.product_id === productId && (c.variant_id || null) === (variantId || null));
   if (!item) return;
 
   item.quantity += delta;
   if (item.quantity <= 0) {
-    cart = cart.filter(c => c.product_id !== productId);
+    cart = cart.filter(c => !(c.product_id === productId && (c.variant_id || null) === (variantId || null)));
   }
 
   if (window.StoreState) window.StoreState.cart = cart;
@@ -101,15 +123,17 @@ function updateCartUI() {
   container.innerHTML = cart.map(i => {
     const itemTotal = i.price * i.quantity;
     total += itemTotal;
+    const vidArg = i.variant_id ? `'${i.variant_id}'` : 'null';
     return `
       <div class="cart-item">
         <div>
-          <strong style="color:#fff">${i.name}</strong>
+          <strong style="color:#fff">${escapeHtml(i.name)}</strong>
+          ${i.variant_label ? `<div style="font-size:0.75rem; color:var(--cyan)">Varian: ${escapeHtml(i.variant_label)}</div>` : ''}
           <div style="font-size:0.8rem; color:var(--text-muted)">Rp ${i.price.toLocaleString('id-ID')}</div>
           <div class="cart-qty-controls">
-            <button class="btn-qty" onclick="updateQuantity('${i.product_id}', -1)">-</button>
+            <button class="btn-qty" onclick="updateQuantity('${i.product_id}', -1, ${vidArg})">-</button>
             <span style="font-size:0.85rem; font-weight:700; padding:0 0.4rem">${i.quantity}</span>
-            <button class="btn-qty" onclick="updateQuantity('${i.product_id}', 1)">+</button>
+            <button class="btn-qty" onclick="updateQuantity('${i.product_id}', 1, ${vidArg})">+</button>
           </div>
         </div>
         <span style="font-weight:700; color:var(--shopee-orange)">Rp ${itemTotal.toLocaleString('id-ID')}</span>

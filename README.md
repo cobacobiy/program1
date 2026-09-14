@@ -77,18 +77,22 @@ graph TD
 
 ## ✨ Features & Highlights
 
-- **Modular Monolith Architecture**: Decoupled domain modules (`User`, `Auth`, `Catalog`, `Inventory`, `Channel`, `Order`, `Analytics`, `Audit`) within a single repository and single binary deployment.
+- **Modular Monolith Architecture**: 18 decoupled domain modules (`User`, `Auth`, `Catalog`, `Inventory`, `Channel`, `Order`, `Analytics`, `Audit`, `Buyer`, `Chat`, `Payment`, `Coupon`, `Review`, `Shipping`, `Notification`, `Return`, `Flash Sale`, `Supplier`) within a single repository and single binary deployment.
 - **Contract-Driven Design**: Strict `#[async_trait]` interfaces in `crates/contracts` guarantee zero direct internal coupling between domain modules.
-- **SQLite Persistence & Embedded Migrations**: Managed via SQLx with WAL mode and transaction safety.
-- **Argon2id & JWT RBAC**: Enterprise-grade password hashing and role-based access control with JWT middleware.
+- **SQLite Persistence & Embedded Migrations**: Managed via SQLx with WAL mode and transaction safety (25 migration files).
+- **Argon2id & JWT RBAC**: Enterprise-grade password hashing, role-based access control with JWT middleware, and granular staff permission system.
 - **Interactive OpenAPI 3.0 & Swagger UI**: Auto-generated API documentation via `utoipa` with live interactive testing at `/swagger-ui`.
 - **Ginee OMS Multi-Stock Inventory**: Multi-warehouse allocation, physical warehouse stock, spare stock, promotional stock, low-stock threshold alerting, and bulk CSV batch updates.
+- **Supplier & Purchase Order Management**: Full supplier registry CRUD and purchase order lifecycle (Draft → Ordered → Received / Cancelled).
+- **Flash Sale & Loyalty Programs**: Time-bound flash sale campaigns with countdown timers, and loyalty points accumulation/redemption system.
+- **Full-Text Search & Autocomplete**: SQLite FTS5-powered product search with relevance-ranked results.
+- **Database Backup & Recovery**: On-demand SQLite snapshot creation, listing, download, and health monitoring.
 - **Health & Readiness Observability**: Kubernetes/Docker compatible `/health` liveness probe and `/health/ready` subsystem readiness verification.
 - **Input Validation & Sanitization**: Strict JSON payload validation returning HTTP 422 with field-level details and HTML sanitization.
 - **Rate Limiting & Abuse Protection**: Thread-safe sliding window rate limiting with standard `Retry-After` headers.
 - **Audit Logging & Activity Trail**: Immutable activity recording for compliance and administrative oversight.
 - **Standardized Error Handling**: RFC-aligned error envelope with typed `ErrorCode` and panic catching middleware.
-- **Rich Dark Glassmorphism UI**: Interactive Admin Hub and Customer Storefront.
+- **Rich Dark Glassmorphism UI**: Interactive Admin Hub and Customer Storefront with Svelte 5 SPA.
 
 ---
 
@@ -98,20 +102,32 @@ graph TD
 program1/
 ├── Cargo.toml                  # Cargo Workspace Manifest
 ├── AGENTS.md                   # Operational guidelines & testing rules
+├── CHANGELOG.md                # Release history (Keep a Changelog format)
 ├── README.md                   # Architecture documentation & API reference
-├── migrations/sqlite/          # Embedded SQLx SQLite schema migrations
+├── migrations/sqlite/          # 25 embedded SQLx SQLite schema migrations
+├── frontend/                   # Svelte 5 SPA (Bun + Vite)
 └── crates/
-    ├── contracts/              # Shared traits (User, Auth, Catalog, Inventory, Order, Audit, etc.) & DTOs
+    ├── contracts/              # Shared traits & DTOs (User, Auth, Catalog, Inventory, Order, Audit, Supplier, etc.)
     ├── core/                   # Database init, Argon2id hashing, tracing, sanitization
     ├── modules/
-    │   ├── user/               # User management & account persistence
+    │   ├── user/               # User management, account persistence & staff permissions
     │   ├── auth/               # JWT token generation & verification
-    │   ├── catalog/            # Catalog management & SKU pricing
+    │   ├── catalog/            # Catalog management, categories & SKU pricing
     │   ├── inventory/          # Ginee OMS multi-warehouse & safety stock tracking
     │   ├── channel/            # Omnichannel marketplace sync (TikTok, Shopee, Tokopedia)
     │   ├── order/              # Checkout processing & stock reservation
-    │   ├── analytics/          # Sales metrics & revenue aggregation
-    │   └── audit/              # Immutable audit logging & compliance trail
+    │   ├── analytics/          # Sales metrics, reports & CSV export
+    │   ├── audit/              # Immutable audit logging & compliance trail
+    │   ├── buyer/              # Buyer registration, profile & storefront auth
+    │   ├── chat/               # WebSocket live chat & support messaging
+    │   ├── payment/            # Midtrans Snap payment gateway integration
+    │   ├── coupon/             # Coupon & promo code management
+    │   ├── review/             # Product reviews, ratings & moderation
+    │   ├── shipping/           # Shipping rates, courier integration & tracking
+    │   ├── notification/       # In-app notification center & WhatsApp dispatch
+    │   ├── return/             # Return & refund request lifecycle
+    │   ├── flash_sale/         # Flash sale campaigns & time-bound promotions
+    │   └── supplier/           # Supplier registry & purchase order management
     └── web/                    # Axum orchestrator, handlers, middleware & UI dashboard
 ```
 
@@ -149,6 +165,20 @@ program1/
 | `GET` | `/api/v1/orders/:id` | Get order details |
 | `POST` | `/api/v1/orders/marketplace` | Place marketplace order (Rate limited: 10/min) |
 
+### Permission-Protected Endpoints (JWT + Granular Permission Required)
+| Method | Endpoint | Permission | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/admin/suppliers` | `suppliers:manage` | List all suppliers |
+| `POST` | `/api/v1/admin/suppliers` | `suppliers:manage` | Create a new supplier |
+| `GET` | `/api/v1/admin/suppliers/:id` | `suppliers:manage` | Get supplier details |
+| `PUT` | `/api/v1/admin/suppliers/:id` | `suppliers:manage` | Update supplier information |
+| `DELETE` | `/api/v1/admin/suppliers/:id` | `suppliers:manage` | Delete a supplier |
+| `GET` | `/api/v1/admin/purchase-orders` | `suppliers:manage` | List all purchase orders |
+| `POST` | `/api/v1/admin/purchase-orders` | `suppliers:manage` | Create a new purchase order |
+| `GET` | `/api/v1/admin/purchase-orders/:id` | `suppliers:manage` | Get purchase order details |
+| `PUT` | `/api/v1/admin/purchase-orders/:id/receive` | `suppliers:manage` | Mark PO as received |
+| `PUT` | `/api/v1/admin/purchase-orders/:id/cancel` | `suppliers:manage` | Cancel a purchase order |
+
 ### Admin-Only Endpoints (Super Admin Role Required)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -156,14 +186,25 @@ program1/
 | `GET` | `/api/v1/users/accounts` | List user accounts & assigned roles |
 | `POST` | `/api/v1/users/accounts` | Create user account |
 | `POST` | `/api/v1/users/accounts/:id/permissions` | Update user menu permissions |
+| `GET` | `/api/v1/admin/permissions` | List all available granular permissions |
+| `GET` | `/api/v1/users/accounts/:id/staff-permissions` | View staff user's assigned permissions |
+| `PUT` | `/api/v1/users/accounts/:id/staff-permissions` | Update staff user's granular permissions |
 | `POST` | `/api/v1/inventory/bulk-update` | Bulk batch update stock via CSV/JSON (Rate limited: 10/min) |
 | `POST` | `/api/v1/inventory/:id/warehouse-stock` | Update physical warehouse stock quantity (Rate limited: 10/min) |
 | `POST` | `/api/v1/inventory/:id/safety-stock` | Update safety stock threshold & record audit note (Rate limited: 10/min) |
 | `POST` | `/api/v1/inventory/:id/spare-stock` | Update spare stock quantity (Rate limited: 10/min) |
 | `POST` | `/api/v1/inventory/:id/promotion-stock` | Update promotional reserved stock quantity (Rate limited: 10/min) |
 | `GET` | `/api/v1/analytics` | Sales analytics & revenue breakdown |
+| `GET` | `/api/v1/analytics/report` | Sales report with date filters & CSV export |
 | `GET` | `/api/v1/audit/logs` | Query system audit logs with filters |
 | `GET` | `/api/v1/audit/logs/user/:id` | Query audit logs by actor ID |
+| `GET/POST` | `/api/v1/admin/flash-sales` | List & create flash sale sessions |
+| `POST` | `/api/v1/admin/flash-sales/:id/items` | Add items to flash sale session |
+| `PUT` | `/api/v1/admin/flash-sales/:id/toggle` | Activate/deactivate flash sale session |
+| `POST` | `/api/v1/admin/database/backup` | Create database backup snapshot |
+| `GET` | `/api/v1/admin/database/backups` | List available database backups |
+| `GET` | `/api/v1/admin/database/backups/:filename/download` | Download backup file |
+| `GET` | `/api/v1/admin/database/health` | Database health & storage metrics |
 
 ---
 

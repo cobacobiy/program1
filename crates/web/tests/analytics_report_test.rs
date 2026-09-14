@@ -175,10 +175,7 @@ async fn test_sales_report_with_date_filter() {
         .create_marketplace_order(
             ChannelType::NativeWeb,
             "Buyer Today".to_string(),
-            vec![StorefrontOrderItemRequest {
-                product_id: items[0].id,
-                quantity: 1,
-            }],
+            vec![StorefrontOrderItemRequest::new(items[0].id, 1)],
         )
         .await
         .unwrap();
@@ -189,10 +186,7 @@ async fn test_sales_report_with_date_filter() {
         .create_marketplace_order(
             ChannelType::Shopee,
             "Buyer Past".to_string(),
-            vec![StorefrontOrderItemRequest {
-                product_id: items[1].id,
-                quantity: 3,
-            }],
+            vec![StorefrontOrderItemRequest::new(items[1].id, 3)],
         )
         .await
         .unwrap();
@@ -254,10 +248,7 @@ async fn test_sales_report_summary_calculation() {
         .create_marketplace_order(
             ChannelType::NativeWeb,
             "Buyer A".to_string(),
-            vec![StorefrontOrderItemRequest {
-                product_id: items[0].id,
-                quantity: 2,
-            }],
+            vec![StorefrontOrderItemRequest::new(items[0].id, 2)],
         )
         .await
         .unwrap();
@@ -267,10 +258,7 @@ async fn test_sales_report_summary_calculation() {
         .create_marketplace_order(
             ChannelType::TikTokShop,
             "Buyer B".to_string(),
-            vec![StorefrontOrderItemRequest {
-                product_id: items[1].id,
-                quantity: 1,
-            }],
+            vec![StorefrontOrderItemRequest::new(items[1].id, 1)],
         )
         .await
         .unwrap();

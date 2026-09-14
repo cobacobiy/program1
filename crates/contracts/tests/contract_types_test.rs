@@ -143,10 +143,7 @@ fn test_buyer_checkout_request_structure() {
     let product_id = Uuid::new_v4();
     let valid_req = BuyerCheckoutRequest {
         address_id,
-        items: vec![StorefrontOrderItemRequest {
-            product_id,
-            quantity: 2,
-        }],
+        items: vec![StorefrontOrderItemRequest::new(product_id, 2)],
         courier: None,
         shipping_cost_cents: None,
         use_points: None,

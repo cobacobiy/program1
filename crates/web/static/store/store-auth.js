@@ -832,6 +832,96 @@ async function handleUpdateBuyerProfile(event) {
   }
 }
 
+// --- BUYER WISHLIST DASHBOARD TAB ---
+async function renderWishlistTab() {
+  const container = document.getElementById("wishlist-content");
+  if (!container) return;
+
+  const token = window.StoreState ? window.StoreState.buyerToken : window.buyerToken;
+  if (!token) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted)">
+        <p style="font-size:2rem; margin-bottom:0.5rem">🔒</p>
+        <p style="font-weight:600; color:var(--text-heading)">Akses Terbatas</p>
+        <p style="font-size:0.85rem">Silakan masuk ke akun pembeli untuk melihat daftar wishlist Anda.</p>
+        <button type="button" class="btn-checkout" style="width:auto; padding:0.5rem 1.5rem; margin-top:1rem" onclick="openBuyerLoginModal()">Masuk Akun</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:2rem">Memuat daftar wishlist...</p>`;
+
+  try {
+    const res = await buyerAuthFetch("/api/v1/buyer/wishlist");
+    if (!res.ok) {
+      container.innerHTML = `<p style="color:var(--rose); text-align:center; padding:2rem">Gagal memuat wishlist.</p>`;
+      return;
+    }
+
+    const items = await res.json();
+    if (!items || items.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:4rem 1rem; color:var(--text-muted)">
+          <div style="font-size:3rem; margin-bottom:0.5rem">💔</div>
+          <p style="font-size:1.1rem; font-weight:600; color:var(--text-heading); margin-bottom:0.3rem">Wishlist Anda Masih Kosong</p>
+          <p style="font-size:0.85rem; margin-bottom:1.5rem">Simpan produk impian Anda dengan menekan tombol ❤️ di katalog produk!</p>
+          <button type="button" class="btn-checkout" style="width:auto; padding:0.6rem 2rem" onclick="switchStoreTab('home')">Jelajahi Produk</button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="wishlist-grid">
+        ${items.map(item => `
+          <div class="wishlist-card">
+            <img src="${escapeHtml(item.product_image_url || 'https://placehold.co/300')}"
+                 alt="${escapeHtml(item.product_name)}" class="wishlist-img"
+                 onerror="this.src='https://placehold.co/300'">
+            <div class="wishlist-info">
+              <h4 class="wishlist-title">${escapeHtml(item.product_name)}</h4>
+              <div class="wishlist-price">Rp ${item.product_price_cents.toLocaleString('id-ID')}</div>
+              <div class="wishlist-actions">
+                <button type="button" class="btn-add-cart" style="flex:1" onclick="showProductDetail('${item.product_id}')">
+                  🛒 Beli
+                </button>
+                <button type="button" class="btn-remove-wishlist" onclick="removeFromWishlistTab('${item.product_id}')" title="Hapus">
+                  🗑️ Hapus
+                </button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (e) {
+    console.error("renderWishlistTab error:", e);
+    container.innerHTML = `<p style="color:var(--rose); text-align:center; padding:2rem">Error: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function removeFromWishlistTab(productId) {
+  try {
+    const res = await buyerAuthFetch(`/api/v1/buyer/wishlist/${productId}`, {
+      method: "DELETE"
+    });
+    if (res.ok || res.status === 204) {
+      if (typeof showToast === "function") {
+        showToast("Produk dihapus dari wishlist", "info");
+      }
+      await renderWishlistTab();
+      if (typeof updateWishlistButtons === "function") {
+        updateWishlistButtons();
+      }
+    } else {
+      showToast("Gagal menghapus produk dari wishlist", "error");
+    }
+  } catch (e) {
+    console.error("removeFromWishlistTab error:", e);
+  }
+}
+
 // Window Exports
 window.buyerAuthFetch = buyerAuthFetch;
 window.checkBuyerSession = checkBuyerSession;
@@ -856,4 +946,7 @@ window.handleVerifyOtp = handleVerifyOtp;
 window.handleResendOtp = handleResendOtp;
 window.renderBuyerProfileDashboard = renderBuyerProfileDashboard;
 window.handleUpdateBuyerProfile = handleUpdateBuyerProfile;
+window.renderWishlistTab = renderWishlistTab;
+window.removeFromWishlistTab = removeFromWishlistTab;
+
 

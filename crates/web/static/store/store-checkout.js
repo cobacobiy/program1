@@ -315,7 +315,11 @@ async function handleProcessCheckout(e) {
     return;
   }
 
-  const items = cart.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+  const items = cart.map(i => ({
+    product_id: i.product_id,
+    variant_id: i.variant_id || null,
+    quantity: i.quantity
+  }));
 
   const payload = {
     address_id: selectedAddressId,

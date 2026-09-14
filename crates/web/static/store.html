@@ -100,6 +100,9 @@
       <button type="button" class="nav-tab-btn" id="tab-btn-profile" onclick="switchStoreTab('profile')">
         <span>👤</span> <span>Profil Saya</span>
       </button>
+      <button type="button" class="nav-tab-btn" id="tab-btn-wishlist" onclick="switchStoreTab('wishlist')">
+        <span>❤️</span> <span>Wishlist</span>
+      </button>
     </div>
   </nav>
 
@@ -259,6 +262,21 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- TAB VIEW 5: WISHLIST SAYA -->
+    <div id="view-store-wishlist" class="store-view-section" style="display:none">
+      <div class="orders-header">
+        <div>
+          <h2 style="font-size:1.3rem; font-weight:700; color:var(--text-heading); display:flex; align-items:center; gap:0.5rem">
+            <span>❤️</span> Wishlist Produk Favorit
+          </h2>
+          <p style="font-size:0.85rem; color:var(--text-muted)">Daftar barang impian yang Anda simpan</p>
+        </div>
+      </div>
+      <div id="wishlist-content" style="margin-top:1.5rem">
+        <!-- populated by store-auth.js -->
       </div>
     </div>
   </main>

@@ -292,10 +292,7 @@ mod tests {
 
         // Seed 1 order via marketplace order
         let items = catalog.list_items().await.unwrap();
-        let item_req = vec![StorefrontOrderItemRequest {
-            product_id: items[0].id,
-            quantity: 2,
-        }];
+        let item_req = vec![StorefrontOrderItemRequest::new(items[0].id, 2)];
         let created = order
             .create_marketplace_order(
                 ChannelType::NativeWeb,

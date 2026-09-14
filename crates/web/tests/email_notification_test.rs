@@ -107,10 +107,7 @@ async fn test_storefront_order_lifecycle_emails() {
         customer_name: "Dewi Sartika".to_string(),
         customer_email: "dewi.sartika@example.com".to_string(),
         shipping_address: "Jl. Asia Afrika No. 12, Bandung".to_string(),
-        items: vec![StorefrontOrderItemRequest {
-            product_id: products[0].id,
-            quantity: 2,
-        }],
+        items: vec![StorefrontOrderItemRequest::new(products[0].id, 2)],
         buyer_id: None,
         shipping_snapshot: None,
         courier: None,
