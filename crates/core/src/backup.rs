@@ -202,6 +202,12 @@ impl BackupContract for BackupService {
             .await
             .map_err(ContractError::Internal)?;
 
+        // Auto-prune backups older than 30 days after successful backup
+        let pruned = self.manager.prune_old_backups(30);
+        if pruned > 0 {
+            tracing::info!("Auto-pruned {} old backup file(s)", pruned);
+        }
+
         Ok(BackupFileDto {
             filename: meta.filename,
             size_bytes: meta.size_bytes,
@@ -263,6 +269,24 @@ mod tests {
         let health = mgr.verify_db_integrity(&pool).await.unwrap();
         assert_eq!(health, "ok");
         let _ = std::fs::remove_file(db_file);
+    }
+
+    #[tokio::test]
+    async fn test_backup_pruning() {
+        let temp_dir = format!("./target/test_prune_{}", rand::random::<u64>());
+        let mgr = BackupManager::new(&temp_dir);
+
+        // Create a fake backup file dated in the past
+        let fake_file = PathBuf::from(&temp_dir).join("backup_program1_2020-01-01T00-00-00Z.db");
+        std::fs::write(&fake_file, b"fake sqlite").unwrap();
+        assert!(fake_file.exists());
+
+        // Pruning backups older than 30 days should remove it
+        let pruned = mgr.prune_old_backups(30);
+        assert_eq!(pruned, 1);
+        assert!(!fake_file.exists());
+
+        let _ = std::fs::remove_dir_all(temp_dir);
     }
 }
 
