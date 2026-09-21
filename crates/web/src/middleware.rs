@@ -457,6 +457,7 @@ pub fn build_cors_layer() -> CorsLayer {
             Method::POST,
             Method::PUT,
             Method::PATCH,
+            Method::DELETE,
             Method::OPTIONS,
         ])
         .allow_headers([
