@@ -20,6 +20,31 @@ use program1_module_supplier::SupplierModule;
 use program1_module_user::UserModule;
 use program1_web::{create_app, AppState};
 
+/// Graceful shutdown signal handler (SIGTERM for Docker/Kubernetes, Ctrl+C for dev)
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => { tracing::info!("Received Ctrl+C, initiating graceful shutdown..."); },
+        _ = terminate => { tracing::info!("Received SIGTERM, initiating graceful shutdown..."); },
+    }
+}
+
 #[tokio::main]
 async fn main() {
     init_tracing();
@@ -204,5 +229,11 @@ async fn main() {
     tracing::info!("Starting Program1 Omnichannel Engine on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+
+    tracing::info!("Program1 server shut down gracefully.");
 }
+
