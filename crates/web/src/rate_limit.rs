@@ -86,10 +86,19 @@ impl IpRateLimiter {
         })
     }
 
-    /// Cleanup stale/empty rate limit entries to prevent memory leak
-    pub async fn cleanup_stale_entries(&self) {
+    /// Cleanup stale entries older than the specified duration
+    pub async fn cleanup_stale_entries_older_than(&self, max_age: Duration) {
         let mut map = self.records.lock().await;
-        map.retain(|_key, timestamps| !timestamps.is_empty());
+        let now = Instant::now();
+        map.retain(|_key, timestamps| {
+            timestamps.retain(|t| now.duration_since(*t) < max_age);
+            !timestamps.is_empty()
+        });
+    }
+
+    /// Cleanup stale/empty rate limit entries to prevent memory leak (default 5 minutes)
+    pub async fn cleanup_stale_entries(&self) {
+        self.cleanup_stale_entries_older_than(Duration::from_secs(300)).await;
     }
 
     /// Reset limiter state (useful for tests)
@@ -178,3 +187,32 @@ pub async fn rate_limit_layer(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cleanup_stale_entries() {
+        let limiter = IpRateLimiter::new();
+        let _ = limiter
+            .check_rate_limit("1.2.3.4", "/api/v1/test", 5, Duration::from_secs(1))
+            .await;
+
+        {
+            let map = limiter.records.lock().await;
+            assert_eq!(map.len(), 1);
+        }
+
+        // Cleanup with 0 duration (everything is stale)
+        limiter
+            .cleanup_stale_entries_older_than(Duration::from_millis(0))
+            .await;
+
+        {
+            let map = limiter.records.lock().await;
+            assert_eq!(map.len(), 0);
+        }
+    }
+}
+

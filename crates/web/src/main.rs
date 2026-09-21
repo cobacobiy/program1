@@ -198,7 +198,20 @@ async fn main() {
         google_client_id: config.google_client_id.clone(),
     };
 
+    // Clone rate_limiter before state is moved to create_app
+    let cleanup_limiter = state.rate_limiter.clone();
+
     let app = create_app(state);
+
+    // Spawn periodic rate limiter cleanup task (every 5 minutes)
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            cleanup_limiter.cleanup_stale_entries().await;
+            tracing::debug!("Rate limiter stale entries cleaned up");
+        }
+    });
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.app_port));
     tracing::info!("Starting Program1 Omnichannel Engine on http://{}", addr);
