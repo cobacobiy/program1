@@ -101,6 +101,10 @@ impl AuthContract for AuthModule {
             _ => ContractError::ValidationError(format!("Invalid token: {}", e)),
         })
     }
+
+    fn expiry_seconds(&self) -> u64 {
+        self.token_expiry_hours * 3600
+    }
 }
 
 #[cfg(test)]
