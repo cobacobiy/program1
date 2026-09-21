@@ -8,6 +8,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, CategoryDto, CreateCategoryRequest, UpdateCategoryRequest,
@@ -29,12 +30,12 @@ pub async fn list_categories_handler(
     Ok(Json(categories))
 }
 
-/// Get details of a category by ID or slug
+/// Get category by ID or slug
 #[utoipa::path(
     get,
-    path = "/api/v1/categories/{id}",
+    path = "/api/v1/categories/{id_or_slug}",
     params(
-        ("id" = String, Path, description = "Category ID or Slug")
+        ("id_or_slug" = String, Path, description = "Category ID or slug")
     ),
     responses(
         (status = 200, description = "Category details", body = CategoryDto),
@@ -43,11 +44,11 @@ pub async fn list_categories_handler(
     tag = "Catalog"
 )]
 pub async fn get_category_handler(
-    Path(id): Path<String>,
+    Path(id_or_slug): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<CategoryDto>, ApiError> {
-    let cat = state.catalog_contract.get_category(&id).await?;
-    Ok(Json(cat))
+    let category = state.catalog_contract.get_category(&id_or_slug).await?;
+    Ok(Json(category))
 }
 
 /// Create a new category (Admin only)
@@ -56,10 +57,9 @@ pub async fn get_category_handler(
     path = "/api/v1/admin/categories",
     request_body = CreateCategoryRequest,
     responses(
-        (status = 201, description = "Category created", body = CategoryDto),
+        (status = 201, description = "Category created successfully", body = CategoryDto),
         (status = 400, description = "Validation error", body = ApiError),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden")
+        (status = 409, description = "Category slug already exists", body = ApiError)
     ),
     security(
         ("bearer_auth" = [])
@@ -68,6 +68,7 @@ pub async fn get_category_handler(
 )]
 pub async fn create_category_handler(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<CreateCategoryRequest>,
 ) -> Result<(StatusCode, Json<CategoryDto>), ApiError> {
     let category = state.catalog_contract.create_category(payload).await?;
@@ -83,7 +84,7 @@ pub async fn create_category_handler(
             resource_type: "category".to_string(),
             resource_id: None,
             details: json!({ "id": category.id, "name": category.name, "slug": category.slug }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -111,6 +112,7 @@ pub async fn create_category_handler(
 pub async fn update_category_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<UpdateCategoryRequest>,
 ) -> Result<Json<CategoryDto>, ApiError> {
     let category = state.catalog_contract.update_category(&id, payload).await?;
@@ -126,7 +128,7 @@ pub async fn update_category_handler(
             resource_type: "category".to_string(),
             resource_id: None,
             details: json!({ "id": category.id, "name": category.name }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -153,6 +155,7 @@ pub async fn update_category_handler(
 pub async fn delete_category_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.catalog_contract.delete_category(&id).await?;
 
@@ -167,7 +170,7 @@ pub async fn delete_category_handler(
             resource_type: "category".to_string(),
             resource_id: None,
             details: json!({ "id": id }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 

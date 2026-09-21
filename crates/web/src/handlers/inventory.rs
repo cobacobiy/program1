@@ -9,6 +9,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, BulkStockUpdateRequest, BulkStockUpdateResult, ErrorCode, InventoryStockDto,
@@ -118,6 +119,7 @@ pub async fn update_safety_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<UpdateSafetyStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
     let operator = payload
@@ -146,7 +148,7 @@ pub async fn update_safety_stock(
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
         details: json!({ "new_safety_stock": payload.new_safety_stock, "note": payload.admin_note, "operator": operator }).to_string(),
-        ip_address: None,
+        ip_address: Some(client_ip.0.clone()),
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for safety stock update");
     }
@@ -202,6 +204,7 @@ pub async fn update_warehouse_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<UpdateWarehouseStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
     let operator = payload
@@ -230,7 +233,7 @@ pub async fn update_warehouse_stock(
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
         details: json!({ "new_warehouse_stock": payload.new_warehouse_stock, "note": payload.admin_note, "operator": operator }).to_string(),
-        ip_address: None,
+        ip_address: Some(client_ip.0.clone()),
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for warehouse stock update");
     }
@@ -262,6 +265,7 @@ pub async fn update_spare_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<UpdateSpareStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
     let operator = payload
@@ -290,7 +294,7 @@ pub async fn update_spare_stock(
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
         details: json!({ "new_spare_stock": payload.new_spare_stock, "note": payload.admin_note, "operator": operator }).to_string(),
-        ip_address: None,
+        ip_address: Some(client_ip.0.clone()),
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for spare stock update");
     }
@@ -322,6 +326,7 @@ pub async fn update_promotion_stock(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<UpdatePromotionStockRequest>,
 ) -> Result<Json<InventoryStockDto>, ApiError> {
     let operator = payload
@@ -350,7 +355,7 @@ pub async fn update_promotion_stock(
         resource_type: "inventory".to_string(),
         resource_id: Some(id),
         details: json!({ "new_promotion_stock": payload.new_promotion_stock, "note": payload.admin_note, "operator": operator }).to_string(),
-        ip_address: None,
+        ip_address: Some(client_ip.0.clone()),
     }).await {
         tracing::warn!(error = %e, "Failed to write audit log for promotion stock update");
     }
@@ -426,17 +431,12 @@ pub async fn get_low_stock_alerts(
 pub async fn bulk_update_stock(
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<BulkStockUpdateRequest>,
 ) -> Result<Json<BulkStockUpdateResult>, ApiError> {
-    let operator = payload
-        .updated_by
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .unwrap_or_else(|| claims.username.clone());
-    let note = payload.admin_note.clone();
     let count = payload.adjustments.len();
+    let operator = claims.username.clone();
+    let note = payload.admin_note.clone();
 
     let mut update_req = payload;
     update_req.updated_by = Some(operator.clone());
@@ -463,7 +463,7 @@ pub async fn bulk_update_stock(
                 "note": note
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await
     {

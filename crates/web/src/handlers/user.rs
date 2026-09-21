@@ -8,6 +8,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     ActivateBreakGlassRequest, AuditLogEntry, BreakGlassStatusDto, CreateUserAccountRequest,
@@ -54,6 +55,7 @@ pub async fn list_user_accounts(
 )]
 pub async fn create_user_account(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<CreateUserAccountRequest>,
 ) -> Result<(StatusCode, Json<UserAccountDto>), ApiError> {
     let acc = state.user_contract.create_account(payload).await?;
@@ -69,7 +71,7 @@ pub async fn create_user_account(
             resource_type: "user".to_string(),
             resource_id: Some(acc.id),
             details: json!({ "role": acc.role }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0),
         })
         .await;
 
@@ -98,6 +100,7 @@ pub async fn create_user_account(
 pub async fn update_user_permissions(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
     Json(payload): Json<UpdateUserPermissionsRequest>,
 ) -> Result<Json<UserAccountDto>, ApiError> {
     let acc = state
@@ -116,7 +119,7 @@ pub async fn update_user_permissions(
             resource_type: "user".to_string(),
             resource_id: Some(id),
             details: json!({ "accessible_menus": payload.accessible_menus }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0),
         })
         .await;
 
@@ -142,6 +145,7 @@ pub async fn update_user_permissions(
 pub async fn activate_break_glass(
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<ActivateBreakGlassRequest>,
 ) -> Result<Json<BreakGlassStatusDto>, ApiError> {
     let status = state
@@ -162,7 +166,7 @@ pub async fn activate_break_glass(
             details:
                 json!({ "reason": payload.reason, "duration_minutes": payload.duration_minutes })
                     .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0),
         })
         .await?;
 
@@ -186,6 +190,7 @@ pub async fn activate_break_glass(
 pub async fn deactivate_break_glass(
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     body: Option<Json<DeactivateBreakGlassRequest>>,
 ) -> Result<Json<BreakGlassStatusDto>, ApiError> {
     let reason = body.and_then(|b| b.0.reason);
@@ -205,7 +210,7 @@ pub async fn deactivate_break_glass(
             resource_type: "break_glass".to_string(),
             resource_id: None,
             details: json!({ "reason": reason }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0),
         })
         .await?;
 
@@ -258,6 +263,7 @@ pub async fn update_user_staff_permissions(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     Json(payload): Json<UpdateStaffPermissionsRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.user_contract.set_user_permissions(id, payload.permissions.clone()).await?;
@@ -273,7 +279,7 @@ pub async fn update_user_staff_permissions(
             resource_type: "user_permissions".to_string(),
             resource_id: Some(id),
             details: json!({ "permissions": payload.permissions }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0),
         })
         .await;
 
