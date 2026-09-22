@@ -9,6 +9,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, CatalogItemDto, CreateCatalogItemRequest, CreateVariantRequest, ErrorCode,
@@ -99,6 +100,7 @@ pub async fn get_catalog_item(
 )]
 pub async fn create_catalog_item(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(mut payload): ValidatedJson<CreateCatalogItemRequest>,
 ) -> Result<(StatusCode, Json<CatalogItemDto>), ApiError> {
     payload.name = program1_core::sanitize::sanitize_text(&payload.name, 200);
@@ -120,7 +122,7 @@ pub async fn create_catalog_item(
             resource_type: "catalog".to_string(),
             resource_id: Some(item.id),
             details: json!({ "sku": sku, "name": item.name }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -192,6 +194,7 @@ pub async fn get_variant_handler(
 pub async fn create_variant_handler(
     Path(product_id): Path<Uuid>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(mut payload): ValidatedJson<CreateVariantRequest>,
 ) -> Result<(StatusCode, Json<ProductVariantDto>), ApiError> {
     payload.variant_name = program1_core::sanitize::sanitize_text(&payload.variant_name, 50);
@@ -219,7 +222,7 @@ pub async fn create_variant_handler(
                 "sku": variant.sku
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -249,6 +252,7 @@ pub async fn create_variant_handler(
 pub async fn update_variant_handler(
     Path((product_id, variant_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(mut payload): ValidatedJson<UpdateVariantRequest>,
 ) -> Result<Json<ProductVariantDto>, ApiError> {
     payload.variant_name = program1_core::sanitize::sanitize_text(&payload.variant_name, 50);
@@ -275,7 +279,7 @@ pub async fn update_variant_handler(
                 "variant_value": variant.variant_value
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -303,6 +307,7 @@ pub async fn update_variant_handler(
 pub async fn delete_variant_handler(
     Path((product_id, variant_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
 ) -> Result<StatusCode, ApiError> {
     state.catalog_contract.delete_variant(variant_id).await?;
 
@@ -317,7 +322,7 @@ pub async fn delete_variant_handler(
             resource_type: "catalog_variant".to_string(),
             resource_id: Some(variant_id),
             details: json!({ "product_id": product_id }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 

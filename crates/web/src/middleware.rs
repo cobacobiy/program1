@@ -19,11 +19,70 @@ use crate::AppState;
 #[derive(Debug, Clone)]
 pub struct RequestId(pub String);
 
+/// Extension and extractor for client IP address
+#[derive(Debug, Clone)]
+pub struct ClientIp(pub String);
+
+impl std::ops::Deref for ClientIp {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ClientIp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[axum::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for ClientIp
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        if let Some(client_ip) = parts.extensions.get::<ClientIp>() {
+            return Ok(client_ip.clone());
+        }
+
+        let ip = if let Some(forwarded) = parts
+            .headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+        {
+            forwarded
+                .split(',')
+                .next()
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|| "127.0.0.1".to_string())
+        } else if let Some(real_ip) = parts
+            .headers
+            .get("x-real-ip")
+            .and_then(|v| v.to_str().ok())
+        {
+            real_ip.trim().to_string()
+        } else {
+            "127.0.0.1".to_string()
+        };
+
+        Ok(ClientIp(ip))
+    }
+}
+
 /// Middleware to extract or generate unique X-Request-ID and log request metrics
 pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
     let start_time = Instant::now();
     let method = req.method().to_string();
     let path = req.uri().path().to_string();
+
+    let client_ip = crate::rate_limit::extract_client_ip(&req);
+    req.extensions_mut().insert(ClientIp(client_ip));
 
     let request_id = req
         .headers()
@@ -40,6 +99,7 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     req.extensions_mut().insert(RequestId(request_id.clone()));
+
 
     let mut response = next.run(req).await;
     let latency = start_time.elapsed();

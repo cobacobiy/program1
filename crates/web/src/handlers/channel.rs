@@ -7,6 +7,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::AppState;
 use program1_contracts::{AuditLogEntry, ChannelStatusDto, ChannelType};
 
@@ -30,17 +31,16 @@ pub async fn list_channels(
     Ok(Json(channels))
 }
 
-/// Trigger on-demand inventory synchronization with external channel (Protected)
+/// Trigger an on-demand stock synchronization for a specific sales channel (Protected)
 #[utoipa::path(
     post,
-    path = "/api/v1/channels/sync/{channel}",
+    path = "/api/v1/channels/{channel_name}/sync",
     params(
-        ("channel" = String, Path, description = "Channel name (e.g. tiktok, shopee, tokopedia)")
+        ("channel_name" = String, Path, description = "Channel name (e.g. tiktok, shopee, tokopedia)")
     ),
     responses(
-        (status = 200, description = "Channel stock synced", body = serde_json::Value),
-        (status = 401, description = "Unauthorized"),
-        (status = 502, description = "Channel sync failed", body = ApiError)
+        (status = 200, description = "Channel synchronization completed"),
+        (status = 401, description = "Unauthorized")
     ),
     security(
         ("bearer_auth" = [])
@@ -50,6 +50,7 @@ pub async fn list_channels(
 pub async fn sync_channel(
     Path(channel_name): Path<String>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let channel = match channel_name.to_lowercase().as_str() {
         "tiktok" | "tiktokshop" => ChannelType::TikTokShop,
@@ -75,7 +76,7 @@ pub async fn sync_channel(
             resource_id: None,
             details: json!({ "channel": channel.to_string(), "synced_products": count })
                 .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 

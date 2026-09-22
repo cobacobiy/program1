@@ -9,6 +9,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, BuyerCheckoutRequest, ChannelType, ErrorCode, JwtClaims, MarketplaceOrderReq,
@@ -110,6 +111,7 @@ pub async fn get_order(
 pub async fn create_storefront_order(
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<BuyerCheckoutRequest>,
 ) -> Result<(StatusCode, Json<OmniOrderDto>), ApiError> {
     if !claims.is_buyer() {
@@ -200,7 +202,7 @@ pub async fn create_storefront_order(
                 "address_id": payload.address_id,
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -225,6 +227,7 @@ pub async fn create_storefront_order(
 )]
 pub async fn create_marketplace_order(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<MarketplaceOrderReq>,
 ) -> Result<(StatusCode, Json<OmniOrderDto>), ApiError> {
     let channel = match payload.channel.to_lowercase().as_str() {
@@ -255,7 +258,7 @@ pub async fn create_marketplace_order(
             resource_id: Some(order.id),
             details: json!({ "total_amount": order.total_amount, "channel": channel.to_string() })
                 .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -285,6 +288,7 @@ pub async fn update_order_status_handler(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<program1_contracts::UpdateOrderStatusRequest>,
 ) -> Result<Json<OmniOrderDto>, ApiError> {
     if claims.is_buyer() {
@@ -325,7 +329,7 @@ pub async fn update_order_status_handler(
                 "reason": reason,
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -356,6 +360,7 @@ pub async fn update_order_tracking_handler(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<UpdateOrderTrackingRequest>,
 ) -> Result<Json<OmniOrderDto>, ApiError> {
     if claims.is_buyer() {
@@ -386,7 +391,7 @@ pub async fn update_order_tracking_handler(
                 "status": updated_order.status,
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -417,6 +422,7 @@ pub async fn buyer_cancel_order_handler(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<program1_contracts::CancelOrderRequest>,
 ) -> Result<Json<OmniOrderDto>, ApiError> {
     if !claims.is_buyer() {
@@ -472,7 +478,7 @@ pub async fn buyer_cancel_order_handler(
                 "reason": payload.reason,
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -502,6 +508,7 @@ pub async fn buyer_confirm_delivery_handler(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Extension(claims): Extension<JwtClaims>,
+    client_ip: ClientIp,
 ) -> Result<Json<OmniOrderDto>, ApiError> {
     if !claims.is_buyer() {
         return Err(ApiError::new(
@@ -551,7 +558,7 @@ pub async fn buyer_confirm_delivery_handler(
                 "new_status": "delivered",
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 

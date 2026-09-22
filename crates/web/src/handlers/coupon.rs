@@ -10,6 +10,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, CouponDto, CouponValidationResult, CreateCouponRequest, ValidateCouponRequest,
@@ -57,6 +58,7 @@ pub async fn list_coupons_handler(
 )]
 pub async fn create_coupon_handler(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(req): ValidatedJson<CreateCouponRequest>,
 ) -> Result<(StatusCode, Json<CouponDto>), ApiError> {
     let coupon = state.coupon_contract.create_coupon(req).await?;
@@ -77,7 +79,7 @@ pub async fn create_coupon_handler(
                 "discount_value": coupon.discount_value
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -105,6 +107,7 @@ pub async fn create_coupon_handler(
 pub async fn toggle_coupon_handler(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
     Json(payload): Json<ToggleCouponStatusRequest>,
 ) -> Result<Json<CouponDto>, ApiError> {
     let coupon = state
@@ -127,7 +130,7 @@ pub async fn toggle_coupon_handler(
                 "is_active": payload.is_active
             })
             .to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
@@ -154,6 +157,7 @@ pub async fn toggle_coupon_handler(
 pub async fn delete_coupon_handler(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
+    client_ip: ClientIp,
 ) -> Result<StatusCode, ApiError> {
     state.coupon_contract.delete_coupon(id).await?;
 
@@ -168,7 +172,7 @@ pub async fn delete_coupon_handler(
             resource_type: "coupon".to_string(),
             resource_id: Some(id),
             details: json!({ "id": id }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 

@@ -4,6 +4,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::ClientIp;
 use crate::state::{AppState, ValidatedJson};
 use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, LoginRequest, RegisterUserRequest, UserAccountDto,
@@ -23,6 +24,7 @@ use program1_contracts::{
 )]
 pub async fn login_handler(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<LoginRequest>,
 ) -> Result<Json<AuthTokenResponse>, ApiError> {
     match state
@@ -44,7 +46,7 @@ pub async fn login_handler(
                     resource_type: "user".to_string(),
                     resource_id: Some(user.id),
                     details: json!({ "role": user.role }).to_string(),
-                    ip_address: None,
+                    ip_address: Some(client_ip.0.clone()),
                 })
                 .await;
 
@@ -68,7 +70,7 @@ pub async fn login_handler(
                     resource_type: "user".to_string(),
                     resource_id: None,
                     details: json!({ "attempted_username": payload.username }).to_string(),
-                    ip_address: None,
+                    ip_address: Some(client_ip.0.clone()),
                 })
                 .await;
 
@@ -95,6 +97,7 @@ pub async fn login_handler(
 )]
 pub async fn register_handler(
     State(state): State<AppState>,
+    client_ip: ClientIp,
     ValidatedJson(payload): ValidatedJson<RegisterUserRequest>,
 ) -> Result<(StatusCode, Json<UserAccountDto>), ApiError> {
     let user = state.user_contract.register(payload).await?;
@@ -110,7 +113,7 @@ pub async fn register_handler(
             resource_type: "user".to_string(),
             resource_id: Some(user.id),
             details: json!({ "role": user.role }).to_string(),
-            ip_address: None,
+            ip_address: Some(client_ip.0.clone()),
         })
         .await;
 
