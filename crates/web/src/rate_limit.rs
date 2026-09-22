@@ -196,7 +196,7 @@ mod tests {
     async fn test_cleanup_stale_entries() {
         let limiter = IpRateLimiter::new();
         let _ = limiter
-            .check_rate_limit("1.2.3.4", "/api/v1/test", 5, Duration::from_secs(1))
+            .check("1.2.3.4", "/api/v1/test", 5, Duration::from_secs(1))
             .await;
 
         {
@@ -212,6 +212,26 @@ mod tests {
         {
             let map = limiter.records.lock().await;
             assert_eq!(map.len(), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_keeps_recent_entries() {
+        let limiter = IpRateLimiter::new();
+
+        // Recent entry within window
+        let _ = limiter
+            .check("1.2.3.4", "/api/v1/test", 100, Duration::from_secs(60))
+            .await;
+
+        // Cleanup with max_age 60 seconds — recent entry should NOT be cleaned up
+        limiter
+            .cleanup_stale_entries_older_than(Duration::from_secs(60))
+            .await;
+
+        {
+            let map = limiter.records.lock().await;
+            assert_eq!(map.len(), 1, "Recent entry should NOT be cleaned up");
         }
     }
 }

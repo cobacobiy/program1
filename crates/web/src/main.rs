@@ -209,7 +209,7 @@ async fn main() {
         loop {
             interval.tick().await;
             cleanup_limiter.cleanup_stale_entries().await;
-            tracing::debug!("Rate limiter stale entries cleaned up");
+            tracing::info!("Rate limiter stale entries cleaned up");
         }
     });
 
