@@ -675,7 +675,7 @@ impl BuyerContract for BuyerModule {
         Ok(BuyerAuthResponse {
             access_token: token,
             token_type: "Bearer".to_string(),
-            expires_in: 86400,
+            expires_in: self.auth_contract.expiry_seconds(),
             buyer: buyer_dto,
             requires_phone_verification: true,
         })
@@ -762,7 +762,7 @@ impl BuyerContract for BuyerModule {
         Ok(BuyerAuthResponse {
             access_token: token,
             token_type: "Bearer".to_string(),
-            expires_in: 86400,
+            expires_in: self.auth_contract.expiry_seconds(),
             requires_phone_verification: !buyer_dto.phone_verified,
             buyer: buyer_dto,
         })
@@ -888,7 +888,7 @@ impl BuyerContract for BuyerModule {
         Ok(BuyerAuthResponse {
             access_token,
             token_type: "Bearer".to_string(),
-            expires_in: 86400,
+            expires_in: self.auth_contract.expiry_seconds(),
             requires_phone_verification,
             buyer,
         })

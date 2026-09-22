@@ -350,6 +350,11 @@ pub trait AuthContract: Send + Sync {
 
     /// Validate & decode JWT token
     fn validate_token(&self, token: &str) -> Result<JwtClaims, ContractError>;
+
+    /// Token expiry duration in seconds
+    fn expiry_seconds(&self) -> u64 {
+        86400
+    }
 }
 
 // --- PAGINATION COMMON MODELS ---

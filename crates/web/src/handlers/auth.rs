@@ -51,7 +51,7 @@ pub async fn login_handler(
             let token_resp = AuthTokenResponse {
                 access_token: token,
                 token_type: "Bearer".to_string(),
-                expires_in: 86400,
+                expires_in: state.auth_contract.expiry_seconds(),
                 user,
             };
             Ok(Json(token_resp))
