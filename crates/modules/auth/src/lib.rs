@@ -258,4 +258,24 @@ mod tests {
         assert_eq!(claims.accessible_menus, vec!["dashboard", "orders"]);
         assert!(claims.exp > claims.iat);
     }
+
+    // 6. Test expiry_seconds
+    #[test]
+    fn test_expiry_seconds_default_24h() {
+        let auth = AuthModule::new("test-secret-key-minimum-32-chars-length!".to_string(), 24);
+        assert_eq!(auth.expiry_seconds(), 86400); // 24 * 3600
+    }
+
+    #[test]
+    fn test_expiry_seconds_custom_8h() {
+        let auth = AuthModule::new("test-secret-key-minimum-32-chars-length!".to_string(), 8);
+        assert_eq!(auth.expiry_seconds(), 28800); // 8 * 3600
+    }
+
+    #[test]
+    fn test_expiry_seconds_zero_defaults_to_24h() {
+        let auth = AuthModule::new("test-secret-key-minimum-32-chars-length!".to_string(), 0);
+        // AuthModule::new sets token_expiry_hours to 24 if 0
+        assert_eq!(auth.expiry_seconds(), 86400);
+    }
 }
