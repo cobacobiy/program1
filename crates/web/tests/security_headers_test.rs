@@ -188,3 +188,39 @@ async fn test_cors_disallowed_origin() {
     let headers = response.headers();
     assert!(headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
 }
+
+#[tokio::test]
+async fn test_cors_preflight_delete_allowed() {
+    let app = setup_test_app().await;
+
+    let req = Request::builder()
+        .uri("/api/v1/buyer/wishlist/1")
+        .method("OPTIONS")
+        .header(header::ORIGIN, "http://localhost:3000")
+        .header(header::ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
+        .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "authorization")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let headers = response.headers();
+    assert_eq!(
+        headers
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "http://localhost:3000"
+    );
+    assert_eq!(
+        headers
+            .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "true"
+    );
+}
+
