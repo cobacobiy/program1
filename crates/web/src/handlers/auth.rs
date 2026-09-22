@@ -10,14 +10,14 @@ use program1_contracts::{
     AuditLogEntry, AuthTokenResponse, LoginRequest, RegisterUserRequest, UserAccountDto,
 };
 
-/// Login with username and password to obtain a JWT Bearer token
+/// Authenticate user credentials and issue JWT bearer token
 #[utoipa::path(
     post,
     path = "/api/v1/auth/login",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "Successful authentication", body = AuthTokenResponse),
-        (status = 400, description = "Invalid credentials or request validation error", body = ApiError),
+        (status = 200, description = "Login successful", body = AuthTokenResponse),
+        (status = 400, description = "Bad credentials or validation error", body = ApiError),
         (status = 429, description = "Rate limit exceeded")
     ),
     tag = "Auth"
