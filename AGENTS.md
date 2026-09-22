@@ -27,11 +27,12 @@ This application provides clean domain-driven business capabilities (`User`, `Pr
 
 ## Critical Operational Rules
 1. **MANDATORY PRE-PUSH UNIT TESTING**:
-   - **NEVER** commit or push code to GitHub without first running and verifying unit tests across all workspace crates:
+   - **NEVER** merge code to `main` without first running and verifying unit tests across all workspace crates:
      ```bash
      cargo test --workspace
      ```
    - Pushing code with failing unit tests or broken compilation is **STRICTLY PROHIBITED**.
+   - *Exception / Batch Workflow*: For multi-PR feedback iterations, test execution can be deferred and run all together immediately before merging into `main` if instructed.
 2. **Contract Isolation**:
    - Modules MUST NOT depend directly on each other's concrete internal structures or private state.
    - All inter-module communications MUST occur through `#[async_trait]` interface traits defined in `program1-contracts`.
