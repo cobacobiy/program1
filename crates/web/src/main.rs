@@ -160,9 +160,10 @@ async fn main() {
     let prune_manager = backup_service.manager().clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400));
+        interval.tick().await;
         loop {
             interval.tick().await;
-            let pruned = prune_manager.prune_old_backups(30);
+            let pruned = prune_manager.prune_old_backups(program1_core::backup::BACKUP_RETENTION_DAYS);
             if pruned > 0 {
                 tracing::info!("Scheduled cleanup: pruned {} old backup file(s)", pruned);
             }

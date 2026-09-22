@@ -17,6 +17,9 @@ pub struct BackupMetadata {
     pub created_at: String,
 }
 
+/// Default backup retention period in days
+pub const BACKUP_RETENTION_DAYS: u32 = 30;
+
 #[derive(Debug, Clone)]
 pub struct BackupManager {
     backup_dir: PathBuf,
@@ -144,15 +147,43 @@ impl BackupManager {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file() {
-                    if let Ok(meta) = entry.metadata() {
-                        if let Ok(mod_time) = meta.modified() {
-                            let mod_dt: DateTime<Utc> = mod_time.into();
-                            let age_secs = now.signed_duration_since(mod_dt).num_seconds();
-                            if age_secs > max_age_secs {
-                                if fs::remove_file(&path).is_ok() {
-                                    deleted += 1;
-                                    info!("Pruned old backup file: {:?}", path);
+                    let mut file_age_secs: Option<i64> = None;
+
+                    // First try to extract timestamp from filename: backup_program1_%Y%m%d_%H%M%S.db or ISO8601/RFC3339
+                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                        if let Some(ts_part) = file_name
+                            .strip_prefix("backup_program1_")
+                            .and_then(|s| s.strip_suffix(".db"))
+                        {
+                            if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(ts_part, "%Y%m%d_%H%M%S") {
+                                file_age_secs = Some(now.signed_duration_since(dt.and_utc()).num_seconds());
+                            } else if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts_part) {
+                                file_age_secs = Some(now.signed_duration_since(dt.with_timezone(&Utc)).num_seconds());
+                            } else if ts_part.len() >= 10 {
+                                if let Ok(date) = chrono::NaiveDate::parse_from_str(&ts_part[..10], "%Y-%m-%d") {
+                                    if let Some(dt) = date.and_hms_opt(0, 0, 0) {
+                                        file_age_secs = Some(now.signed_duration_since(dt.and_utc()).num_seconds());
+                                    }
                                 }
+                            }
+                        }
+                    }
+
+                    // Fallback to filesystem mtime if filename timestamp was unavailable
+                    if file_age_secs.is_none() {
+                        if let Ok(meta) = entry.metadata() {
+                            if let Ok(mod_time) = meta.modified() {
+                                let mod_dt: DateTime<Utc> = mod_time.into();
+                                file_age_secs = Some(now.signed_duration_since(mod_dt).num_seconds());
+                            }
+                        }
+                    }
+
+                    if let Some(age_secs) = file_age_secs {
+                        if age_secs > max_age_secs {
+                            if fs::remove_file(&path).is_ok() {
+                                deleted += 1;
+                                info!("Pruned old backup file: {:?}", path);
                             }
                         }
                     }
@@ -202,8 +233,8 @@ impl BackupContract for BackupService {
             .await
             .map_err(ContractError::Internal)?;
 
-        // Auto-prune backups older than 30 days after successful backup
-        let pruned = self.manager.prune_old_backups(30);
+        // Auto-prune backups older than BACKUP_RETENTION_DAYS days after successful backup
+        let pruned = self.manager.prune_old_backups(BACKUP_RETENTION_DAYS);
         if pruned > 0 {
             tracing::info!("Auto-pruned {} old backup file(s)", pruned);
         }
@@ -281,8 +312,8 @@ mod tests {
         std::fs::write(&fake_file, b"fake sqlite").unwrap();
         assert!(fake_file.exists());
 
-        // Pruning backups older than 30 days should remove it
-        let pruned = mgr.prune_old_backups(30);
+        // Pruning backups older than BACKUP_RETENTION_DAYS days should remove it
+        let pruned = mgr.prune_old_backups(BACKUP_RETENTION_DAYS);
         assert_eq!(pruned, 1);
         assert!(!fake_file.exists());
 
