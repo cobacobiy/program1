@@ -3,6 +3,7 @@
   import type { Product, ProductReview, PaginatedReviews } from '../types';
   import { toast } from '../toast.svelte';
   import { fetchAdmin } from './adminApi';
+  import './admin-shared.css';
 
   interface Props {
     products: Product[];
@@ -18,7 +19,7 @@
   let adminReviewsTotalPages = $state(1);
   let reviewsLoading = $state(false);
 
-  export async function loadAdminReviews(page = 1) {
+  async function loadAdminReviews(page = 1) {
     reviewsLoading = true;
     try {
       let url = `/api/v1/admin/reviews?page=${page}&page_size=${adminReviewsPageSize}`;
@@ -107,61 +108,63 @@
   {:else if adminReviews.length === 0}
     <p class="empty-text">Tidak ada ulasan ditemukan.</p>
   {:else}
-    <table class="table-custom">
-      <thead>
-        <tr>
-          <th>Produk</th>
-          <th>Pembeli</th>
-          <th>Rating</th>
-          <th>Isi Ulasan</th>
-          <th>Tanggal</th>
-          <th>Status</th>
-          <th>Aksi Moderasi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each adminReviews as rev (rev.id)}
+    <div style="overflow-x: auto;">
+      <table class="table-custom">
+        <thead>
           <tr>
-            <td>
-              <strong>{products.find(p => p.id === rev.product_id)?.name || 'Produk'}</strong>
-              <div><small><code>#{rev.product_id.slice(0, 8)}</code></small></div>
-            </td>
-            <td>
-              <strong>{rev.buyer_name}</strong>
-            </td>
-            <td>
-              <span class="stars-badge">
-                {"★".repeat(rev.rating)}{"☆".repeat(5 - rev.rating)} ({rev.rating}/5)
-              </span>
-            </td>
-            <td class="review-text-cell">
-              {#if rev.review_text}
-                <span>{rev.review_text}</span>
-              {:else}
-                <em class="text-muted">(Tanpa teks ulasan)</em>
-              {/if}
-            </td>
-            <td>
-              <small>{new Date(rev.created_at).toLocaleDateString('id-ID')}</small>
-            </td>
-            <td>
-              <span class="status-pill {rev.is_visible ? 'delivered' : 'cancelled'}">
-                {rev.is_visible ? '✓ Tampil' : '✕ Disembunyikan'}
-              </span>
-            </td>
-            <td>
-              <button
-                class="btn-action"
-                class:primary={!rev.is_visible}
-                onclick={() => handleToggleReviewVisibility(rev)}
-              >
-                {rev.is_visible ? 'Sembunyikan' : 'Tampilkan'}
-              </button>
-            </td>
+            <th>Produk</th>
+            <th>Pembeli</th>
+            <th>Rating</th>
+            <th>Isi Ulasan</th>
+            <th>Tanggal</th>
+            <th>Status</th>
+            <th>Aksi Moderasi</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each adminReviews as rev (rev.id)}
+            <tr>
+              <td>
+                <strong>{products.find(p => p.id === rev.product_id)?.name || 'Produk'}</strong>
+                <div><small><code>#{rev.product_id.slice(0, 8)}</code></small></div>
+              </td>
+              <td>
+                <strong>{rev.buyer_name}</strong>
+              </td>
+              <td>
+                <span class="stars-badge">
+                  {"★".repeat(rev.rating)}{"☆".repeat(5 - rev.rating)} ({rev.rating}/5)
+                </span>
+              </td>
+              <td class="review-text-cell">
+                {#if rev.review_text}
+                  <span>{rev.review_text}</span>
+                {:else}
+                  <em class="text-muted">(Tanpa teks ulasan)</em>
+                {/if}
+              </td>
+              <td>
+                <small>{new Date(rev.created_at).toLocaleDateString('id-ID')}</small>
+              </td>
+              <td>
+                <span class="status-pill {rev.is_visible ? 'delivered' : 'cancelled'}">
+                  {rev.is_visible ? '✓ Tampil' : '✕ Disembunyikan'}
+                </span>
+              </td>
+              <td>
+                <button
+                  class="btn-action"
+                  class:primary={!rev.is_visible}
+                  onclick={() => handleToggleReviewVisibility(rev)}
+                >
+                  {rev.is_visible ? 'Sembunyikan' : 'Tampilkan'}
+                </button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
 
     {#if adminReviewsTotalPages > 1}
       <div class="pagination-bar">
@@ -200,22 +203,8 @@
   }
   .btn-filter:hover { background: #334155; color: #fff; }
   .btn-filter.active { background: #0284c7; color: #fff; border-color: #0284c7; font-weight: bold; }
-  .table-custom { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  .table-custom th, .table-custom td {
-    padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #1e293b; font-size: 0.9rem;
-  }
-  .table-custom th { background: #1e293b; color: #94a3b8; font-size: 0.8rem; }
   .stars-badge { color: #f59e0b; font-size: 0.85rem; font-weight: 500; }
   .review-text-cell { max-width: 320px; font-size: 0.85rem; line-height: 1.4; color: #cbd5e1; }
-  .text-muted { color: #64748b; font-size: 0.8rem; font-style: italic; }
-  .status-pill { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
-  .status-pill.delivered { background: #065f46; color: #a7f3d0; }
-  .status-pill.cancelled { background: #7f1d1d; color: #fecaca; }
-  .btn-action {
-    background: #334155; color: #fff; border: none; padding: 0.35rem 0.7rem;
-    border-radius: 4px; cursor: pointer; font-size: 0.8rem;
-  }
-  .btn-action.primary { background: #0284c7; font-weight: bold; }
   .pagination-bar {
     display: flex; justify-content: space-between; align-items: center;
     padding-top: 1rem; margin-top: 1rem; border-top: 1px solid #334155;
@@ -227,5 +216,4 @@
   .btn-page:hover:not(:disabled) { background: #334155; color: #fff; }
   .btn-page:disabled { opacity: 0.4; cursor: not-allowed; }
   .page-info { font-size: 0.8rem; color: #94a3b8; }
-  .empty-text { color: #94a3b8; text-align: center; padding: 2rem 0; }
 </style>

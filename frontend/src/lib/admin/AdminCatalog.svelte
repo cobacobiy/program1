@@ -5,6 +5,7 @@
   import { i18n } from '../i18n.svelte';
   import { adminAuth } from '../adminAuth.svelte';
   import { fetchAdmin } from './adminApi';
+  import './admin-shared.css';
 
   interface Props {
     products: Product[];
@@ -175,40 +176,42 @@
   {#if loading}
     <p class="empty-text">Memuat katalog...</p>
   {:else}
-    <table class="table-custom">
-      <thead>
-        <tr>
-          <th>Gambar</th>
-          <th>Nama Produk</th>
-          <th>Kategori</th>
-          <th>Harga</th>
-          <th>Stok</th>
-          <th>Varian</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each products as p (p.id)}
+    <div style="overflow-x: auto;">
+      <table class="table-custom">
+        <thead>
           <tr>
-            <td class="td-img">
-              {#if p.image_url}
-                <img src={p.image_url} alt={p.name} />
-              {:else}
-                <span>📦</span>
-              {/if}
-            </td>
-            <td><strong>{p.name}</strong></td>
-            <td><span class="badge-tag">{p.category || 'Umum'}</span></td>
-            <td>{formatRupiah(p.price_cents)}</td>
-            <td><span class="badge-stock" class:empty={p.stock <= 0}>{p.stock} unit</span></td>
-            <td>
-              <button class="btn-action primary" onclick={() => openVariantModal(p)}>
-                ⚙️ Kelola Varian
-              </button>
-            </td>
+            <th>Gambar</th>
+            <th>Nama Produk</th>
+            <th>Kategori</th>
+            <th>Harga</th>
+            <th>Stok</th>
+            <th>Varian</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each products as p (p.id)}
+            <tr>
+              <td class="td-img">
+                {#if p.image_url}
+                  <img src={p.image_url} alt={p.name} />
+                {:else}
+                  <span>📦</span>
+                {/if}
+              </td>
+              <td><strong>{p.name}</strong></td>
+              <td><span class="badge-tag">{p.category || 'Umum'}</span></td>
+              <td>{formatRupiah(p.price_cents)}</td>
+              <td><span class="badge-stock" class:empty={p.stock <= 0}>{p.stock} unit</span></td>
+              <td>
+                <button class="btn-action primary" onclick={() => openVariantModal(p)}>
+                  ⚙️ Kelola Varian
+                </button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
 </div>
 
@@ -366,57 +369,10 @@
 {/if}
 
 <style>
-  .section-panel { width: 100%; }
-  h2 { margin: 0; font-size: 1.25rem; color: #f8fafc; }
-  .panel-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  .btn-add-prod {
-    background: #059669; color: #fff; border: none; padding: 0.55rem 1rem;
-    border-radius: 6px; font-weight: bold; cursor: pointer;
-  }
-  .table-custom { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  .table-custom th, .table-custom td {
-    padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #1e293b; font-size: 0.9rem;
-  }
-  .table-custom th { background: #1e293b; color: #94a3b8; font-size: 0.8rem; }
   .td-img { width: 44px; height: 44px; text-align: center; }
   .td-img img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
-  .badge-tag { background: #334155; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; color: #cbd5e1; }
   .badge-stock { color: #10b981; font-weight: bold; }
   .badge-stock.empty { color: #ef4444; }
-  .btn-action {
-    background: #334155; color: #fff; border: none; padding: 0.35rem 0.7rem;
-    border-radius: 4px; cursor: pointer; font-size: 0.8rem;
-  }
-  .btn-action.primary { background: #0284c7; font-weight: bold; }
-  .empty-text { color: #94a3b8; text-align: center; padding: 2rem 0; }
-
-  /* Modal */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-    display: flex; align-items: center; justify-content: center; z-index: 1000;
-  }
-  .modal-card {
-    background: #0f172a; border: 1px solid #334155; border-radius: 12px;
-    width: 90%; max-width: 480px; padding: 1.5rem; color: #f8fafc;
-  }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
-  .modal-header h3 { margin: 0; font-size: 1.15rem; color: #f8fafc; }
-  .close-btn { background: none; border: none; font-size: 1.4rem; color: #94a3b8; cursor: pointer; }
-  .prod-form { display: flex; flex-direction: column; gap: 0.85rem; margin-top: 1rem; }
-  .prod-form label { font-size: 0.85rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.25rem; }
-  .prod-form input, .prod-form textarea {
-    background: #1e293b; border: 1px solid #334155; border-radius: 6px;
-    padding: 0.6rem; color: #fff; font-family: inherit;
-  }
-  .row-fields { display: flex; gap: 1rem; }
-  .row-fields label { flex: 1; }
-  .select-custom {
-    background: #1e293b; border: 1px solid #334155; border-radius: 6px;
-    padding: 0.6rem; color: #fff; font-family: inherit;
-  }
-  .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.75rem; }
-  .btn-cancel { background: #334155; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
-  .btn-save { background: #059669; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold; cursor: pointer; }
 
   /* Variant Modal */
   .modal-variant-card { max-width: 680px; }

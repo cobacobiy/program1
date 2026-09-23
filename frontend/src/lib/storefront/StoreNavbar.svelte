@@ -267,4 +267,28 @@
     50% { transform: scale(1.45); }
     100% { transform: scale(1); }
   }
+
+  @media (max-width: 768px) {
+    .nav-inner {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .nav-tabs {
+      order: 3;
+      width: 100%;
+      justify-content: center;
+    }
+    .nav-user-actions {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    .btn-orders, .btn-wishlist {
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+    }
+    .user-pill {
+      font-size: 0.8rem;
+    }
+  }
 </style>

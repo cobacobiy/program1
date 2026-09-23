@@ -3,6 +3,7 @@
   import { toast } from '../toast.svelte';
   import { adminAuth } from '../adminAuth.svelte';
   import { fetchAdmin } from './adminApi';
+  import './admin-shared.css';
 
   interface BackupFile {
     filename: string;
@@ -21,7 +22,7 @@
   let backupLoading = $state(false);
   let creatingBackup = $state(false);
 
-  export async function loadBackupsAndHealth() {
+  async function loadBackupsAndHealth() {
     backupLoading = true;
     try {
       const [bList, health] = await Promise.all([
@@ -130,37 +131,39 @@
       <small>Klik tombol "⚡ Buat Backup Sekarang" di kanan atas untuk membuat snapshot SQLite instan.</small>
     </div>
   {:else}
-    <table class="table-custom">
-      <thead>
-        <tr>
-          <th>Nama Berkas</th>
-          <th>Ukuran</th>
-          <th>Waktu Dibuat</th>
-          <th class="text-right">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each backups as b (b.filename)}
+    <div style="overflow-x: auto;">
+      <table class="table-custom">
+        <thead>
           <tr>
-            <td>
-              <strong class="backup-filename">{b.filename}</strong>
-            </td>
-            <td>{(b.size_bytes / 1024).toFixed(1)} KB</td>
-            <td>
-              <small>{new Date(b.created_at).toLocaleString('id-ID')}</small>
-            </td>
-            <td class="text-right">
-              <button
-                class="btn-action primary"
-                onclick={() => downloadBackup(b.filename)}
-              >
-                ⬇️ Unduh Berkas
-              </button>
-            </td>
+            <th>Nama Berkas</th>
+            <th>Ukuran</th>
+            <th>Waktu Dibuat</th>
+            <th class="text-right">Aksi</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each backups as b (b.filename)}
+            <tr>
+              <td>
+                <strong class="backup-filename">{b.filename}</strong>
+              </td>
+              <td>{(b.size_bytes / 1024).toFixed(1)} KB</td>
+              <td>
+                <small>{new Date(b.created_at).toLocaleString('id-ID')}</small>
+              </td>
+              <td class="text-right">
+                <button
+                  class="btn-action primary"
+                  onclick={() => downloadBackup(b.filename)}
+                >
+                  ⬇️ Unduh Berkas
+                </button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
 </div>
 
@@ -189,19 +192,7 @@
   .db-health-meta { font-size: 0.85rem; color: #94a3b8; display: flex; gap: 1.5rem; }
   .text-white { color: #cbd5e1; }
   .section-subheading { font-size: 1rem; color: #94a3b8; margin-bottom: 0.75rem; }
-  .table-custom { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  .table-custom th, .table-custom td {
-    padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #1e293b; font-size: 0.9rem;
-  }
-  .table-custom th { background: #1e293b; color: #94a3b8; font-size: 0.8rem; }
-  .text-right { text-align: right; }
   .backup-filename { color: #38bdf8; font-family: monospace; }
-  .btn-action {
-    background: #334155; color: #fff; border: none; padding: 0.35rem 0.7rem;
-    border-radius: 4px; cursor: pointer; font-size: 0.8rem;
-  }
-  .btn-action.primary { background: #0284c7; font-weight: bold; }
   .empty-state { text-align: center; padding: 3rem 1rem; color: #64748b; }
   .empty-icon { font-size: 3rem; margin-bottom: 0.5rem; }
-  .empty-text { color: #94a3b8; text-align: center; padding: 2rem 0; }
 </style>

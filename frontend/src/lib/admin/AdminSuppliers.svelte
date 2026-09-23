@@ -4,6 +4,7 @@
   import { formatRupiah } from '../currency';
   import { toast } from '../toast.svelte';
   import { fetchAdmin } from './adminApi';
+  import './admin-shared.css';
 
   interface SupplierItem {
     id: string;
@@ -59,7 +60,7 @@
   let newPoUnitCost = $state(50000);
   let newPoNotes = $state('');
 
-  export async function loadSuppliersAndPo() {
+  async function loadSuppliersAndPo() {
     supplierLoading = true;
     try {
       const [sup, po] = await Promise.all([
@@ -184,53 +185,55 @@
         <p>Belum ada Purchase Order yang tercatat.</p>
       </div>
     {:else}
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>No. PO</th>
-            <th>Pemasok (Supplier)</th>
-            <th>Jumlah Item</th>
-            <th>Total Biaya (HPP)</th>
-            <th>Status PO</th>
-            <th>Tanggal Pesan</th>
-            <th class="text-right">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each poList as po (po.id)}
+      <div style="overflow-x: auto;">
+        <table class="admin-table">
+          <thead>
             <tr>
-              <td><strong class="po-num">{po.po_number}</strong></td>
-              <td>{po.supplier_name || 'Mitra Pemasok'}</td>
-              <td>{po.items.reduce((acc, i) => acc + i.quantity, 0)} unit ({po.items.length} varian)</td>
-              <td><strong>{formatRupiah(po.total_cost_cents / 100)}</strong></td>
-              <td>
-                {#if po.status === 'received'}
-                  <span class="status-badge received">✓ Diterima & Masuk Stok</span>
-                {:else if po.status === 'ordered'}
-                  <span class="status-badge ordered">⏳ Menunggu Pengiriman</span>
-                {:else}
-                  <span class="status-badge cancelled">✕ Dibatalkan</span>
-                {/if}
-              </td>
-              <td><small>{new Date(po.ordered_at).toLocaleDateString('id-ID')}</small></td>
-              <td class="text-right">
-                {#if po.status === 'ordered'}
-                  <button class="btn-action primary btn-compact" onclick={() => handleReceivePo(po.id)}>
-                    📥 Terima Barang
-                  </button>
-                  <button class="btn-action danger btn-compact" onclick={() => handleCancelPo(po.id)}>
-                    ✕ Batal
-                  </button>
-                {:else if po.status === 'received'}
-                  <small class="text-emerald">Selesai ({new Date(po.received_at || po.ordered_at).toLocaleDateString('id-ID')})</small>
-                {:else}
-                  <small class="text-muted">Tidak aktif</small>
-                {/if}
-              </td>
+              <th>No. PO</th>
+              <th>Pemasok (Supplier)</th>
+              <th>Jumlah Item</th>
+              <th>Total Biaya (HPP)</th>
+              <th>Status PO</th>
+              <th>Tanggal Pesan</th>
+              <th class="text-right">Aksi</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {#each poList as po (po.id)}
+              <tr>
+                <td><strong class="po-num">{po.po_number}</strong></td>
+                <td>{po.supplier_name || 'Mitra Pemasok'}</td>
+                <td>{po.items.reduce((acc, i) => acc + i.quantity, 0)} unit ({po.items.length} varian)</td>
+                <td><strong>{formatRupiah(po.total_cost_cents / 100)}</strong></td>
+                <td>
+                  {#if po.status === 'received'}
+                    <span class="status-badge received">✓ Diterima & Masuk Stok</span>
+                  {:else if po.status === 'ordered'}
+                    <span class="status-badge ordered">⏳ Menunggu Pengiriman</span>
+                  {:else}
+                    <span class="status-badge cancelled">✕ Dibatalkan</span>
+                  {/if}
+                </td>
+                <td><small>{new Date(po.ordered_at).toLocaleDateString('id-ID')}</small></td>
+                <td class="text-right">
+                  {#if po.status === 'ordered'}
+                    <button class="btn-action primary btn-compact" onclick={() => handleReceivePo(po.id)}>
+                      📥 Terima Barang
+                    </button>
+                    <button class="btn-action danger btn-compact" onclick={() => handleCancelPo(po.id)}>
+                      ✕ Batal
+                    </button>
+                  {:else if po.status === 'received'}
+                    <small class="text-emerald">Selesai ({new Date(po.received_at || po.ordered_at).toLocaleDateString('id-ID')})</small>
+                  {:else}
+                    <small class="text-muted">Tidak aktif</small>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {/if}
   </div>
 
@@ -244,36 +247,38 @@
         <p>Belum ada supplier yang didaftarkan.</p>
       </div>
     {:else}
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Nama Perusahaan / Mitra</th>
-            <th>Kontak Person (PIC)</th>
-            <th>Telepon / WA</th>
-            <th>Email</th>
-            <th>Alamat Gudang / Pabrik</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each suppliersList as s (s.id)}
+      <div style="overflow-x: auto;">
+        <table class="admin-table">
+          <thead>
             <tr>
-              <td><strong>{s.name}</strong></td>
-              <td>{s.contact_person || '-'}</td>
-              <td>{s.phone || '-'}</td>
-              <td>{s.email || '-'}</td>
-              <td><small>{s.address || '-'}</small></td>
-              <td>
-                {#if s.is_active}
-                  <span class="dot-active">● Aktif</span>
-                {:else}
-                  <span class="dot-inactive">● Nonaktif</span>
-                {/if}
-              </td>
+              <th>Nama Perusahaan / Mitra</th>
+              <th>Kontak Person (PIC)</th>
+              <th>Telepon / WA</th>
+              <th>Email</th>
+              <th>Alamat Gudang / Pabrik</th>
+              <th>Status</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {#each suppliersList as s (s.id)}
+              <tr>
+                <td><strong>{s.name}</strong></td>
+                <td>{s.contact_person || '-'}</td>
+                <td>{s.phone || '-'}</td>
+                <td>{s.email || '-'}</td>
+                <td><small>{s.address || '-'}</small></td>
+                <td>
+                  {#if s.is_active}
+                    <span class="dot-active">● Aktif</span>
+                  {:else}
+                    <span class="dot-inactive">● Nonaktif</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {/if}
   </div>
 </div>

@@ -4,8 +4,9 @@
   import { toast } from './toast.svelte';
   import { i18n } from './i18n.svelte';
   import NotificationBell from './NotificationBell.svelte';
-  import type { Product, Coupon, ProductReview, Category } from './types';
+  import type { Product, Coupon, ProductReview, Category, AdminOrder, AuditLogRecord } from './types';
   import { fetchAdmin } from './admin/adminApi';
+  import './admin/admin-shared.css';
 
   import AdminKpi from './admin/AdminKpi.svelte';
   import AdminReports from './admin/AdminReports.svelte';
@@ -20,28 +21,12 @@
   import AdminSuppliers from './admin/AdminSuppliers.svelte';
   import AdminAudit from './admin/AdminAudit.svelte';
 
-  interface AdminOrder {
-    id: string;
-    total_amount_cents: number;
-    status: string;
-    created_at: string;
-    tracking_number?: string | null;
-  }
-
-  interface AuditLogRecord {
-    id: string;
-    actor_username?: string;
-    action: string;
-    resource_type: string;
-    created_at: string;
-  }
-
   // Active sub-tab
   let subTab = $state<'kpi' | 'reports' | 'catalog' | 'categories' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews' | 'returns' | 'backup' | 'suppliers'>('kpi');
 
   // Login form state
-  let loginUser = $state('admin');
-  let loginPass = $state('admin123');
+  let loginUser = $state('');
+  let loginPass = $state('');
 
   // Data states
   let products = $state<Product[]>([]);
@@ -67,6 +52,7 @@
     try {
       await adminAuth.login(loginUser, loginPass);
       toast.success('Login admin berhasil!');
+      loginPass = '';
       await loadData();
     } catch (err: any) {
       toast.error(err.message || 'Login admin gagal');
@@ -125,11 +111,11 @@
       <form onsubmit={handleLogin} class="login-form">
         <label>
           Username:
-          <input type="text" bind:value={loginUser} required />
+          <input type="text" bind:value={loginUser} placeholder="Masukkan username" autocomplete="username" required />
         </label>
         <label>
           Password:
-          <input type="password" bind:value={loginPass} required />
+          <input type="password" bind:value={loginPass} placeholder="Masukkan password" autocomplete="current-password" required />
         </label>
         <button type="submit" class="btn-submit" disabled={adminAuth.loading}>
           {adminAuth.loading ? 'Memverifikasi...' : 'Masuk ke Admin Hub'}
@@ -294,4 +280,23 @@
   }
 
   .admin-main { flex: 1; background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 1.5rem; }
+
+  @media (max-width: 768px) {
+    .admin-container {
+      flex-direction: column;
+    }
+    .sidebar {
+      width: 100%;
+      border-radius: 8px;
+    }
+    .side-nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+    .side-nav button {
+      font-size: 0.8rem;
+      padding: 0.5rem 0.6rem;
+    }
+  }
 </style>
