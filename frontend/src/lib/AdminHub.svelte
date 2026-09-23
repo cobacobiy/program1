@@ -40,8 +40,8 @@
   let subTab = $state<'kpi' | 'reports' | 'catalog' | 'categories' | 'inventory' | 'orders' | 'audit' | 'coupons' | 'reviews' | 'returns' | 'backup' | 'suppliers'>('kpi');
 
   // Login form state
-  let loginUser = $state('admin');
-  let loginPass = $state('admin123');
+  let loginUser = $state('');
+  let loginPass = $state('');
 
   // Data states
   let products = $state<Product[]>([]);
@@ -94,9 +94,11 @@
       adminReviews = revRes.items || [];
     } catch (err: any) {
       toast.error(err.message || 'Gagal memuat data admin');
-    } finally {
-      loading = false;
     }
+  }
+
+  async function loadDataWrapper() {
+    await loadData();
   }
 
   $effect(() => {
@@ -125,11 +127,11 @@
       <form onsubmit={handleLogin} class="login-form">
         <label>
           Username:
-          <input type="text" bind:value={loginUser} required />
+          <input type="text" bind:value={loginUser} placeholder="Masukkan username" required />
         </label>
         <label>
           Password:
-          <input type="password" bind:value={loginPass} required />
+          <input type="password" bind:value={loginPass} placeholder="Masukkan password" required />
         </label>
         <button type="submit" class="btn-submit" disabled={adminAuth.loading}>
           {adminAuth.loading ? 'Memverifikasi...' : 'Masuk ke Admin Hub'}
