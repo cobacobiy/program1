@@ -460,3 +460,22 @@ export interface LoyaltySummaryDto {
   ledgers: LoyaltyLedgerEntryDto[];
 }
 
+// === Admin-specific Types ===
+
+export interface AdminOrder {
+  id: string;
+  total_amount_cents: number;
+  status: string;
+  created_at: string;
+  tracking_number?: string | null;
+}
+
+export interface AuditLogRecord {
+  id: string;
+  actor_username?: string;
+  action: string;
+  resource_type: string;
+  created_at: string;
+}
+
+

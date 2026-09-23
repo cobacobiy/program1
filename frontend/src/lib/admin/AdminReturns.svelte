@@ -4,6 +4,7 @@
   import { formatRupiah } from '../currency';
   import { toast } from '../toast.svelte';
   import { fetchAdmin } from './adminApi';
+  import './admin-shared.css';
 
   let adminReturns = $state<ReturnRequest[]>([]);
   let adminReturnsLoading = $state(false);
@@ -13,7 +14,7 @@
   let rejectNotes = $state('');
   let isProcessingReturn = $state(false);
 
-  export async function loadAdminReturns() {
+  async function loadAdminReturns() {
     adminReturnsLoading = true;
     try {
       const url = returnStatusFilter
@@ -115,7 +116,8 @@
   {:else if adminReturns.length === 0}
     <p class="empty-text">Belum ada pengajuan retur untuk status yang dipilih.</p>
   {:else}
-    <table class="table-custom">
+    <div style="overflow-x: auto;">
+      <table class="table-custom">
       <thead>
         <tr>
           <th>ID / Tanggal</th>
@@ -212,6 +214,7 @@
         {/each}
       </tbody>
     </table>
+    </div>
   {/if}
 </div>
 
@@ -263,38 +266,9 @@
     padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; cursor: pointer;
   }
   .pill-btn.active { background: #0284c7; color: #fff; border-color: #0284c7; font-weight: 600; }
-  .table-custom { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  .table-custom th, .table-custom td {
-    padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #1e293b; font-size: 0.9rem;
-  }
-  .table-custom th { background: #1e293b; color: #94a3b8; font-size: 0.8rem; }
-  .status-pill { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
-  .status-pill.pending { background: #854d0e; color: #fef08a; }
   .status-pill.approved { background: #0284c7; color: #e0f2fe; }
   .status-pill.return_shipped { background: #7c3aed; color: #ede9fe; }
   .status-pill.received { background: #059669; color: #ecfdf5; }
   .status-pill.refunded { background: #047857; color: #a7f3d0; }
   .status-pill.rejected { background: #7f1d1d; color: #fecaca; }
-  .btn-action {
-    background: #334155; color: #fff; border: none; padding: 0.35rem 0.7rem;
-    border-radius: 4px; cursor: pointer; font-size: 0.8rem;
-  }
-  .btn-action.primary { background: #0284c7; font-weight: bold; }
-  .btn-action.danger { background: #dc2626; font-weight: bold; }
-  .btn-action.success { background: #10b981; font-weight: bold; }
-  .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
-  .empty-text { color: #94a3b8; text-align: center; padding: 2rem 0; }
-
-  /* Modal */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-    display: flex; align-items: center; justify-content: center; z-index: 1000;
-  }
-  .modal-card {
-    background: #0f172a; border: 1px solid #334155; border-radius: 12px;
-    padding: 1.5rem; color: #f8fafc;
-  }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
-  .modal-header h3 { margin: 0; font-size: 1.15rem; color: #f8fafc; }
-  .close-btn { background: none; border: none; font-size: 1.4rem; color: #94a3b8; cursor: pointer; }
 </style>

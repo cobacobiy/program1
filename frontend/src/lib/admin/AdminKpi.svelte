@@ -1,14 +1,7 @@
 <script lang="ts">
-  import type { Product, Coupon, ProductReview } from '../types';
+  import type { Product, Coupon, ProductReview, AdminOrder } from '../types';
   import { formatRupiah } from '../currency';
-
-  interface AdminOrder {
-    id: string;
-    total_amount_cents: number;
-    status: string;
-    created_at: string;
-    tracking_number?: string | null;
-  }
+  import './admin-shared.css';
 
   interface Props {
     products: Product[];

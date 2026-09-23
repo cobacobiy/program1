@@ -4,6 +4,7 @@
   import { formatRupiah } from '../currency';
   import { toast } from '../toast.svelte';
   import { fetchAdmin } from './adminApi';
+  import './admin-shared.css';
 
   let reportDateFrom = $state('');
   let reportDateTo = $state('');
@@ -11,7 +12,7 @@
   let reportLoading = $state(false);
   let salesReportData = $state<SalesReportResponse | null>(null);
 
-  export async function loadSalesReport() {
+  async function loadSalesReport() {
     reportLoading = true;
     try {
       const params = new URLSearchParams();
