@@ -127,6 +127,7 @@
   .edit-resi-btn { margin-left: 0.5rem; font-size: 0.75rem; padding: 0.2rem 0.4rem; }
   .empty-dash { color: #64748b; font-size: 0.8rem; }
   .status-pill { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+  .status-pill.pending { background: #854d0e; color: #fef08a; }
   .status-pill.paid { background: #0284c7; color: #e0f2fe; }
   .status-pill.processing { background: #d97706; color: #fef3c7; }
   .status-pill.shipped { background: #7c3aed; color: #ede9fe; }
