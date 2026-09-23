@@ -116,12 +116,25 @@ program1/
 | 23 | Dynamic SEO, Open Graph & Sitemap Generator | [#74 Dynamic SEO & Sitemap](https://github.com/cobacobiy/program1/issues/74) | 🟢 MEDIUM | v1.1.0 | `[x]` DONE |
 | 24 | Granular Staff Roles & Permission Matrix (RBAC) | [#75 Granular Staff RBAC](https://github.com/cobacobiy/program1/issues/75) | 🟡 HIGH | v1.2.0 | `[x]` DONE |
 
+### ✅ Phase 5 — Code Quality, Optimization & Refactoring (DONE)
+
+| # | Fitur / Komponen | GitHub Issue | Prioritas | Rilis | Status |
+|---|------------------|--------------|-----------|-------|--------|
+| 25 | Rate Limiter Cleanup Lock Starvation Optimization | [#76 Rate Limiter Starvation Fix](https://github.com/cobacobiy/program1/issues/76) | 🔴 CRITICAL | v1.2.1 | `[x]` DONE |
+| 26 | Buyer Checkout Shipping Address Validation Hardening | [#77 Address Validation](https://github.com/cobacobiy/program1/issues/77) | 🟡 HIGH | v1.2.1 | `[x]` DONE |
+| 27 | Product Reviews API Cursor/Offset Pagination | [#78 Reviews Pagination](https://github.com/cobacobiy/program1/issues/78) | 🟡 HIGH | v1.2.1 | `[x]` DONE |
+| 28 | Supplier Purchase Order Status State Machine Transitions | [#79 Supplier PO State Machine](https://github.com/cobacobiy/program1/issues/79) | 🟡 HIGH | v1.2.1 | `[x]` DONE |
+| 29 | High-Traffic Database Composite Indexes (Coupon & Returns) | [#80 DB Composite Indexes](https://github.com/cobacobiy/program1/issues/80) | 🟡 HIGH | v1.2.1 | `[x]` DONE |
+| 30 | Marketplace Channel Sync Exponential Backoff & Retry | [#81 Channel Sync Backoff](https://github.com/cobacobiy/program1/issues/81) | 🟡 HIGH | v1.2.1 | `[x]` DONE |
+| 31 | Frontend Svelte Monolith Modularization (Storefront & Admin) | [#82 Frontend Modularization](https://github.com/cobacobiy/program1/issues/82) | 🟡 HIGH | v1.2.1 | `[x]` DONE |
+
 ---
 
 ## 📊 Ringkasan Pencapaian Proyek
 
-- **Total Issue Terimplementasi**: 24 Fitur Modular (Phase 1 s/d Phase 4) + 12 Fondasi (Phase 0)
-- **Total GitHub Issues Closed**: 75 Issues
+- **Total Issue Terimplementasi**: 31 Fitur Modular (Phase 1 s/d Phase 5) + 12 Fondasi (Phase 0)
+- **Total GitHub Issues Closed**: 82 Issues
 - **Unit & Integration Tests**: ~170+ automated test cases mencakup seluruh modul
-- **Penyimpanan Migrasi Database**: 25 file migration SQLite terstruktur di `migrations/sqlite/`
+- **Penyimpanan Migrasi Database**: 26 file migration SQLite terstruktur di `migrations/sqlite/`
 - **Arsitektur Deployment**: Single self-contained binary via `program1-web` dengan dukungan multiplatform Docker & Nginx Proxy Manager.
+
